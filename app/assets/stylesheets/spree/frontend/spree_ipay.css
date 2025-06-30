@@ -1,0 +1,67 @@
+.ipay-payment-container {
+  text-align: center;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.ipay-status-indicator {
+  display: inline-block;
+  padding: 15px 25px;
+  border-radius: 5px;
+  margin: 10px 0;
+}
+
+.ipay-status-pending {
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  color: #856404;
+}
+
+.ipay-status-success {
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+}
+
+.ipay-status-failed {
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+}
+
+.ipay-loading-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(0,0,0,.3);
+  border-radius: 50%;
+  border-top-color: #007bff;
+  animation: spin 1s ease-in-out infinite;
+  margin-right: 10px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.ipay-payment-instructions {
+  background-color: #e3f2fd;
+  border: 1px solid #bbdefb;
+  border-radius: 4px;
+  padding: 15px;
+  margin: 15px 0;
+}
+
+.ipay-payment-instructions h4 {
+  color: #1976d2;
+  margin-bottom: 10px;
+}
+
+.ipay-payment-instructions ul {
+  text-align: left;
+  margin: 10px 0;
+}
+
+.ipay-payment-instructions li {
+  margin: 5px 0;
+}
