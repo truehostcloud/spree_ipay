@@ -1,20 +1,16 @@
 module Spree
   module CheckoutControllerDecorator
     def self.prepended(base)
-      Rails.logger.info("OMKUU Checkout controller decorator being applied to #{base}")
       base.before_action :handle_ipay_redirect, only: [:update]
     end
 
     private
 
     def handle_ipay_redirect
-      Rails.logger.info "OMKUU Starting iPay redirect process for Order #{@order.number if @order}"
-      
       # Get phone number and store in session during payment state
       if params[:state] == "payment"
         phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
         session[:ipay_phone_number] = phone if phone.present?
-        Rails.logger.info "OMKUU Stored phone number in session: #{phone}"
       end
       
       # Generate form and redirect during confirm state
@@ -24,18 +20,11 @@ module Spree
         
         # Generate iPay form HTML
         form_html = generate_ipay_form_html(payment, session[:ipay_phone_number], ipay_method)
-        Rails.logger.info "OMKUU Generated iPay form HTML"
-        
-        # Print debug info
-        puts "\nOMKUU iPay Payment URL:"
-        puts ipay_method.preferred_test_mode ? "https://payments.ipayafrica.com/v3/ke" : "https://payments.ipayafrica.com/v3/ke"
         
         # Render the form directly
         render html: form_html.html_safe, layout: 'spree/layouts/checkout'
       end
     rescue => e
-      Rails.logger.error "OMKUU Payment processing failed for Order #{@order.number}: #{e.message}"
-      Rails.logger.error "OMKUU Error backtrace: #{e.backtrace.join("\n")}"
       redirect_to checkout_state_path(:payment), error: "Payment processing failed: #{e.message}"
     end
 
@@ -92,7 +81,7 @@ module Spree
           ipay_params[channel.to_s] = ipay_method.preferences["#{channel}"] ? '1' : '0'
         end
 
-        Rails.logger.info "OMKUU iPay API request parameters: #{ipay_params.inspect}"
+
 
         # Generate the form HTML with full-page flexible layout and improved button positioning
         form_html = <<~HTML
@@ -141,7 +130,6 @@ module Spree
 
         form_html
       rescue => e
-        Rails.logger.error "OMKUU Error generating form: #{e.message}"
         raise "Error generating payment form: #{e.message}"
       end
     end

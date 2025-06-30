@@ -9,9 +9,9 @@ module Spree
     
     # Callbacks
     before_validation :normalize_phone, if: :phone_changed?
-
+    
     private
-
+    
     def normalize_phone
       return if phone.blank?
       

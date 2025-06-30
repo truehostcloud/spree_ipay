@@ -55,8 +55,6 @@ module Spree
     end
 
     def process_payment(payment)
-      Rails.logger.info "\nOMKUU [IPay#process_payment] Starting payment processing"
-      
       # First, authorize the payment
       response = authorize(
         payment.amount_in_cents, 
@@ -65,10 +63,7 @@ module Spree
         order_id: payment.order.number
       )
       
-      unless response.success?
-        Rails.logger.error "OMKUU [IPay#process_payment] Authorization failed: #{response.message}"
-        return response
-      end
+      return response unless response.success?
       
       # If authorization is successful, capture the payment
       capture_response = capture(
@@ -77,10 +72,7 @@ module Spree
         originator: payment
       )
       
-      unless capture_response.success?
-        Rails.logger.error "OMKUU [IPay#process_payment] Capture failed: #{capture_response.message}"
-        return capture_response
-      end
+      return capture_response unless capture_response.success?
       
       # Update payment with the captured response
       payment.update!(
@@ -89,118 +81,65 @@ module Spree
         avs_response: capture_response.avs_result['code']
       )
       
-      Rails.logger.info "OMKUU [IPay#process_payment] Payment processed successfully"
       capture_response
     rescue StandardError => e
-      Rails.logger.error "OMKUU [IPay#process_payment] Error: #{e.message}"
       failure_response(e.message)
     end
 
     def authorize(amount, source, options = {})
-      Rails.logger.info "\nOMKUU [IPay#authorize] Starting authorization"
-      Rails.logger.info "OMKUU [IPay#authorize] Options: #{options.except(:controller).inspect}"
-      
       payment = options[:originator]
       order = payment.order
       
-      Rails.logger.info "OMKUU [IPay#authorize] Processing Order ##{order.number}, Payment ID: #{payment.id}"
-      Rails.logger.info "OMKUU [IPay#authorize] Current payment state: #{payment.state}"
-      Rails.logger.info "OMKUU [IPay#authorize] Source provided: #{source.inspect}"
-      
       # Ensure the order is in the correct state
       unless order.checkout_steps.include?('confirm')
-        error_msg = "Order is not in a confirmable state"
-        Rails.logger.error "OMKUU [IPay#authorize] ERROR: #{error_msg}"
-        return failure_response(error_msg)
+        return failure_response("Order is not in a confirmable state")
       end
       
       # Ensure we have a valid source
       if source.blank? || !source.is_a?(Spree::IpaySource)
-        error_msg = "Invalid payment source: #{source.inspect}"
-        Rails.logger.error "OMKUU [IPay#authorize] ERROR: #{error_msg}"
-        Rails.logger.error "OMKUU [IPay#authorize] Source class: #{source.class.name} (expected Spree::IpaySource)"
-        return failure_response(error_msg)
+        return failure_response("Invalid payment source")
       end
-      
-      Rails.logger.info "OMKUU [IPay#authorize] Source is valid: ID=#{source.id}, Phone=#{source.phone}"
 
       # Ensure source is associated with payment method
-      if source.payment_method_id != id
-        Rails.logger.info "OMKUU [IPay#authorize] Updating source payment_method_id from #{source.payment_method_id} to #{id}"
-        if source.update(payment_method_id: id)
-          Rails.logger.info "OMKUU [IPay#authorize] Successfully updated source payment_method_id"
-        else
-          error_msg = "Failed to update source: #{source.errors.full_messages.to_sentence}"
-          Rails.logger.error "OMKUU [IPay#authorize] ERROR: #{error_msg}"
-          return failure_response(error_msg)
-        end
+      if source.payment_method_id != id && !source.update(payment_method_id: id)
+        return failure_response("Failed to update payment source")
       end
       
       # Get phone from source
       phone = source.phone
-      Rails.logger.info "OMKUU [IPay#authorize] Using phone: #{phone}"
       
       # Store phone number in session if we have a controller context
       if options[:controller]&.respond_to?(:session)
         options[:controller].session[:ipay_phone_number] = phone
-        Rails.logger.info "OMKUU [IPay#authorize] Stored phone number in session"
       end
-      
-      # Log payment source state
-      Rails.logger.info "OMKUU [IPay#authorize] Payment source before assignment: #{payment.source.inspect}"
-      Rails.logger.info "OMKUU [IPay#authorize] Payment source_id before assignment: #{payment.source_id}"
       
       # Ensure payment has the source assigned
       if payment.source.nil? || !payment.source.is_a?(Spree::IpaySource)
-        Rails.logger.info "OMKUU [IPay#authorize] Assigning new source to payment"
         payment.source = source
         payment.payment_method_id = id
         
         # Save the payment to ensure source is associated
-        if payment.save
-          Rails.logger.info "OMKUU [IPay#authorize] Successfully saved payment with source"
-          Rails.logger.info "OMKUU [IPay#authorize] Updated payment source: #{payment.source.inspect}"
-          Rails.logger.info "OMKUU [IPay#authorize] Updated payment source_id: #{payment.source_id}"
-          Rails.logger.info "OMKUU Created new IpaySource for payment #{payment.id}"
-        else
-          error_msg = "Failed to save payment: #{payment.errors.full_messages.to_sentence}"
-          Rails.logger.error "OMKUU [IPay#authorize] ERROR: #{error_msg}"
-          return failure_response(error_msg)
+        unless payment.save
+          return failure_response("Failed to save payment: #{payment.errors.full_messages.to_sentence}")
         end
       else
-        Rails.logger.info "OMKUU [IPay#authorize] Payment already has a valid source"
         payment.source.phone = phone
-        if payment.source.changed?
-          if payment.source.save
-            Rails.logger.info "OMKUU Updated phone number for existing IpaySource"
-          else
-            error_msg = "Failed to update source: #{payment.source.errors.full_messages.to_sentence}"
-            Rails.logger.error "OMKUU [IPay#authorize] ERROR: #{error_msg}"
-            return failure_response(error_msg)
-          end
+        if payment.source.changed? && !payment.source.save
+          return failure_response("Failed to update payment source")
         end
-        Rails.logger.info "OMKUU Using existing IpaySource for payment #{payment.id}"
       end
       
       # Process the payment
       process!(phone: phone, payment: payment, amount: amount, options: options)
     rescue => e
-      error_msg = "Authorization failed: #{e.message}"
-      Rails.logger.error "OMKUU #{error_msg}"
-      Rails.logger.error e.backtrace.join("\n")
-      failure_response(error_msg)
+      failure_response("Authorization failed: #{e.message}")
     end
 
     def capture(amount, response_code, options = {})
-      Rails.logger.info "\nOMKUU [IPay#capture] Starting capture"
-      Rails.logger.info "OMKUU [IPay#capture] Amount: #{amount}, Response Code: #{response_code}"
-      
       payment = options[:originator]
-      order = payment.order
       
-      # If we're in test mode, just authorize the payment
+      # If we're in test mode, just return success
       if preferred_test_mode
-        Rails.logger.info "OMKUU [IPay#capture] Test mode - simulating successful capture"
         return ActiveMerchant::Billing::Response.new(
           true, 
           'Test mode - payment captured successfully', 
@@ -217,39 +156,41 @@ module Spree
         { authorization: response_code }, 
         {}
       )
-    rescue StandardError => e
-      Rails.logger.error "OMKUU [IPay#capture] Error: #{e.message}"
-      failure_response(e.message)
+    rescue => e
+      failure_response("Capture failed: #{e.message}")
     end
 
     def void(response_code, options = {})
-      Rails.logger.info "OMKUU Voiding payment for response code: #{response_code}"
+      payment = options[:originator]
       
-      begin
-        response = cancel_payment(response_code)
-        
-        if response['status'] == 'success'
-          Rails.logger.info "OMKUU Payment voided successfully"
-          success_response
-        else
-          Rails.logger.error "OMKUU Payment void failed: #{response['message']}"
-          failure_response(response['message'])
-        end
-      rescue => e
-        Rails.logger.error "OMKUU Payment void error: #{e.message}"
-        Rails.logger.error "OMKUU Error backtrace: #{e.backtrace.join("\n")}"
-        failure_response("Payment void failed: #{e.message}")
+      # If we're in test mode, just return success
+      if preferred_test_mode
+        return ActiveMerchant::Billing::Response.new(
+          true, 
+          'Test mode - payment voided successfully', 
+          { test: true, authorization: "TEST-VOID-#{SecureRandom.hex(4)}" }, 
+          { test: true }
+        )
       end
+      
+      response = cancel_payment(response_code)
+      
+      if response['status'] == 'success'
+        success_response
+      else
+        failure_response(response['message'] || 'Payment void failed')
+      end
+    rescue => e
+      failure_response("Payment void failed: #{e.message}")
     end
 
     def process!(phone: nil, payment: nil, amount: nil, options: {})
-      Rails.logger.info "OMKUU Starting iPay payment processing for Order #{payment.order.number}"
+      # Process iPay payment
       
       begin
         # Validate required parameters
         unless phone.present? && payment.present? && payment.order.present? && amount.present?
           error_msg = "Missing required parameters for iPay payment"
-          Rails.logger.error "OMKUU #{error_msg}"
           payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
           return failure_response(error_msg)
         end
@@ -257,7 +198,6 @@ module Spree
         # Validate phone number format
         unless phone.to_s.match(/^\+?\d{10,15}$/)
           error_msg = "Invalid phone number format: #{phone}"
-          Rails.logger.error "OMKUU #{error_msg}"
           payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
           return failure_response('Please enter a valid phone number')
         end
@@ -265,7 +205,6 @@ module Spree
         # Validate payment amount
         unless amount.to_f > 0
           error_msg = "Invalid payment amount: #{amount}"
-          Rails.logger.error "OMKUU #{error_msg}"
           payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
           return failure_response('Invalid payment amount')
         end
@@ -276,7 +215,6 @@ module Spree
         
         unless vendor_id.present? && hash_key.present?
           error_msg = "Missing iPay credentials. Please configure vendor_id and hash_key."
-          Rails.logger.error "OMKUU #{error_msg}"
           payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
           return failure_response('Payment configuration error. Please contact support.')
         end
@@ -295,8 +233,7 @@ module Spree
         # Transition payment to processing state
         payment.started_processing! if payment.respond_to?(:started_processing!)
         
-        # Log successful processing
-        Rails.logger.info "OMKUU Successfully processed payment for Order #{payment.order.number}"
+        # Payment processing started
         payment.log_entries.create(details: 'Payment processing started') if payment.respond_to?(:log_entries)
         
         # Return success response
@@ -304,33 +241,20 @@ module Spree
         
       rescue => e
         error_msg = "Payment processing failed: #{e.message}"
-        Rails.logger.error "OMKUU #{error_msg}"
-        Rails.logger.error "OMKUU Error backtrace: #{e.backtrace.join("\n")}"
         payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
         failure_response(error_msg)
       end
     end
 
-    # Generate HMAC SHA1 hash for iPay using the working implementation
+    # Generate HMAC SHA1 hash for iPay
     def ipay_signature_hash(payment)
-      Rails.logger.info "OMKUU Starting hash generation for Order #{payment&.order&.number}"
-      
-      # Debug log all preferences and payment details
-      Rails.logger.info "OMKUU Payment object: #{payment.inspect}"
-      Rails.logger.info "OMKUU Payment order: #{payment.order.inspect if payment&.order}"
-      
       # Get values from payment method preferences
       vendor_id = preferred_vendor_id.to_s
       hash_key = preferred_hash_key.to_s
       
-      Rails.logger.info "OMKUU Vendor ID from preferences: #{vendor_id.inspect}"
-      Rails.logger.info "OMKUU Hash Key from preferences: #{hash_key.present? ? '[PRESENT]' : '[MISSING]'}"
-      
       # Validate required preferences
       if vendor_id.blank? || hash_key.blank?
-        error_msg = "Missing required iPay credentials. Please configure vendor_id and hash_key in payment method settings."
-        Rails.logger.error "OMKUU #{error_msg}"
-        raise error_msg
+        raise "Missing required iPay credentials. Please configure vendor_id and hash_key in payment method settings."
       end
       
       # Get required values
@@ -353,32 +277,25 @@ module Spree
 
       # Ensure all values are strings and not nil
       [live, oid, inv, ttl, tel, eml, vid, curr, p1, p2, p3, p4, cbk, rst, cst, crl].each do |param|
-        if param.nil?
-          Rails.logger.error "OMKUU Found nil parameter in hash generation"
-          raise "Nil parameter in hash generation"
-        end
+        raise "Nil parameter in hash generation" if param.nil?
       end
 
       # Concatenate datastring in the required order
       datastring = "#{live}#{oid}#{inv}#{ttl}#{tel}#{eml}#{vid}#{curr}#{p1}#{p2}#{p3}#{p4}#{cbk}#{cst}#{crl}"
-      Rails.logger.info "OMKUU Data string for hash: #{datastring}"
 
-      begin
-        # Generate hash using HMAC SHA1
-        hash = OpenSSL::HMAC.hexdigest('sha1', hash_key, datastring)
-        Rails.logger.info "OMKUU Generated hash: #{hash}"
-        hash
-      rescue => e
-        Rails.logger.error "OMKUU Error generating hash: #{e.message}"
-        raise "Error generating hash: #{e.message}"
-      end
+      # Generate hash using HMAC SHA1
+      OpenSSL::HMAC.hexdigest('sha1', hash_key, datastring)
+    rescue => e
+      raise "Error generating hash: #{e.message}"
     end
 
     def generate_ipay_form_html(payment)
       # Get required values
       live = test_mode? ? "0" : "1"
-      oid = payment.order.number
-      inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
+      # Use numeric order ID for transaction code
+      oid = payment.order.id.to_s
+      # Use numeric order ID for invoice as well
+      inv = payment.order.id.to_s
       ttl = (payment.amount.to_f * 100).to_i.to_s  # Amount in cents
       tel = payment.order.bill_address&.phone || session[:ipay_phone_number] || "0700000000"
       eml = payment.order.email
@@ -388,11 +305,56 @@ module Spree
       p2 = ""
       p3 = ""
       p4 = ""
-      cbk = preferred_callback_url.presence || "https://example.com/ipay/callback"
-      rst = preferred_return_url.presence || "https://example.com/ipay/return"
-      cst = "1"
-      crl = "2"
-      hsh = ipay_signature_hash(payment)
+      # Generate proper callback and return URLs
+      # Extract host from the return_url preference
+      return_uri = URI.parse(preferred_return_url.presence || 'https://example.com')
+      default_host = return_uri.host
+      default_protocol = return_uri.scheme || 'https'
+      
+      # Generate callback URL for iPay to send payment status
+      begin
+        if preferred_callback_url.present?
+          callback_uri = URI.parse(preferred_callback_url)
+          callback_uri.scheme ||= default_protocol
+          callback_uri.host ||= default_host
+          callback_uri.path = '/api/v1/ipay/callback' if callback_uri.path.blank? || callback_uri.path == '/'
+        else
+          # In test mode, ensure we're using HTTPS for security
+          protocol = test_mode? ? 'https' : default_protocol
+          callback_uri = URI.parse("#{protocol}://#{default_host}/api/v1/ipay/callback")
+        end
+        
+        # Ensure the callback URL is valid
+        raise URI::InvalidURIError if callback_uri.host.blank?
+        
+        # Add test parameter if in test mode
+        if test_mode?
+          params = URI.decode_www_form(callback_uri.query || '').to_h
+          params['test'] = '1'
+          callback_uri.query = URI.encode_www_form(params)
+        end
+        
+        cbk = callback_uri.to_s
+      rescue URI::InvalidURIError => e
+          # Fallback to a safe default in case of errors
+        cbk = "https://#{default_host}/api/v1/ipay/callback"
+        cbk += '?test=1' if test_mode?
+      end
+      
+      # Generate return URL for customer redirect after payment
+      # Point to the frontend order confirmation page
+      order_number = payment.order.number
+      order_token = payment.order.guest_token
+      rst = preferred_return_url.presence || "#{default_protocol}://#{default_host}/orders/#{order_number}?order_token=#{order_token}"
+      
+      cst = "1"  # Customer email notification flag
+      crl = "2"  # Customer phone notification flag
+      
+      begin
+        hsh = ipay_signature_hash(payment)
+      rescue => e
+        raise "Error generating payment hash: #{e.message}"
+      end
 
       # Prepare iPay parameters
       ipay_params = {
@@ -424,7 +386,7 @@ module Spree
         ipay_params[channel] = self.preferences[channel.to_s] ? '1' : '0'
       end
 
-      Rails.logger.info "OMKUU iPay API request parameters: #{ipay_params.inspect}"
+
 
       # Generate form HTML
       form_html = "<form id='ipay_form' action='https://payments.ipayafrica.com/v3/ke' method='POST'>\n"
@@ -446,11 +408,9 @@ module Spree
       return success_response if payment.completed?
 
       begin
-        Rails.logger.info "OMKUU Confirming payment for Order ##{payment.order.number}"
         response = initiate_payment(payment, phone: phone)
 
         if response['status'] == 'success'
-          Rails.logger.info "OMKUU Payment confirmed successfully for Order ##{payment.order.number}"
           payment.update!(
             response_code: response['data']['transaction_id'],
             avs_response: response['data']['checkout_url']
@@ -467,66 +427,46 @@ module Spree
             }
           )
         else
-          Rails.logger.warn "OMKUU Payment confirmation failed for Order ##{payment.order.number}: #{response['message']}"
           failure_response(response['message'] || 'Payment confirmation failed')
         end
       rescue => e
-        Rails.logger.error "OMKUU Payment confirmation error: #{e.message}"
-        Rails.logger.error "OMKUU Error backtrace: #{e.backtrace.join("\n")}"
         failure_response("Payment confirmation failed: #{e.message}")
       end
     end
 
     def complete(payment)
-      Rails.logger.info "OMKUU Completing payment for Order ##{payment.order.number}"
-      
-      if payment.completed?
-        Rails.logger.info "OMKUU Payment already completed"
-        return success_response
-      end
+      return success_response if payment.completed?
 
       begin
         # Check payment status
         status = check_payment_status(payment.response_code)
         
         if status['status'] == 'success'
-          Rails.logger.info "OMKUU Payment completed successfully"
           payment.update!(state: 'completed')
           success_response
         else
-          Rails.logger.error "OMKUU Payment completion failed: #{status['message']}"
-          failure_response(status['message'])
+          failure_response(status['message'] || 'Payment completion failed')
         end
       rescue => e
-        Rails.logger.error "OMKUU Payment completion error: #{e.message}"
-        Rails.logger.error "OMKUU Error backtrace: #{e.backtrace.join("\n")}"
         failure_response("Payment completion failed: #{e.message}")
       end
     end
 
     def void(response_code, options = {})
-      Rails.logger.info "OMKUU Voiding payment for response code: #{response_code}"
-      
       begin
         response = cancel_payment(response_code)
         
         if response['status'] == 'success'
-          Rails.logger.info "OMKUU Payment voided successfully"
           success_response
         else
-          Rails.logger.error "OMKUU Payment void failed: #{response['message']}"
-          failure_response(response['message'])
+          failure_response(response['message'] || 'Payment void failed')
         end
       rescue => e
-        Rails.logger.error "OMKUU Payment void error: #{e.message}"
-        Rails.logger.error "OMKUU Error backtrace: #{e.backtrace.join("\n")}"
         failure_response("Payment void failed: #{e.message}")
       end
     end
 
     def initiate_payment(payment, phone: nil)
-      Rails.logger.info "OMKUU Initiating payment for Order ##{payment.order.number}"
-      
       # Prepare parameters
       params = {
         live: test_mode? ? '0' : '1',
@@ -546,6 +486,7 @@ module Spree
         crl: '2',
         hsh: generate_hash(payment)
       }
+
 
       # Add channel parameters
       [
@@ -575,14 +516,10 @@ module Spree
         }
       )
     rescue => e
-      Rails.logger.error "OMKUU Payment initiation failed: #{e.message}"
-      Rails.logger.error "OMKUU Error backtrace: #{e.backtrace.join("\n")}"
       failure_response("Payment initiation failed: #{e.message}")
     end
 
     def check_payment_status(transaction_id)
-      Rails.logger.info "OMKUU Checking payment status for transaction: #{transaction_id}"
-      
       # Prepare status check parameters
       params = {
         live: test_mode? ? '0' : '1',
@@ -597,14 +534,9 @@ module Spree
         body: params
       )
 
-      # Parse response
-      status = JSON.parse(response.body)
-      
-      Rails.logger.info "OMKUU Payment status response: #{status.inspect}"
-      status
+      # Parse and return response
+      JSON.parse(response.body)
     rescue => e
-      Rails.logger.error "OMKUU Payment status check failed: #{e.message}"
-      Rails.logger.error "OMKUU Error backtrace: #{e.backtrace.join("\n")}"
       {
         status: 'error',
         message: "Failed to check payment status: #{e.message}"
@@ -612,8 +544,6 @@ module Spree
     end
 
     def cancel_payment(transaction_id)
-      Rails.logger.info "OMKUU Cancelling payment for transaction: #{transaction_id}"
-      
       # Prepare cancellation parameters
       params = {
         live: test_mode? ? '0' : '1',
@@ -628,14 +558,9 @@ module Spree
         body: params
       )
 
-      # Parse response
-      status = JSON.parse(response.body)
-      
-      Rails.logger.info "OMKUU Payment cancellation response: #{status.inspect}"
-      status
+      # Parse and return response
+      JSON.parse(response.body)
     rescue => e
-      Rails.logger.error "OMKUU Payment cancellation failed: #{e.message}"
-      Rails.logger.error "OMKUU Error backtrace: #{e.backtrace.join("\n")}"
       {
         status: 'error',
         message: "Failed to cancel payment: #{e.message}"
@@ -646,8 +571,8 @@ module Spree
       # Generate hash based on iPay's requirements
       data_string = [
         SpreeIpay::Preferences.live_mode ? '1' : '0',
-        payment.order.number,
-        payment.order.number,
+        payment.order.id.to_s,  # Use numeric order ID
+        payment.order.id.to_s,  # Use numeric order ID for both oid and inv
         payment.amount.to_f.round(2).to_s,
         payment.order.email,
         SpreeIpay::Preferences.vendor_id,
@@ -661,13 +586,8 @@ module Spree
         '2'  # crl
       ].join
 
-      Rails.logger.info "OMKUU Data string for hash: #{data_string}"
-
-      # Generate hash using HMAC SHA1
-      hash = OpenSSL::HMAC.hexdigest('sha1', SpreeIpay::Preferences.secret_key, data_string)
-      
-      Rails.logger.info "OMKUU Generated hash: #{hash}"
-      hash
+      # Generate and return hash using HMAC SHA1
+      OpenSSL::HMAC.hexdigest('sha1', SpreeIpay::Preferences.secret_key, data_string)
     end
 
     def generate_status_hash(transaction_id)
@@ -678,13 +598,8 @@ module Spree
         transaction_id
       ].join
 
-      Rails.logger.info "OMKUU Status check data string: #{data_string}"
-
-      # Generate hash using HMAC SHA1
-      hash = OpenSSL::HMAC.hexdigest('sha1', SpreeIpay::Preferences.secret_key, data_string)
-      
-      Rails.logger.info "OMKUU Generated status hash: #{hash}"
-      hash
+      # Generate and return hash using HMAC SHA1
+      OpenSSL::HMAC.hexdigest('sha1', SpreeIpay::Preferences.secret_key, data_string)
     end
 
     def generate_cancel_hash(transaction_id)
@@ -695,13 +610,8 @@ module Spree
         transaction_id
       ].join
 
-      Rails.logger.info "OMKUU Cancellation data string: #{data_string}"
-
-      # Generate hash using HMAC SHA1
-      hash = OpenSSL::HMAC.hexdigest('sha1', SpreeIpay::Preferences.secret_key, data_string)
-      
-      Rails.logger.info "OMKUU Generated cancel hash: #{hash}"
-      hash
+      # Generate and return hash using HMAC SHA1
+      OpenSSL::HMAC.hexdigest('sha1', SpreeIpay::Preferences.secret_key, data_string)
     end
 
     def callback_url(payment)
@@ -721,7 +631,6 @@ module Spree
     end
     
     def source_required?
-      Rails.logger.info "OMKUU [IPay#source_required?] Checking if source is required - returning true"
       true
     end
 
