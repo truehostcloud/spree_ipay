@@ -1,0 +1,39 @@
+# Ignore environment variables and secrets
+.env
+.env.*
+
+# Ignore Rails/Spree standard files
+/log/
+/tmp/
+/storage/
+/public/assets/
+/public/packs/
+/public/packs-test/
+/public/system/
+/node_modules/
+/coverage/
+.byebug_history
+
+# Ignore editor and OS files
+*.swp
+*.swo
+*~
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Ignore credentials and database files
+config/credentials.yml.enc
+config/master.key
+db/*.sqlite3
+db/*.sqlite3-journal
+
+# Ignore test artifacts
+/spec/examples.txt
+
+# Ignore local gems
+*.gem
+
+# Ignore bundler config
+/.bundle
