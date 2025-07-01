@@ -1,0 +1,8 @@
+<div class="order-success-page" style="max-width:600px;margin:40px auto;padding:32px;background:#f8fff8;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;">
+  <svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#e6ffe6"/><path d="M8.5 12.5l2.5 2.5 4.5-4.5" stroke="#3bb143" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1 style="color:#3bb143;">Order Placed Successfully!</h1>
+  <p style="margin:18px 0 0 0;font-size:1.2em;">Thank you for your payment.<br>Your order <strong><%= @order.number %></strong> has been placed and is being processed.</p>
+  <div style="margin-top:32px;">
+    <a href="<%= spree.order_path(@order) %>" style="display:inline-block;padding:12px 28px;background:#3bb143;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;">View Order Details</a>
+  </div>
+</div>

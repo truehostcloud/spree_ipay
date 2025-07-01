@@ -11,8 +11,8 @@ module SpreeIpay
       @vendor_id = ENV['IPAY_VENDOR_ID'] || ''
       @secret_key = ENV['IPAY_SECRET_KEY'] || ''
       @api_endpoint = ENV['IPAY_API_ENDPOINT'] || 'https://payments.ipayafrica.com/v3/ke'
-      @callback_url = ENV['IPAY_CALLBACK_URL'] || ''
-      @return_url = ENV['IPAY_RETURN_URL'] || ''
+      @callback_url = ENV['IPAY_CALLBACK_URL']
+      @return_url = ENV['IPAY_RETURN_URL']
       @currency = ENV['IPAY_CURRENCY'] || 'KES'
       
       # Channel preferences

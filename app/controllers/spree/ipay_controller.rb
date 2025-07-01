@@ -4,7 +4,9 @@ module Spree
     
     # iPay callback endpoint - handles both test and live environments
     # POST /ipay/callback
-    def callback
+    # def callback
+    # All callback logic is now handled by Spree::GatewayCallbacksController.
+    #
       # Callback processing started
       
       begin
@@ -99,7 +101,9 @@ module Spree
     private
     
     # Extract callback parameters based on iPay documentation
-    def extract_callback_params
+    # def extract_callback_params
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       {
         # Core transaction details
         transaction_id: params[:txncd],
@@ -136,7 +140,9 @@ module Spree
     end
     
     # Verify iPay callback using IPN (Instant Payment Notification)
-    def verify_ipay_callback(transaction_data)
+    # def verify_ipay_callback(transaction_data)
+    # Removed: old callback verification, now handled by GatewayCallbacksController.
+    #
       return true if Rails.env.test? # Skip verification in test environment
       
       vendor_id = ENV['IPAY_VENDOR_ID'] || 'demo'
@@ -160,7 +166,9 @@ module Spree
     end
     
     # Build IPN verification URL
-    def build_ipn_url(vendor_id, transaction_data)
+    # def build_ipn_url(vendor_id, transaction_data)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       base_url = "https://www.ipayafrica.com/ipn/"
       params = {
         vendor: vendor_id,
@@ -177,7 +185,9 @@ module Spree
     end
     
     # Make IPN verification request
-    def make_ipn_request(url)
+    # def make_ipn_request(url)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       require 'net/http'
       uri = URI(url)
       
@@ -191,7 +201,9 @@ module Spree
     end
     
     # Normalize status codes for comparison
-    def normalize_status(status)
+    # def normalize_status(status)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       case status&.downcase
       when 'aei7p7yrx4ae34', 'success', 'completed', 'paid'
         'aei7p7yrx4ae34'
@@ -205,7 +217,9 @@ module Spree
     end
     
     # Find order by reference (can be order ID or order number)
-    def find_order_by_reference(order_reference)
+    # def find_order_by_reference(order_reference)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       # First try to find by ID if reference is numeric
       if order_reference.to_s =~ /^\d+$/
         order = Spree::Order.find_by(id: order_reference)
@@ -223,7 +237,9 @@ module Spree
       order
     end
     
-    def find_payment_for_order(order)
+    # def find_payment_for_order(order)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       all_payments = order.payments.to_a
 
       
@@ -264,7 +280,9 @@ module Spree
     end
     
     # Update payment with transaction details
-    def update_payment_details(payment, transaction_data)
+    # def update_payment_details(payment, transaction_data)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       updates = {}
       
       # Always update the response code if we have a transaction ID
@@ -287,7 +305,9 @@ module Spree
     end
     
     # Process payment based on status
-    def process_payment_status(payment, order, transaction_data)
+    # def process_payment_status(payment, order, transaction_data)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       status = normalize_status(transaction_data[:status])
       
       case status
@@ -315,7 +335,9 @@ module Spree
     end
     
     # Handle successful payment
-    def handle_successful_payment(payment, order, transaction_data)
+    # def handle_successful_payment(payment, order, transaction_data)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       unless payment.completed?
         begin
           payment.complete!
@@ -347,7 +369,9 @@ module Spree
     end
     
     # Handle pending payment
-    def handle_pending_payment(payment, order)
+    # def handle_pending_payment(payment, order)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       payment.started_processing! if payment.checkout?
       
       render json: { 
@@ -358,7 +382,9 @@ module Spree
     end
     
     # Handle failed payment
-    def handle_failed_payment(payment, order)
+    # def handle_failed_payment(payment, order)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       payment.failure! unless payment.failed?
       
       render json: { 
@@ -369,7 +395,9 @@ module Spree
     end
     
     # Handle duplicate payment
-    def handle_duplicate_payment(payment, order)
+    # def handle_duplicate_payment(payment, order)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       
       render json: { 
         status: 2, 
@@ -379,7 +407,9 @@ module Spree
     end
     
     # Handle insufficient payment
-    def handle_insufficient_payment(payment, order, transaction_data)
+    # def handle_insufficient_payment(payment, order, transaction_data)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       render json: { 
         status: 0, 
         id: payment.number, 
@@ -388,14 +418,18 @@ module Spree
     end
     
     # Handle overpayment
-    def handle_overpayment(payment, order, transaction_data)
+    # def handle_overpayment(payment, order, transaction_data)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
       # You can decide whether to accept overpayments or not
       # For now, we'll accept them as successful
       handle_successful_payment(payment, order, transaction_data)
     end
     
     # Handle unknown status
-    def handle_unknown_status(payment, order, status)
+    # def handle_unknown_status(payment, order, status)
+    # Removed: old callback helper, now handled by GatewayCallbacksController.
+    #
 
       
       render json: { 

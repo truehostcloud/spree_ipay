@@ -6,12 +6,39 @@ module Spree
   class PaymentMethod::Ipay < PaymentMethod
     include HTTParty
 
+    # Core settings
     preference :vendor_id, :string
     preference :hash_key, :string
     preference :test_mode, :boolean, default: true
+    preference :live_mode, :boolean, default: false
     preference :currency, :string, default: 'KES'
-    preference :callback_url, :string, default: 'https://example.com/ipay/callback'
-    preference :return_url, :string, default: 'https://example.com/ipay/return'
+    preference :callback_url, :string, default: '/ipay/confirm'
+    preference :return_url, :string, default: -> { "#{Rails.application.routes.url_helpers.root_url.chomp('/')}/ipay/confirm" }
+    
+    # Channel settings
+    preference :mpesa, :boolean, default: true
+    preference :bonga, :boolean, default: false
+    preference :airtel, :boolean, default: false
+    preference :equity, :boolean, default: false
+    preference :mobilebanking, :boolean, default: false
+    preference :creditcard, :boolean, default: false
+    preference :unionpay, :boolean, default: false
+    preference :mvisa, :boolean, default: false
+    preference :vooma, :boolean, default: false
+    preference :pesalink, :boolean, default: false
+    preference :autopay, :boolean, default: false
+    def initialize(*args)
+      super
+      # Initialize with empty preferences - don't use environment variables
+      @preferences ||= {}
+      
+      # Set default values if not already set
+      self.preferred_test_mode = true if preferred_test_mode.nil?
+      self.preferred_live_mode = false if preferred_live_mode.nil?
+    end
+    preference :currency, :string, default: 'KES'
+    preference :callback_url, :string, default: '/ipay/confirm'
+    preference :return_url, :string, default: '/ipay/confirm'
     
     # Channel preferences
     preference :mpesa, :boolean, default: true
@@ -188,9 +215,20 @@ module Spree
       # Process iPay payment
       
       begin
+        # Log the start of payment processing
+
+        
         # Validate required parameters
         unless phone.present? && payment.present? && payment.order.present? && amount.present?
           error_msg = "Missing required parameters for iPay payment"
+
+          payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
+          return failure_response(error_msg)
+        end
+
+        # Validate credentials are set
+        if preferred_vendor_id.blank? || preferred_hash_key.blank?
+          error_msg = "iPay vendor ID or hash key is not configured"
           payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
           return failure_response(error_msg)
         end
@@ -209,15 +247,22 @@ module Spree
           return failure_response('Invalid payment amount')
         end
 
-        # Validate iPay credentials
-        vendor_id = preferred_vendor_id.presence || SpreeIpay::Preferences.vendor_id
-        hash_key = preferred_hash_key.presence || SpreeIpay::Preferences.secret_key
+        # Validate iPay credentials with detailed logging
+        vendor_id = preferred_vendor_id
+        hash_key = preferred_hash_key
         
+
+
+
+      
         unless vendor_id.present? && hash_key.present?
-          error_msg = "Missing iPay credentials. Please configure vendor_id and hash_key."
+          error_msg = "Missing iPay credentials. Please configure vendor_id and hash_key in the payment method settings."
+
           payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
-          return failure_response('Payment configuration error. Please contact support.')
+          return failure_response('Payment configuration error. Please check your iPay settings.')
         end
+        
+
 
         # Update payment amount if needed
         if payment.amount.to_f != amount.to_f
@@ -254,11 +299,14 @@ module Spree
       
       # Validate required preferences
       if vendor_id.blank? || hash_key.blank?
-        raise "Missing required iPay credentials. Please configure vendor_id and hash_key in payment method settings."
+        error_msg = "Missing required iPay credentials. Please configure vendor_id and hash_key in the payment method settings."
+        Rails.logger.error error_msg
+        raise error_msg
       end
       
-      # Get required values
+      # Set live mode (0 for test, 1 for live)
       live = test_mode? ? "0" : "1"
+      
       oid = payment.order.number.to_s
       inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
       ttl = (payment.amount.to_f * 100).to_i.to_s  # Amount in cents
@@ -270,8 +318,8 @@ module Spree
       p2 = ""
       p3 = ""
       p4 = ""
-      cbk = preferred_callback_url.presence || "https://example.com/ipay/callback"
-      rst = preferred_return_url.presence || "https://example.com/ipay/return"
+      cbk = preferred_callback_url.presence || '/ipay/confirm'
+      rst = preferred_return_url.presence || "https://#{base_url}/ipay/return"
       cst = "1"
       crl = "2"
 
@@ -283,7 +331,7 @@ module Spree
       # Concatenate datastring in the required order
       datastring = "#{live}#{oid}#{inv}#{ttl}#{tel}#{eml}#{vid}#{curr}#{p1}#{p2}#{p3}#{p4}#{cbk}#{cst}#{crl}"
 
-      # Generate hash using HMAC SHA1
+      # Generate and return hash using HMAC SHA1
       OpenSSL::HMAC.hexdigest('sha1', hash_key, datastring)
     rescue => e
       raise "Error generating hash: #{e.message}"
@@ -379,11 +427,16 @@ module Spree
 
 
       # Add channel parameters based on preferences
-      [
+
+      channels = [
         :mpesa, :bonga, :airtel, :equity, :mobilebanking,
         :creditcard, :unionpay, :mvisa, :vooma, :pesalink, :autopay
-      ].each do |channel|
-        ipay_params[channel] = self.preferences[channel.to_s] ? '1' : '0'
+      ]
+      
+      channels.each do |channel|
+        channel_value = self.send("preferred_#{channel}") ? '1' : '0'
+        ipay_params[channel] = channel_value
+
       end
 
 
@@ -467,25 +520,37 @@ module Spree
     end
 
     def initiate_payment(payment, phone: nil)
+      # Log the start of payment initiation
+
+      
       # Prepare parameters
       params = {
-        live: test_mode? ? '0' : '1',
+        live: preferred_test_mode ? '0' : '1',
         oid: payment.order.number,
         inv: payment.order.number,
         ttl: payment.amount.to_f.round(2).to_s,
         tel: phone,
         eml: payment.order.email,
-        vid: SpreeIpay::Preferences.vendor_id,
-        curr: SpreeIpay::Preferences.currency,
+        vid: preferred_vendor_id,
+        curr: preferred_currency.presence || 'KES',
         p1: '',
         p2: '',
         p3: '',
         p4: '',
-        cbk: SpreeIpay::Preferences.callback_url,
+        cbk: preferred_callback_url.presence || "#{Rails.application.routes.url_helpers.root_url.chomp('/')}/ipay/confirm",
         cst: '1',
-        crl: '2',
-        hsh: generate_hash(payment)
+        crl: '2'
       }
+      
+      # Log all parameters except sensitive ones
+      log_params = params.dup
+      log_params[:tel] = '[FILTERED]' if log_params[:tel].present?
+      log_params[:eml] = '[FILTERED]' if log_params[:eml].present?
+
+      
+      # Generate and add hash
+      params[:hsh] = generate_hash(payment)
+
 
 
       # Add channel parameters
@@ -493,16 +558,43 @@ module Spree
         :mpesa, :bonga, :airtel, :equity, :mobilebanking,
         :creditcard, :unionpay, :mvisa, :vooma, :pesalink, :autopay
       ].each do |channel|
-        params[channel.to_s] = SpreeIpay::Preferences.send(channel) ? '1' : '0'
+        next unless respond_to?("preferred_#{channel}")
+        params[channel.to_s] = send("preferred_#{channel}") ? '1' : '0'
       end
 
-      # Generate form HTML
-      form_html = "<form id='ipay_form' action='#{SpreeIpay::Preferences.api_endpoint}' method='post'>"
+      # Determine API endpoint based on test mode
+      def api_endpoint
+        endpoint = test_mode? ? 
+          'https://sandbox.ipayafrica.com/v3/ke' : 
+          'https://payments.ipayafrica.com/v3/ke'
+        
+
+        endpoint
+      end  
+      # Log the final parameters being sent
+      log_params = params.dup
+      log_params[:hsh] = '[FILTERED]' if log_params[:hsh].present?
+      log_params[:tel] = '[FILTERED]' if log_params[:tel].present?
+      log_params[:eml] = '[FILTERED]' if log_params[:eml].present?
+
+
+      # Generate form HTML - use the proper endpoint based on test mode
+      form_action = api_endpoint
+
+      
+      form_html = "<form id='ipay_form' action='#{form_action}' method='POST'>\n"
+      
       params.each do |key, value|
-        form_html += "<input type='hidden' name='#{key}' value='#{ERB::Util.html_escape(value)}'>"
+        escaped_value = ERB::Util.html_escape(value.to_s)
+        form_html += "<input type='hidden' name='#{key}' value='#{escaped_value}'>\n"
+
       end
-      form_html += "<button type='submit' style='display:none'>Pay</button></form>"
+      
+      form_html += "</form>"
       form_html += "<script>document.getElementById('ipay_form').submit();</script>"
+      
+
+      form_html
 
       # Store form HTML in session
       options[:controller].session[:ipay_form_html] = form_html
@@ -523,14 +615,14 @@ module Spree
       # Prepare status check parameters
       params = {
         live: test_mode? ? '0' : '1',
-        vid: SpreeIpay::Preferences[:vendor_id],
+        vid: preferred_vendor_id,
         tid: transaction_id,
         hsh: generate_status_hash(transaction_id)
       }
 
       # Make API call to check status
       response = HTTParty.post(
-        SpreeIpay::Preferences[:api_endpoint],
+        preferred_api_endpoint,
         body: params
       )
 
@@ -547,14 +639,14 @@ module Spree
       # Prepare cancellation parameters
       params = {
         live: test_mode? ? '0' : '1',
-        vid: SpreeIpay::Preferences[:vendor_id],
+        vid: preferred_vendor_id,
         tid: transaction_id,
         hsh: generate_cancel_hash(transaction_id)
       }
 
       # Make API call to cancel payment
       response = HTTParty.post(
-        SpreeIpay::Preferences.api_endpoint,
+        preferred_api_endpoint,
         body: params
       )
 
@@ -568,50 +660,73 @@ module Spree
     end
 
     def generate_hash(payment)
-      # Generate hash based on iPay's requirements
+
+      
+      # Prepare all values
+      live = preferred_test_mode ? '0' : '1'
+      oid = payment.order.number
+      inv = payment.order.number
+      ttl = payment.amount.to_f.round(2).to_s
+      eml = payment.order.email
+      vid = preferred_vendor_id
+      curr = preferred_currency.presence || 'KES'
+      cbk = preferred_callback_url.presence || '/ipay/confirm'
+      
+      # Log all values being used
+
+
+      # Create data string in the exact order required by iPay
       data_string = [
-        SpreeIpay::Preferences.live_mode ? '1' : '0',
-        payment.order.id.to_s,  # Use numeric order ID
-        payment.order.id.to_s,  # Use numeric order ID for both oid and inv
-        payment.amount.to_f.round(2).to_s,
-        payment.order.email,
-        SpreeIpay::Preferences.vendor_id,
-        SpreeIpay::Preferences.currency,
-        '', # p1
-        '', # p2
-        '', # p3
-        '', # p4
-        SpreeIpay::Preferences.callback_url,
-        '1', # cst
-        '2'  # crl
+        live,   # live
+        oid,    # order ID
+        inv,    # invoice number
+        ttl,    # total amount
+        '',     # tel (empty as per iPay docs)
+        eml,    # email
+        vid,    # vendor ID
+        curr,   # currency
+        '',     # p1
+        '',     # p2
+        '',     # p3
+        '',     # p4
+        cbk,    # callback URL
+        '1',    # cst
+        '2'     # crl
       ].join
+      
+
+      
+      # Generate the hash
+      hash = OpenSSL::HMAC.hexdigest('sha1', preferred_hash_key, data_string)
+      
+
+      
+      hash
 
       # Generate and return hash using HMAC SHA1
-      OpenSSL::HMAC.hexdigest('sha1', SpreeIpay::Preferences.secret_key, data_string)
+      OpenSSL::HMAC.hexdigest('sha1', preferred_hash_key, data_string)
     end
 
     def generate_status_hash(transaction_id)
       # Generate hash for status check
       data_string = [
-        SpreeIpay::Preferences.live_mode ? '1' : '0',
-        SpreeIpay::Preferences.vendor_id,
+        preferred_test_mode ? '0' : '1',
+        preferred_vendor_id,
         transaction_id
       ].join
 
-      # Generate and return hash using HMAC SHA1
-      OpenSSL::HMAC.hexdigest('sha1', SpreeIpay::Preferences.secret_key, data_string)
+      OpenSSL::HMAC.hexdigest('sha1', preferred_hash_key, data_string)
     end
 
     def generate_cancel_hash(transaction_id)
-      # Generate hash for cancellation
+      # Generate hash for payment cancellation
       data_string = [
-        SpreeIpay::Preferences.live_mode ? '1' : '0',
-        SpreeIpay::Preferences.vendor_id,
+        preferred_test_mode ? '0' : '1',
+        preferred_vendor_id,
         transaction_id
       ].join
 
-      # Generate and return hash using HMAC SHA1
-      OpenSSL::HMAC.hexdigest('sha1', SpreeIpay::Preferences.secret_key, data_string)
+      OpenSSL::HMAC.hexdigest('sha1', preferred_hash_key, data_string)
     end
 
     def callback_url(payment)
@@ -627,7 +742,18 @@ module Spree
     end
 
     def test_mode?
-      SpreeIpay::Preferences.test_mode
+      # If both are set, prefer test mode
+      return true if preferred_test_mode && preferred_live_mode
+      # Default to test mode if neither is set
+      return true if preferred_test_mode.nil? && preferred_live_mode.nil?
+      # Otherwise use the preferred_test_mode value
+      !!preferred_test_mode
+    end
+    
+    def api_endpoint
+      test_mode? ? 
+        'https://sandbox.ipayafrica.com/v3/ke' : 
+        'https://payments.ipayafrica.com/v3/ke'
     end
     
     def source_required?
