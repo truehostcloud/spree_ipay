@@ -1,9 +1,9 @@
 module SpreeIpay
   class Preferences
     attr_accessor :live_mode, :vendor_id, :secret_key, :api_endpoint,
-                   :callback_url, :return_url, :currency,
-                   :mpesa, :bonga, :airtel, :equity, :mobilebanking,
-                   :creditcard, :unionpay, :mvisa, :vooma, :pesalink, :autopay
+                  :callback_url, :return_url, :currency,
+                  :mpesa, :bonga, :airtel, :equity, :mobilebanking,
+                  :creditcard, :unionpay, :mvisa, :vooma, :pesalink, :autopay
 
     def initialize
       # Load from environment variables with defaults
@@ -14,7 +14,7 @@ module SpreeIpay
       @callback_url = ENV['IPAY_CALLBACK_URL']
       @return_url = ENV['IPAY_RETURN_URL']
       @currency = ENV['IPAY_CURRENCY'] || 'KES'
-      
+
       # Channel preferences
       @mpesa = ENV['IPAY_MPESA'] ? true : false
       @bonga = ENV['IPAY_BONGA'] ? true : false

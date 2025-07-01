@@ -2,8 +2,6 @@ module Spree
   class GatewayCallbacksController < ApplicationController
     skip_before_action :verify_authenticity_token, only: [:confirm]
 
-
-
     def confirm
       txn_id = params[:txnid]
       status = params[:status]
@@ -38,7 +36,8 @@ module Spree
 
       # iPay status code handling (see docs)
       status_map = {
-        'aei7p7yrx4ae34' => { label: 'Success', color: '#3bb143', icon: 'success', heading: 'Order Placed Successfully!' },
+        'aei7p7yrx4ae34' => { label: 'Success', color: '#3bb143', icon: 'success',
+                              heading: 'Order Placed Successfully!' },
         'fe2707etr5s4wq' => { label: 'Failed', color: '#d32f2f', icon: 'fail', heading: 'Payment Failed' },
         'bdi6p2yy76etrs' => { label: 'Pending', color: '#fbc02d', icon: 'pending', heading: 'Payment Pending' },
         'cr5i3pgy9867e1' => { label: 'Used', color: '#d32f2f', icon: 'fail', heading: 'Code Already Used' },
@@ -95,10 +94,10 @@ module Spree
       end
       # Icon SVGs
       icon_svg = case meta[:icon]
-        when 'success' then '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#e6ffe6"/><path d="M8.5 12.5l2.5 2.5 4.5-4.5" stroke="#3bb143" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-        when 'pending' then '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#fffbe6"/><path d="M12 8v4l3 3" stroke="#fbc02d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-        else '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#ffe6e6"/><path d="M8 12l4 4 4-8" stroke="#d32f2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-      end
+                 when 'success' then '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#e6ffe6"/><path d="M8.5 12.5l2.5 2.5 4.5-4.5" stroke="#3bb143" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+                 when 'pending' then '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#fffbe6"/><path d="M12 8v4l3 3" stroke="#fbc02d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+                 else '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#ffe6e6"/><path d="M8 12l4 4 4-8" stroke="#d32f2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+                 end
 
       # Escape all dynamic/user variables
       esc_order_number = ERB::Util.html_escape(order.number)
@@ -117,34 +116,33 @@ module Spree
 
       if code == 'aei7p7yrx4ae34'
         # Show success page
-        html = <<-HTML
-<div style='max-width:600px;margin:40px auto;padding:32px;background:#{esc_color}11;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
-  #{esc_icon_svg}
-  <h1 style="color:#{esc_color};">#{esc_heading}</h1>
-  #{details}
-  <div style="margin-top:32px;">
-    <a href='#{esc_root_path}' style='display:inline-block;padding:12px 28px;background:#{esc_color};color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
-  </div>
-</div>
+        html = <<~HTML
+          <div style='max-width:600px;margin:40px auto;padding:32px;background:#{esc_color}11;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
+            #{esc_icon_svg}
+            <h1 style="color:#{esc_color};">#{esc_heading}</h1>
+            #{details}
+            <div style="margin-top:32px;">
+              <a href='#{esc_root_path}' style='display:inline-block;padding:12px 28px;background:#{esc_color};color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
+            </div>
+          </div>
         HTML
       else
         # Show two buttons: Retry Payment and Return to Store
-        html = <<-HTML
-<div style='max-width:600px;margin:40px auto;padding:32px;background:#{esc_color}11;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
-  #{esc_icon_svg}
-  <h1 style="color:#{esc_color};">#{esc_heading}</h1>
-  <p style="margin:18px 0 0 0;font-size:1.2em;">#{esc_message}</p>
-  #{details}
-  <div style="margin-top:32px;display:flex;gap:16px;justify-content:center;">
-    <a href='#{esc_payment_path}' style='display:inline-block;padding:12px 28px;background:#1976d2;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Retry Payment</a>
-    <a href='#{esc_root_path}' style='display:inline-block;padding:12px 28px;background:#{esc_color};color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
-  </div>
-</div>
+        html = <<~HTML
+          <div style='max-width:600px;margin:40px auto;padding:32px;background:#{esc_color}11;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
+            #{esc_icon_svg}
+            <h1 style="color:#{esc_color};">#{esc_heading}</h1>
+            <p style="margin:18px 0 0 0;font-size:1.2em;">#{esc_message}</p>
+            #{details}
+            <div style="margin-top:32px;display:flex;gap:16px;justify-content:center;">
+              <a href='#{esc_payment_path}' style='display:inline-block;padding:12px 28px;background:#1976d2;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Retry Payment</a>
+              <a href='#{esc_root_path}' style='display:inline-block;padding:12px 28px;background:#{esc_color};color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
+            </div>
+          </div>
         HTML
       end
       render html: html.html_safe, status: (code == 'aei7p7yrx4ae34' ? :ok : :payment_required)
       return
-
     rescue => e
       render plain: "An error occurred", status: :internal_server_error
     end
