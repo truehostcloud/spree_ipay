@@ -1,0 +1,74 @@
+name: Comment on PR
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+    types: [opened, synchronize]
+
+jobs:
+  trigger-bot-review:
+    if: github.event.pull_request.draft == false
+    name: Trigger Bot Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ secrets.BOT_REVIEW_COMMENT_ACCESS_TOKEN }}
+      MAIN_BRANCH: main
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Add comment on PR creation on dev and main
+        if: false
+        uses: actions/github-script@v7
+        continue-on-error: true
+        timeout-minutes: 5
+        with:
+          github-token: ${{ env.GITHUB_TOKEN }}
+          script: |
+            const comments = ['/describe'];
+            for (const comment of comments) {
+            github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: comment
+            });
+            }
+
+      - name: Add comment on PR creation to trigger bot review
+        if: github.event.action == 'opened' && github.base_ref == ${{ env.MAIN_BRANCH }}
+        uses: actions/github-script@v7
+        continue-on-error: true
+        timeout-minutes: 5
+        with:
+          github-token: ${{ env.GITHUB_TOKEN }}
+          script: |
+            const comments = ['/describe', '/review', '/improve'];
+            for (const comment of comments) {
+            github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: comment
+            });
+            }
+
+      - name: Add comment on PR update
+        if: github.event.action == 'synchronize' && github.base_ref == ${{ env.MAIN_BRANCH }}
+        uses: actions/github-script@v7
+        continue-on-error: true
+        timeout-minutes: 5
+        with:
+          github-token: ${{ env.GITHUB_TOKEN }}
+          script: |
+            const comments = ['/review', '/improve'];
+            for (const comment of comments) {
+            github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: comment
+            });
+            }

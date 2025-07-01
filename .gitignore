@@ -1,0 +1,70 @@
+# See https://github.com/github/gitignore/blob/main/Rails.gitignore for full reference
+
+# Ignore bundler config
+dotenv*
+.bundle
+vendor/bundle
+
+# Ignore Rails logs and temp files
+log/*
+tmp/*
+
+# Ignore database files
+db/*.sqlite3
+db/*.sqlite3-journal
+db/*.sqlite3-*
+
+# Ignore byebug command history file
+.byebug_history
+
+# Ignore node modules and yarn files
+node_modules/
+yarn-error.log
+yarn-debug.log*
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore coverage reports
+coverage/
+
+# Ignore secret credentials and environment files
+config/master.key
+config/credentials.yml.enc
+.env
+.env.*
+
+# Ignore compiled assets and cache
+public/assets
+public/packs
+public/packs-test
+public/packs-dev
+public/assets-test
+public/assets-dev
+public/webpack
+public/webpack-test
+public/webpack-dev
+
+# Ignore Capybara screenshots
+capybara-*.html
+
+# Ignore Sprockets cache
+.sprockets-manifest*
+
+# Ignore other temp files
+*.rbc
+*.sassc
+
+# Ignore pid files
+*.pid
+*.pid.lock
+
+# Ignore coverage and test artifacts
+doc/coverage/
+
+# Ignore RuboCop config
+.rubocop-https?--*
+
+# Ignore deepsource config
+.deepsource.toml
