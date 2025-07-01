@@ -58,7 +58,7 @@ module SpreeIpay
   def self.Preferences
     Configuration
   end
-  
+
   # Alias for backward compatibility
   Preferences = Configuration unless defined?(Preferences)
 end

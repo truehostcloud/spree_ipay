@@ -13,8 +13,10 @@ module Spree
     preference :live_mode, :boolean, default: false
     preference :currency, :string, default: 'KES'
     preference :callback_url, :string, default: '/ipay/confirm'
-    preference :return_url, :string, default: -> { "#{Rails.application.routes.url_helpers.root_url.chomp('/')}/ipay/confirm" }
-    
+    preference :return_url, :string, default: -> {
+                                                "#{Rails.application.routes.url_helpers.root_url.chomp('/')}/ipay/confirm"
+                                              }
+
     # Channel settings
     preference :mpesa, :boolean, default: true
     preference :bonga, :boolean, default: false
@@ -31,7 +33,7 @@ module Spree
       super
       # Initialize with empty preferences - don't use environment variables
       @preferences ||= {}
-      
+
       # Set default values if not already set
       self.preferred_test_mode = true if preferred_test_mode.nil?
       self.preferred_live_mode = false if preferred_live_mode.nil?
@@ -39,7 +41,7 @@ module Spree
     preference :currency, :string, default: 'KES'
     preference :callback_url, :string, default: '/ipay/confirm'
     preference :return_url, :string, default: '/ipay/confirm'
-    
+
     # Channel preferences
     preference :mpesa, :boolean, default: true
     preference :bonga, :boolean, default: true
@@ -84,30 +86,30 @@ module Spree
     def process_payment(payment)
       # First, authorize the payment
       response = authorize(
-        payment.amount_in_cents, 
-        payment.source, 
+        payment.amount_in_cents,
+        payment.source,
         originator: payment,
         order_id: payment.order.number
       )
-      
+
       return response unless response.success?
-      
+
       # If authorization is successful, capture the payment
       capture_response = capture(
-        payment.amount_in_cents, 
-        response.authorization, 
+        payment.amount_in_cents,
+        response.authorization,
         originator: payment
       )
-      
+
       return capture_response unless capture_response.success?
-      
+
       # Update payment with the captured response
       payment.update!(
         state: 'completed',
         response_code: capture_response.authorization,
         avs_response: capture_response.avs_result['code']
       )
-      
+
       capture_response
     rescue StandardError => e
       failure_response(e.message)
@@ -116,12 +118,12 @@ module Spree
     def authorize(amount, source, options = {})
       payment = options[:originator]
       order = payment.order
-      
+
       # Ensure the order is in the correct state
       unless order.checkout_steps.include?('confirm')
         return failure_response("Order is not in a confirmable state")
       end
-      
+
       # Ensure we have a valid source
       if source.blank? || !source.is_a?(Spree::IpaySource)
         return failure_response("Invalid payment source")
@@ -131,20 +133,20 @@ module Spree
       if source.payment_method_id != id && !source.update(payment_method_id: id)
         return failure_response("Failed to update payment source")
       end
-      
+
       # Get phone from source
       phone = source.phone
-      
+
       # Store phone number in session if we have a controller context
       if options[:controller]&.respond_to?(:session)
         options[:controller].session[:ipay_phone_number] = phone
       end
-      
+
       # Ensure payment has the source assigned
       if payment.source.nil? || !payment.source.is_a?(Spree::IpaySource)
         payment.source = source
         payment.payment_method_id = id
-        
+
         # Save the payment to ensure source is associated
         unless payment.save
           return failure_response("Failed to save payment: #{payment.errors.full_messages.to_sentence}")
@@ -155,7 +157,7 @@ module Spree
           return failure_response("Failed to update payment source")
         end
       end
-      
+
       # Process the payment
       process!(phone: phone, payment: payment, amount: amount, options: options)
     rescue => e
@@ -164,23 +166,23 @@ module Spree
 
     def capture(amount, response_code, options = {})
       payment = options[:originator]
-      
+
       # If we're in test mode, just return success
       if preferred_test_mode
         return ActiveMerchant::Billing::Response.new(
-          true, 
-          'Test mode - payment captured successfully', 
-          { test: true, authorization: "TEST-#{SecureRandom.hex(8)}" }, 
+          true,
+          'Test mode - payment captured successfully',
+          { test: true, authorization: "TEST-#{SecureRandom.hex(8)}" },
           { test: true }
         )
       end
-      
+
       # In production, you would implement the actual capture logic here
       # For now, we'll simulate a successful capture
       ActiveMerchant::Billing::Response.new(
-        true, 
-        'Payment captured successfully', 
-        { authorization: response_code }, 
+        true,
+        'Payment captured successfully',
+        { authorization: response_code },
         {}
       )
     rescue => e
@@ -189,19 +191,19 @@ module Spree
 
     def void(response_code, options = {})
       payment = options[:originator]
-      
+
       # If we're in test mode, just return success
       if preferred_test_mode
         return ActiveMerchant::Billing::Response.new(
-          true, 
-          'Test mode - payment voided successfully', 
-          { test: true, authorization: "TEST-VOID-#{SecureRandom.hex(4)}" }, 
+          true,
+          'Test mode - payment voided successfully',
+          { test: true, authorization: "TEST-VOID-#{SecureRandom.hex(4)}" },
           { test: true }
         )
       end
-      
+
       response = cancel_payment(response_code)
-      
+
       if response['status'] == 'success'
         success_response
       else
@@ -213,11 +215,10 @@ module Spree
 
     def process!(phone: nil, payment: nil, amount: nil, options: {})
       # Process iPay payment
-      
+
       begin
         # Log the start of payment processing
 
-        
         # Validate required parameters
         unless phone.present? && payment.present? && payment.order.present? && amount.present?
           error_msg = "Missing required parameters for iPay payment"
@@ -257,19 +258,13 @@ module Spree
         # Validate iPay credentials with detailed logging
         vendor_id = preferred_vendor_id
         hash_key = preferred_hash_key
-        
 
-
-
-      
         unless vendor_id.present? && hash_key.present?
           error_msg = "Missing iPay credentials. Please configure vendor_id and hash_key in the payment method settings."
 
           payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
           return failure_response('Payment configuration error. Please check your iPay settings.')
         end
-        
-
 
         # Update payment amount if needed
         if payment.amount.to_f != amount.to_f
@@ -284,13 +279,12 @@ module Spree
 
         # Transition payment to processing state
         payment.started_processing! if payment.respond_to?(:started_processing!)
-        
+
         # Payment processing started
         payment.log_entries.create(details: 'Payment processing started') if payment.respond_to?(:log_entries)
-        
+
         # Return success response
         success_response('Payment processing started')
-        
       rescue => e
         error_msg = "Payment processing failed: #{e.message}"
         payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
@@ -303,19 +297,19 @@ module Spree
       # Get values from payment method preferences
       vendor_id = preferred_vendor_id.to_s
       hash_key = preferred_hash_key.to_s
-      
+
       # Validate required preferences
       if vendor_id.blank? || hash_key.blank?
         error_msg = "Missing required iPay credentials. Please configure vendor_id and hash_key in the payment method settings."
         raise error_msg
       end
-      
+
       # Set live mode (0 for test, 1 for live)
       live = test_mode? ? "0" : "1"
-      
+
       oid = payment.order.number.to_s
       inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      ttl = (payment.amount.to_f * 100).to_i.to_s  # Amount in cents
+      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
       tel = payment.order.bill_address&.phone.to_s || session[:ipay_phone_number].to_s || "0700000000"
       eml = payment.order.email.to_s
       vid = vendor_id
@@ -350,7 +344,7 @@ module Spree
       oid = payment.order.id.to_s
       # Use numeric order ID for invoice as well
       inv = payment.order.id.to_s
-      ttl = (payment.amount.to_f * 100).to_i.to_s  # Amount in cents
+      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
       tel = payment.order.bill_address&.phone || session[:ipay_phone_number] || "0700000000"
       eml = payment.order.email
       vid = preferred_vendor_id
@@ -364,7 +358,7 @@ module Spree
       return_uri = URI.parse(preferred_return_url.presence || 'https://example.com')
       default_host = return_uri.host
       default_protocol = return_uri.scheme || 'https'
-      
+
       # Generate callback URL for iPay to send payment status
       begin
         if preferred_callback_url.present?
@@ -377,33 +371,33 @@ module Spree
           protocol = test_mode? ? 'https' : default_protocol
           callback_uri = URI.parse("#{protocol}://#{default_host}/api/v1/ipay/callback")
         end
-        
+
         # Ensure the callback URL is valid
         raise URI::InvalidURIError if callback_uri.host.blank?
-        
+
         # Add test parameter if in test mode
         if test_mode?
           params = URI.decode_www_form(callback_uri.query || '').to_h
           params['test'] = '1'
           callback_uri.query = URI.encode_www_form(params)
         end
-        
+
         cbk = callback_uri.to_s
       rescue URI::InvalidURIError => e
-          # Fallback to a safe default in case of errors
+        # Fallback to a safe default in case of errors
         cbk = "https://#{default_host}/api/v1/ipay/callback"
         cbk += '?test=1' if test_mode?
       end
-      
+
       # Generate return URL for customer redirect after payment
       # Point to the frontend order confirmation page
       order_number = payment.order.number
       order_token = payment.order.guest_token
       rst = preferred_return_url.presence || "#{default_protocol}://#{default_host}/orders/#{order_number}?order_token=#{order_token}"
-      
+
       cst = "1"  # Customer email notification flag
       crl = "2"  # Customer phone notification flag
-      
+
       begin
         hsh = ipay_signature_hash(payment)
       rescue => e
@@ -431,35 +425,31 @@ module Spree
         hsh: hsh
       }
 
-
       # Add channel parameters based on preferences
 
       channels = [
         :mpesa, :bonga, :airtel, :equity, :mobilebanking,
         :creditcard, :unionpay, :mvisa, :vooma, :pesalink, :autopay
       ]
-      
+
       channels.each do |channel|
         channel_value = self.send("preferred_#{channel}") ? '1' : '0'
         ipay_params[channel] = channel_value
-
       end
-
-
 
       # Generate form HTML
       form_html = "<form id='ipay_form' action='https://payments.ipayafrica.com/v3/ke' method='POST'>\n"
-      
+
       # Add all parameters with proper escaping
       ipay_params.each do |key, value|
         form_html << "  <input type='hidden' name='#{key}' value='#{ERB::Util.html_escape(value.to_s)}'>\n"
       end
-      
+
       # Add submit button and auto-submit script
       form_html << "  <input type='submit' value='Pay with iPay'>\n"
       form_html << "</form>\n"
       form_html << "<script>document.getElementById('ipay_form').submit();</script>\n"
-      
+
       form_html
     end
 
@@ -499,7 +489,7 @@ module Spree
       begin
         # Check payment status
         status = check_payment_status(payment.response_code)
-        
+
         if status['status'] == 'success'
           payment.update!(state: 'completed')
           success_response
@@ -514,7 +504,7 @@ module Spree
     def void(response_code, options = {})
       begin
         response = cancel_payment(response_code)
-        
+
         if response['status'] == 'success'
           success_response
         else
@@ -528,7 +518,6 @@ module Spree
     def initiate_payment(payment, phone: nil)
       # Log the start of payment initiation
 
-      
       # Prepare parameters
       params = {
         live: preferred_test_mode ? '0' : '1',
@@ -547,17 +536,14 @@ module Spree
         cst: '1',
         crl: '2'
       }
-      
+
       # Log all parameters except sensitive ones
       log_params = params.dup
       log_params[:tel] = '[FILTERED]' if log_params[:tel].present?
       log_params[:eml] = '[FILTERED]' if log_params[:eml].present?
 
-      
       # Generate and add hash
       params[:hsh] = generate_hash(payment)
-
-
 
       # Add channel parameters
       [
@@ -565,40 +551,36 @@ module Spree
         :creditcard, :unionpay, :mvisa, :vooma, :pesalink, :autopay
       ].each do |channel|
         next unless respond_to?("preferred_#{channel}")
+
         params[channel.to_s] = send("preferred_#{channel}") ? '1' : '0'
       end
 
       # Determine API endpoint based on test mode
       def api_endpoint
-        endpoint = test_mode? ? 
-          'https://sandbox.ipayafrica.com/v3/ke' : 
+        endpoint = test_mode? ?
+          'https://sandbox.ipayafrica.com/v3/ke' :
           'https://payments.ipayafrica.com/v3/ke'
-        
 
         endpoint
-      end  
+      end
       # Log the final parameters being sent
       log_params = params.dup
       log_params[:hsh] = '[FILTERED]' if log_params[:hsh].present?
       log_params[:tel] = '[FILTERED]' if log_params[:tel].present?
       log_params[:eml] = '[FILTERED]' if log_params[:eml].present?
 
-
       # Generate form HTML - use the proper endpoint based on test mode
       form_action = api_endpoint
 
-      
       form_html = "<form id='ipay_form' action='#{form_action}' method='POST'>\n"
-      
+
       params.each do |key, value|
         escaped_value = ERB::Util.html_escape(value.to_s)
         form_html += "<input type='hidden' name='#{key}' value='#{escaped_value}'>\n"
-
       end
-      
+
       form_html += "</form>"
       form_html += "<script>document.getElementById('ipay_form').submit();</script>"
-      
 
       form_html
 
@@ -666,8 +648,6 @@ module Spree
     end
 
     def generate_hash(payment)
-
-      
       # Prepare all values
       live = preferred_test_mode ? '0' : '1'
       oid = payment.order.number
@@ -677,9 +657,8 @@ module Spree
       vid = preferred_vendor_id
       curr = preferred_currency.presence || 'KES'
       cbk = preferred_callback_url.presence || '/ipay/confirm'
-      
-      # Log all values being used
 
+      # Log all values being used
 
       # Create data string in the exact order required by iPay
       data_string = [
@@ -699,14 +678,10 @@ module Spree
         '1',    # cst
         '2'     # crl
       ].join
-      
 
-      
       # Generate the hash
       hash = OpenSSL::HMAC.hexdigest('sha1', preferred_hash_key, data_string)
-      
 
-      
       hash
 
       # Generate and return hash using HMAC SHA1
@@ -752,16 +727,17 @@ module Spree
       return true if preferred_test_mode && preferred_live_mode
       # Default to test mode if neither is set
       return true if preferred_test_mode.nil? && preferred_live_mode.nil?
+
       # Otherwise use the preferred_test_mode value
       !!preferred_test_mode
     end
-    
+
     def api_endpoint
-      test_mode? ? 
-        'https://sandbox.ipayafrica.com/v3/ke' : 
+      test_mode? ?
+        'https://sandbox.ipayafrica.com/v3/ke' :
         'https://payments.ipayafrica.com/v3/ke'
     end
-    
+
     def source_required?
       true
     end
