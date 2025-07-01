@@ -1,33 +1,39 @@
 module Spree
   class GatewayCallbacksController < ApplicationController
-    skip_before_action :verify_authenticity_token
+    skip_before_action :verify_authenticity_token, only: [:confirm]
 
-    Rails.logger.info "[IPAY CALLBACK] GatewayCallbacksController loaded at \\#{Time.current}"
+
 
     def confirm
-      Rails.logger.info "OMKUU [IPAY CALLBACK] --- CALLBACK RECEIVED ---"
-      Rails.logger.info "OMKUU [IPAY CALLBACK] Time: #{Time.current}"
-      Rails.logger.info "OMKUU [IPAY CALLBACK] Params: #{params.to_unsafe_h.inspect}"
-      Rails.logger.info "OMKUU [IPAY CALLBACK] Session: #{session.to_hash.inspect}"
-      Rails.logger.info "OMKUU [IPAY CALLBACK] Request: ip=#{request.remote_ip}, method=#{request.method}, path=#{request.fullpath}, headers=#{request.headers.env.select{|k,v| k.to_s.start_with?("HTTP_")}}"
-
       txn_id = params[:txnid]
       status = params[:status]
       order_number = params[:order_id] || params[:id] || params[:ivm]
-      Rails.logger.info "OMKUU Using order_number='#{order_number}' (from order_id, id, or ivm param)"
 
       order = Spree::Order.find_by(number: order_number)
       unless order
-        Rails.logger.error "OMKUU ERROR: Order not found for order_number=#{order_number} with params=#{params.to_unsafe_h.inspect}"
         render plain: "Order not found", status: :not_found
         return
       end
 
       payment = order.payments.last
       unless payment
-        Rails.logger.error "OMKUU ERROR: Payment not found for order_number=#{order_number} (order.id=#{order.id})"
         render plain: "Payment not found", status: :not_found
         return
+      end
+
+      # --- iPay C2B SHA1 HMAC Signature Verification ---
+      required_keys = %w[live oid inv ttl tel eml vid curr p1 p2 p3 p4 cbk cst crl]
+      # Accept both string and symbol keys from params
+      param_values = required_keys.map { |k| params[k] || params[k.to_sym] }
+      if param_values.all?
+        datastring = param_values.join
+        hash_key = payment.payment_method.preferred_hash_key if payment.payment_method.respond_to?(:preferred_hash_key)
+        received_signature = params[:hsh] || params[:hash]
+        generated_signature = OpenSSL::HMAC.hexdigest('sha1', hash_key, datastring)
+        unless ActiveSupport::SecurityUtils.secure_compare(generated_signature, received_signature.to_s)
+          render plain: "Invalid signature", status: :unauthorized
+          return
+        end
       end
 
       # iPay status code handling (see docs)
@@ -55,16 +61,30 @@ module Spree
       p2 = params[:p2] || ''
       p3 = params[:p3] || ''
       p4 = params[:p4] || ''
-      # OMKUU log for all
-      Rails.logger.info "OMKUU IPAY CALLBACK: order_number=#{order_number}, payment id=#{payment.id}, status=#{code}, reason=#{reason}, message=#{message}, txncd=#{txncd}, msisdn_id=#{msisdn_id}, msisdn_idnum=#{msisdn_idnum}, mc=#{mc}, agt=#{agt}, card_mask=#{card_mask}, ivm=#{ivm}, id=#{id_param}"
       # State handling
       if code == 'aei7p7yrx4ae34'
         payment.update(response_code: txn_id) if txn_id.present?
         unless payment.completed?
-          payment.complete!
+          if payment.respond_to?(:can_complete?)
+            payment.complete! if payment.can_complete?
+          else
+            payment.complete!
+          end
         end
-        unless order.completed?
-          order.next! until order.completed?
+        if order.respond_to?(:can_advance?) && order.respond_to?(:completed?)
+          while !order.completed? && order.can_advance?
+            begin
+              order.next!
+            rescue => e
+              break
+            end
+          end
+        else
+          begin
+            order.next! until order.completed?
+          rescue => e
+            # Swallow error, do not log
+          end
         end
       elsif code == 'bdi6p2yy76etrs' # Pending, do not fail payment
         # leave payment as pending
@@ -79,33 +99,45 @@ module Spree
         when 'pending' then '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#fffbe6"/><path d="M12 8v4l3 3" stroke="#fbc02d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
         else '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#ffe6e6"/><path d="M8 12l4 4 4-8" stroke="#d32f2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
       end
-      # Details table (only show Order #, Status, Message, Payer Name, Payer Phone)
-      details = "<table style='margin:24px auto 0 auto;font-size:1em;text-align:left;'><tr><td style='padding:4px 12px;font-weight:bold;'>Order #:</td><td>#{order_number}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Status:</td><td>#{meta[:label]}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Message:</td><td>#{message}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Payer Name:</td><td>#{msisdn_id}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Payer Phone:</td><td>#{msisdn_idnum}</td></tr></table>"
 
-      # Main page
-      payment_path = spree.checkout_state_path(order.state)
-      html = if code == 'aei7p7yrx4ae34'
-        <<-HTML
-<div style='max-width:600px;margin:40px auto;padding:32px;background:#e6ffe6;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
-  #{icon_svg}
-  <h1 style="color:#{meta[:color]};">#{meta[:heading]}</h1>
+      # Escape all dynamic/user variables
+      esc_order_number = ERB::Util.html_escape(order.number)
+      esc_status = ERB::Util.html_escape(meta[:label])
+      esc_message = ERB::Util.html_escape(message)
+      esc_payer_name = ERB::Util.html_escape(msisdn_id)
+      esc_payer_phone = ERB::Util.html_escape(msisdn_idnum)
+      esc_heading = ERB::Util.html_escape(meta[:heading])
+      esc_color = ERB::Util.html_escape(meta[:color])
+      esc_icon_svg = icon_svg # assumed safe, as it's generated SVG markup
+      esc_root_path = ERB::Util.html_escape(spree.root_path)
+      esc_payment_path = ERB::Util.html_escape(spree.checkout_state_path(order.state))
+
+      # Details table (only show Order #, Status, Message, Payer Name, Payer Phone)
+      details = "<table style='margin:24px auto 0 auto;font-size:1em;text-align:left;'><tr><td style='padding:4px 12px;font-weight:bold;'>Order #:</td><td>#{esc_order_number}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Status:</td><td>#{esc_status}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Message:</td><td>#{esc_message}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Payer Name:</td><td>#{esc_payer_name}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Payer Phone:</td><td>#{esc_payer_phone}</td></tr></table>"
+
+      if code == 'aei7p7yrx4ae34'
+        # Show success page
+        html = <<-HTML
+<div style='max-width:600px;margin:40px auto;padding:32px;background:#{esc_color}11;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
+  #{esc_icon_svg}
+  <h1 style="color:#{esc_color};">#{esc_heading}</h1>
   #{details}
   <div style="margin-top:32px;">
-    <a href='#{spree.root_path}' style='display:inline-block;padding:12px 28px;background:#{meta[:color]};color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
+    <a href='#{esc_root_path}' style='display:inline-block;padding:12px 28px;background:#{esc_color};color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
   </div>
 </div>
         HTML
       else
         # Show two buttons: Retry Payment and Return to Store
-        <<-HTML
-<div style='max-width:600px;margin:40px auto;padding:32px;background:#{meta[:color]}11;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
-  #{icon_svg}
-  <h1 style="color:#{meta[:color]};">#{meta[:heading]}</h1>
-  <p style="margin:18px 0 0 0;font-size:1.2em;">#{message}</p>
+        html = <<-HTML
+<div style='max-width:600px;margin:40px auto;padding:32px;background:#{esc_color}11;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
+  #{esc_icon_svg}
+  <h1 style="color:#{esc_color};">#{esc_heading}</h1>
+  <p style="margin:18px 0 0 0;font-size:1.2em;">#{esc_message}</p>
   #{details}
   <div style="margin-top:32px;display:flex;gap:16px;justify-content:center;">
-    <a href='#{payment_path}' style='display:inline-block;padding:12px 28px;background:#1976d2;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Retry Payment</a>
-    <a href='#{spree.root_path}' style='display:inline-block;padding:12px 28px;background:#{meta[:color]};color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
+    <a href='#{esc_payment_path}' style='display:inline-block;padding:12px 28px;background:#1976d2;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Retry Payment</a>
+    <a href='#{esc_root_path}' style='display:inline-block;padding:12px 28px;background:#{esc_color};color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
   </div>
 </div>
         HTML
@@ -114,7 +146,6 @@ module Spree
       return
 
     rescue => e
-      Rails.logger.error "Payment confirmation error: #{e.message}"
       render plain: "An error occurred", status: :internal_server_error
     end
   end

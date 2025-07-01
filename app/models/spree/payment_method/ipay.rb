@@ -226,6 +226,13 @@ module Spree
           return failure_response(error_msg)
         end
 
+        # Validate phone is a 10-digit number
+        unless phone.to_s.match?(/^\d{10}$/)
+          error_msg = "Invalid phone number. Please enter a valid 10-digit mobile number."
+          payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
+          return failure_response(error_msg)
+        end
+
         # Validate credentials are set
         if preferred_vendor_id.blank? || preferred_hash_key.blank?
           error_msg = "iPay vendor ID or hash key is not configured"
@@ -300,7 +307,6 @@ module Spree
       # Validate required preferences
       if vendor_id.blank? || hash_key.blank?
         error_msg = "Missing required iPay credentials. Please configure vendor_id and hash_key in the payment method settings."
-        Rails.logger.error error_msg
         raise error_msg
       end
       
