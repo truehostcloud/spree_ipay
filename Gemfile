@@ -7,13 +7,13 @@ gemspec
 # Spree version to test against
 ruby '3.3.8'
 
-# Pin Rails to a version compatible with Spree 4.10.0
+# Pin Rails to a version compatible with Spree
 gem 'rails', '~> 7.0.8'
 
 # Spree gems
-gem 'spree', '~> 4.10.0'
-gem 'spree_gateway', '~> 3.10.0'  # Compatible with Spree 4.10.0
-gem 'spree_auth_devise', '~> 4.10.0'
+gem 'spree', '~> 4.6.3'  # Latest stable version
+gem 'spree_gateway', '~> 3.10.0'  # Compatible with Spree 4.6.3
+gem 'spree_auth_devise', '~> 4.6.3'  # Latest version available
 
 group :test do
   gem 'rspec-rails', '~> 5.0'
