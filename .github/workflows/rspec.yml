@@ -27,6 +27,10 @@ jobs:
     env:
       RAILS_ENV: test
       DATABASE_URL: postgres://postgres:password@localhost:5432/spree_ipay_test
+      TEST_DATABASE_URL: postgres://postgres:password@localhost:5432/spree_ipay_test
+      DISABLE_SPRING: 1
+      RAILS_MASTER_KEY: 1234567890abcdef1234567890abcdef  # Add a dummy key for test environment
+      SECRET_KEY_BASE: 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
 
     steps:
     - uses: actions/checkout@v4
@@ -51,13 +55,27 @@ jobs:
 
     - name: Set up test database
       run: |
-        # Create the test app
-        bundle exec rake test_app
-        
-        # Set up database
-        cd spec/dummy
-        RAILS_ENV=test bundle exec rails db:create db:migrate
-        cd ../..
+        # Generate test app if it doesn't exist
+        if [ ! -d "spec/dummy" ]; then
+          bundle exec rails new spec/dummy --skip-git --database=postgresql --skip-test --skip-system-test --skip-turbolinks --skip-webpack-install
+          
+          # Add Spree to the test app
+          cd spec/dummy
+          echo "gem 'spree', '~> 4.5.0'" >> Gemfile
+          echo "gem 'spree_gateway', '~> 3.11.1'" >> Gemfile
+          echo "gem 'spree_auth_devise', '~> 4.5.0'" >> Gemfile
+          bundle install
+          
+          # Run Spree install
+          bundle exec rails g spree:install --auto-accept --user_class=Spree::User
+          bundle exec rails g spree:auth:install
+          bundle exec rails g spree_gateway:install
+          
+          # Set up database
+          bundle exec rails db:create
+          bundle exec rails db:migrate
+          cd ../..
+        fi
 
     - name: Run tests
       run: bundle exec rspec
