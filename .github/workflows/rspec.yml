@@ -45,9 +45,9 @@ jobs:
         
         # Add Spree to the test app
         echo "\n# Spree" >> Gemfile
-        echo "gem 'spree', '~> 4.6.3'" >> Gemfile
+        echo "gem 'spree', '~> 4.6.0'" >> Gemfile
         echo "gem 'spree_gateway', '~> 3.10.0'" >> Gemfile
-        echo "gem 'spree_auth_devise', '~> 4.6.3'" >> Gemfile
+        echo "gem 'spree_auth_devise', '~> 4.6.0'" >> Gemfile
         echo "gem 'spree_extension', '~> 0.1.0'" >> Gemfile
         echo "gem 'spree_ipay', path: '../..'" >> Gemfile
         
