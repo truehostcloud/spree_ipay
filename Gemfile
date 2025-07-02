@@ -13,7 +13,7 @@ gem "mini_racer", platforms: %i[ ruby jruby ] # fixes Could not find a JavaScrip
 gem "sqlite3", ">= 1.4"
 
 # Use the Puma web server [https://github.com/puma/puma]
-gem "puma", "~> 5.6"
+gem "puma", ">= 6.0"  # Need Puma 6+ for Rack 3 compatibility
 
 # JavaScript with ESM import maps [https://github.com/rails/importmap-rails]
 gem "importmap-rails"
