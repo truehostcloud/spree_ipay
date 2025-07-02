@@ -6,7 +6,7 @@ gemspec
 ruby '3.0.6'
 
 gem 'spree', '~> 4.5.0'
-gem 'spree_gateway', '~> 3.15.0'
+gem 'spree_gateway', '~> 3.11.1'  # Latest version compatible with Spree 4.5
 gem 'spree_auth_devise', '~> 4.5.0'
 
 group :test do
