@@ -47,7 +47,6 @@ group :test do
 end
 
 group :development, :test do
-  gem 'sqlite3', '~> 1.4'  # For local development
   gem 'pry-byebug', '~> 3.9'  # Debugging
   gem 'dotenv-rails', '~> 2.8'  # For environment variables
 end
