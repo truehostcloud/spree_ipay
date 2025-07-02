@@ -38,9 +38,9 @@ jobs:
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: 3.3.8
+        ruby-version: 3.2.2
         bundler-cache: true
-        bundler: 2.4.22  # Specific bundler version that works well with Spree 4.10
+        bundler: 2.4.22  # Specific bundler version that works well with Spree 4.5
 
     - name: Install PostgreSQL client
       run: |
@@ -62,9 +62,9 @@ jobs:
         
         # Add Spree to the test app
         echo "\n# Spree" >> Gemfile
-        echo "gem 'spree', '~> 4.6.0'" >> Gemfile
+        echo "gem 'spree', '~> 4.5.0'" >> Gemfile
         echo "gem 'spree_gateway', '~> 3.10.0'" >> Gemfile
-        echo "gem 'spree_auth_devise', '~> 4.6.0'" >> Gemfile
+        echo "gem 'spree_auth_devise', '~> 4.5.0'" >> Gemfile
         echo "gem 'spree_extension', '~> 0.1.0'" >> Gemfile
         
         # Install gems

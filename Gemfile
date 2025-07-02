@@ -2,16 +2,16 @@
 
 source 'https://rubygems.org'
 
-# Spree version to test against
-ruby '3.3.8'
+# Ruby version
+ruby '3.2.2'
 
-# Pin Rails to a version compatible with Spree
+# Rails version
 gem 'rails', '~> 7.0.8'
 
 # Spree gems
-gem 'spree', '~> 4.6.0'  # Using ~> to allow patch versions
-gem 'spree_gateway', '~> 3.10.0'  # Compatible with Spree 4.6.x
-gem 'spree_auth_devise', '~> 4.6.0'  # Compatible with Spree 4.6.x
+gem 'spree', '~> 4.5.0'  # Stable version with good Ruby 3.2 support
+gem 'spree_gateway', '~> 3.10.0'  # Compatible with Spree 4.5.x
+gem 'spree_auth_devise', '~> 4.5.0'  # Compatible with Spree 4.5.x
 
 # This is the current extension being developed
 # It will be loaded from the local filesystem
