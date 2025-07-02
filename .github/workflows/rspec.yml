@@ -43,6 +43,15 @@ jobs:
           --skip-sprockets \
           --database=sqlite3
         
+        # Add Spree and testing gems to Gemfile
+        echo -e '\n# Spree\ngem "spree", "~> 4.6.0"\ngem "spree_gateway", "~> 3.10.0"\ngem "spree_auth_devise", "~> 4.6.0"\ngem "spree_extension", "~> 0.1.0"\ngem "spree_ipay", path: "../.."\n\n# Ransack with Rails 7.1 compatibility\ngem "ransack", github: "activerecord-hackery/ransack", branch: "master"\n\n# Testing\ngroup :development, :test do\n  gem "rspec-rails", "~> 6.1.0"\n  gem "factory_bot_rails", "~> 6.2.0"\n  gem "database_cleaner", "~> 2.0"\n  gem "shoulda-matchers", "~> 5.0"\nend' >> Gemfile
+
+        # Install gems
+        bundle _2.4.22_ install --verbose
+        
+        # Install RSpec
+        bundle _2.4.22_ exec rails generate rspec:install
+        
         # Run Spree install
         bundle _2.4.22_ exec rails g spree:install --auto-accept --user_class=Spree::User
         bundle _2.4.22_ exec rails g spree:auth:install
@@ -52,10 +61,7 @@ jobs:
         bundle _2.4.22_ exec rails db:create
         bundle _2.4.22_ exec rails db:migrate
         
-        # Set up RSpec
-        bundle _2.4.22_ exec rails generate rspec:install
-        
-        # Ensure binstubs are generated for RSpec
+        # Generate RSpec binstub
         bundle _2.4.22_ binstubs rspec-core
 
     - name: Run tests
