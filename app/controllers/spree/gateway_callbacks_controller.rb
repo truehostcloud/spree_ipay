@@ -3,13 +3,6 @@ module Spree
     skip_before_action :verify_authenticity_token, only: [:confirm]
 
     def confirm
-      # Log all callback parameters to the terminal using Omkuu
-      if defined?(Omkuu)
-        Omkuu.log(:info, "iPay Callback Params: #{params.to_unsafe_h.inspect}")
-      else
-        Rails.logger.info "[OMKUU] iPay Callback Params: #{params.to_unsafe_h.inspect}"
-      end
-
       txn_id = params[:txnid]
       status = params[:status]
       order_number = params[:order_id] || params[:id] || params[:ivm]

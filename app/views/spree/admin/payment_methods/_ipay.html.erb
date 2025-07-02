@@ -301,37 +301,40 @@
 
         <div class="form-group">
           <%= label_tag :callback_url, "Callback URL" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_callback_url]",
-            @payment_method.preferred_callback_url,
-            type: :string,
-            class: 'form-control',
-            placeholder: 'https://yourdomain.com/api/v1/ipay/:payment_id/callback'
-          ) %>
+          <div class="input-group">
+            <%= preference_field_tag(
+              "payment_method[preferred_callback_url]",
+              @payment_method.preferred_callback_url,
+              type: :string,
+              class: 'form-control',
+              placeholder: 'https://yourstore.com/ipay/confirm',
+              id: 'callback-url-field-admin'
+            ) %>
+            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard('#callback-url-field-admin')">Copy</button>
+          </div>
           <small class="form-text text-muted">
-            <strong>Required:</strong> Copy this Callback URL into your iPay merchant dashboard settings.<br>
-            <strong>This URL must be accessible from the public internet</strong> (iPay servers cannot reach localhost).<br>
-            <strong>Example:</strong> <code>https://yourdomain.com/api/v1/ipay/:payment_id/callback</code><br>
-            Replace <code>:payment_id</code> with the actual payment id if required by iPay.<br>
-            <strong>Tip:</strong> Use your current ngrok address while developing locally.<br>
-            <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="copyToClipboard('[name=\'payment_method[preferred_callback_url]\']')">Copy Callback URL</button>
+            <strong>Required:</strong> Enter your store domain followed by <code>/ipay/confirm</code>.<br>
+            <strong>Example:</strong> <code>https://yourstore.com/ipay/confirm</code><br>
+            <span style="color:#c00">This URL must be accessible from the public internet (not localhost).</span>
           </small>
         </div>
         <div class="form-group">
           <%= label_tag :return_url, "Return URL" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_return_url]",
-            @payment_method.preferred_return_url,
-            type: :string,
-            class: 'form-control',
-            placeholder: 'https://yourdomain.com/ipay/checkout/:id'
-          ) %>
+          <div class="input-group">
+            <%= preference_field_tag(
+              "payment_method[preferred_return_url]",
+              @payment_method.preferred_return_url,
+              type: :string,
+              class: 'form-control',
+              placeholder: 'https://yourstore.com/ipay/confirm',
+              id: 'return-url-field-admin'
+            ) %>
+            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard('#return-url-field-admin')">Copy</button>
+          </div>
           <small class="form-text text-muted">
-            <strong>Required:</strong> Copy this Return URL into your iPay merchant dashboard settings.<br>
-            This is where the customer will be redirected after payment.<br>
-            <strong>Example:</strong> <code>https://yourdomain.com/ipay/checkout/:id</code><br>
-            Replace <code>:id</code> with the order number or id as needed.<br>
-            <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="copyToClipboard('[name=\'payment_method[preferred_return_url]\']')">Copy Return URL</button>
+            This is where customers are redirected after payment. You can use any page, such as a thank you or order summary page. It does not affect payment processing.<br>
+            <strong>Note:</strong> Only the Callback URL above is used for payment confirmation.<br>
+            <strong>Example:</strong> <code>https://yourstore.com/ipay/confirm</code>
           </small>
         </div>
         <!-- Payment Channels Section -->
@@ -385,6 +388,17 @@
 </div>
 
 <script>
+// Copy to clipboard helper for admin fields
+function copyToClipboard(selector) {
+  var input = document.querySelector(selector);
+  if (input) {
+    input.select();
+    document.execCommand('copy');
+    input.blur();
+    alert('Copied to clipboard!');
+  }
+}
+
 // Basic debounce implementation
 function debounce(func, wait) {
   let timeout;
