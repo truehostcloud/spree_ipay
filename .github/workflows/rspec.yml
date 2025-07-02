@@ -43,7 +43,6 @@ jobs:
           --skip-sprockets \
           --database=sqlite3
         
-        
         # Run Spree install
         bundle _2.4.22_ exec rails g spree:install --auto-accept --user_class=Spree::User
         bundle _2.4.22_ exec rails g spree:auth:install
@@ -52,6 +51,9 @@ jobs:
         # Set up database
         bundle _2.4.22_ exec rails db:create
         bundle _2.4.22_ exec rails db:migrate
+        
+        # Set up RSpec
+        bundle _2.4.22_ exec rails generate rspec:install
 
     - name: Run tests
       run: |
