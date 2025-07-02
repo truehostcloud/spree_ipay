@@ -115,14 +115,17 @@ This gem integrates the iPay payment gateway with your Spree Commerce store, ena
 This extension includes a full RSpec test suite. To run the tests:
 
 1. **Install dependencies:**
+
    ```bash
    bundle install
    ```
 
 2. **Set up the dummy app (if not already set up):**
+
    ```bash
    bundle exec rails app:template LOCATION="https://raw.githubusercontent.com/spree/spree/master/lib/generators/templates/rails/engine/dummy_template.rb" --dummy_path=spec/dummy
    ```
+
    Or, if you already have a `spec/dummy` app, skip this step.
 
 3. **Run the specs:**
@@ -136,12 +139,14 @@ This extension includes a full RSpec test suite. To run the tests:
 ### What is Covered by the Specs?
 
 **Model Specs** (`spec/models/spree/payment_method/ipay_spec.rb`):
+
 - Payment completion logic (success, failure, exceptions, nil/malformed responses, already completed, DB errors)
 - Void/cancellation logic (success and failure)
 - Base URL logic (ensures correct value using Rails URL helpers)
 - General payment method behaviors and integration with Spree
 
 **Controller Specs** (`spec/controllers/spree/gateway_callbacks_controller_spec.rb`):
+
 - iPay callback endpoint (`/ipay/confirm`):
   - Valid and invalid callback handling
   - Signature/HMAC verification
@@ -150,9 +155,11 @@ This extension includes a full RSpec test suite. To run the tests:
   - Only existing routes/controllers are tested
 
 **Deprecated/Empty Specs** (`spec/controllers/spree/api/v1/ipay_controller_spec.rb`):
+
 - Deprecated/empty (no actual tests, just a comment for clarity)
 
 **Test Helpers** (`spec/spec_helper.rb`, `spec/rails_helper.rb`):
+
 - Standard RSpec and Rails test configuration for the extension
 
 - Make sure your dummy app is compatible with the Rails and Spree versions required by this extension.

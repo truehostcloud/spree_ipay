@@ -3,10 +3,14 @@
 require '/home/symomkuu/spree_ipay/spec/rails_helper'
 
 RSpec.describe Spree::PaymentMethod::Ipay, type: :model do
-  let(:payment_method) { create(:payment_method_ipay, name: 'iPay', preferred_vendor_id: 'demo', preferred_hash_key: 'demohash') }
+  let(:payment_method) {
+    create(:payment_method_ipay, name: 'iPay', preferred_vendor_id: 'demo', preferred_hash_key: 'demohash')
+  }
   let(:order) { create(:order) }
   let(:ipay_source) { create(:ipay_source, payment_method: payment_method) }
-  let(:payment) { create(:payment, payment_method: payment_method, order: order, response_code: 'TXN123', source: ipay_source) }
+  let(:payment) {
+    create(:payment, payment_method: payment_method, order: order, response_code: 'TXN123', source: ipay_source)
+  }
   it 'is valid with valid attributes' do
     expect(described_class.new).to be_a(Spree::PaymentMethod::Ipay)
   end
@@ -14,9 +18,9 @@ RSpec.describe Spree::PaymentMethod::Ipay, type: :model do
   context 'when payment status is completed' do
     before do
       allow(payment_method).to receive(:check_payment_status).and_return({
-        'status' => 'success',
-        'data' => { 'payment_status' => 'COMPLETED' }
-      })
+                                                                           'status' => 'success',
+                                                                           'data' => { 'payment_status' => 'COMPLETED' }
+                                                                         })
     end
 
     it 'completes payment and returns success response' do
@@ -28,9 +32,9 @@ RSpec.describe Spree::PaymentMethod::Ipay, type: :model do
 
     it 'returns failure response' do
       allow(payment_method).to receive(:check_payment_status).and_return({
-        'status' => 'failure',
-        'message' => 'Payment not completed'
-      })
+                                                                           'status' => 'failure',
+                                                                           'message' => 'Payment not completed'
+                                                                         })
       response = payment_method.complete(payment)
       expect(response).not_to be_success
       expect(response.message).to eq('Payment not completed')
@@ -39,9 +43,9 @@ RSpec.describe Spree::PaymentMethod::Ipay, type: :model do
     context 'when iPay returns failure status' do
       it 'returns failure response with message' do
         allow(payment_method).to receive(:check_payment_status).and_return({
-          'status' => 'failure',
-          'message' => 'Payment not completed'
-        })
+                                                                             'status' => 'failure',
+                                                                             'message' => 'Payment not completed'
+                                                                           })
         response = payment_method.complete(payment)
         expect(response).not_to be_success
         expect(response.message).to eq('Payment not completed')
@@ -78,8 +82,8 @@ RSpec.describe Spree::PaymentMethod::Ipay, type: :model do
     context 'when payment update fails' do
       it 'returns failure response with error message' do
         allow(payment_method).to receive(:check_payment_status).and_return({
-          'status' => 'success'
-        })
+                                                                             'status' => 'success'
+                                                                           })
         allow(payment).to receive(:completed?).and_return(false)
         allow(payment).to receive(:update!).and_raise(StandardError.new('DB error'))
         response = payment_method.complete(payment)
@@ -95,8 +99,8 @@ RSpec.describe Spree::PaymentMethod::Ipay, type: :model do
     context 'when void is successful' do
       before do
         allow(payment_method).to receive(:cancel_payment).and_return({
-          'status' => 'success'
-        })
+                                                                       'status' => 'success'
+                                                                     })
       end
 
       it 'returns success response' do
@@ -109,9 +113,9 @@ RSpec.describe Spree::PaymentMethod::Ipay, type: :model do
     context 'when void fails' do
       before do
         allow(payment_method).to receive(:cancel_payment).and_return({
-          'status' => 'error',
-          'message' => 'Cannot void completed payment'
-        })
+                                                                       'status' => 'error',
+                                                                       'message' => 'Cannot void completed payment'
+                                                                     })
       end
 
       it 'returns failure response' do
