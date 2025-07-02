@@ -22,19 +22,20 @@ module Spree
           order_reference = params[:id] || params[:oid]
           
           if order_reference.blank?
-            render json: { status: 'error', message: 'Order reference is required' }, status: :bad_request and return
+            render json: { status: 'error', message: 'Order reference is required' }, status: :bad_request
+            return
           end
           
           # Find the order by number or ID
           order = Spree::Order.find_by(number: order_reference) || Spree::Order.find_by(id: order_reference)
           
           if order.nil?
-            render json: { status: 'error', message: 'Order not found' }, status: :not_found and return
+            render json: { status: 'error', message: 'Order not found' }, status: :not_found
+            return
           end
           
           # Find all payments for this order
           all_payments = order.payments.includes(:payment_method).to_a
-          end
           
           # Try to find the payment with more flexible matching
           @payment = all_payments.detect do |p| 
@@ -51,7 +52,8 @@ module Spree
               message: 'No suitable payment found for this order',
               order_number: order.number,
               order_id: order.id
-            }, status: :not_found and return
+            }, status: :not_found
+            return
           end
           
           # Update the response code with the transaction ID if we have one

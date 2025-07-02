@@ -1,0 +1,1 @@
+../../spree_starter/spec/spec_helper.rb
