@@ -44,16 +44,7 @@ jobs:
           --database=sqlite3
         
         # Add Spree to the test app
-        cat > Gemfile.tmp << 'EOL'
-# Spree
-gem 'spree', '~> 4.6.0'
-gem 'spree_gateway', '~> 3.10.0'
-gem 'spree_auth_devise', '~> 4.6.0'
-gem 'spree_extension', '~> 0.1.0'
-gem 'spree_ipay', path: '../..'
-EOL
-        cat Gemfile.tmp >> Gemfile
-        rm Gemfile.tmp
+        echo -e '\n# Spree\ngem "spree", "~> 4.6.0"\ngem "spree_gateway", "~> 3.10.0"\ngem "spree_auth_devise", "~> 4.6.0"\ngem "spree_extension", "~> 0.1.0"\ngem "spree_ipay", path: "../.."' >> Gemfile
         
         # Install gems
         bundle _2.4.22_ install --verbose
