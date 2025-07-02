@@ -1,0 +1,53 @@
+name: Run RSpec Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:13
+        ports: [5432:5432]
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:password@localhost:5432/spree_ipay_test
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: 3.2  # Adjust to match your extension's Ruby version
+        bundler-cache: true
+
+    - name: Set up Node.js (for JS dependencies if needed)
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get -yqq install libpq-dev
+        bundle install --jobs 4 --retry 3
+
+    - name: Prepare database
+      run: |
+        cp config/database.yml.github-actions config/database.yml || true
+        bundle exec rails db:create db:schema:load --trace
+        bundle exec rails db:migrate
+
+    - name: Run RSpec
+      run: bundle exec rspec
