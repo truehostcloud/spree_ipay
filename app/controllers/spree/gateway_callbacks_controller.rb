@@ -3,6 +3,13 @@ module Spree
     skip_before_action :verify_authenticity_token, only: [:confirm]
 
     def confirm
+      # Log all callback parameters to the terminal using Omkuu
+      if defined?(Omkuu)
+        Omkuu.log(:info, "iPay Callback Params: #{params.to_unsafe_h.inspect}")
+      else
+        Rails.logger.info "[OMKUU] iPay Callback Params: #{params.to_unsafe_h.inspect}"
+      end
+
       txn_id = params[:txnid]
       status = params[:status]
       order_number = params[:order_id] || params[:id] || params[:ivm]
@@ -32,6 +39,19 @@ module Spree
           render plain: "Invalid signature", status: :unauthorized
           return
         end
+      end
+
+      # --- Amount Verification ---
+      paid_amount = params['mc'].to_f
+      required_amount = order.total.to_f
+      if paid_amount < required_amount
+        if defined?(Omkuu)
+          Omkuu.log(:warn, "iPay Callback: Amount paid (#{paid_amount}) is less than order total (#{required_amount}) for order #{order.number}")
+        else
+          Rails.logger.warn "[OMKUU] iPay Callback: Amount paid (#{paid_amount}) is less than order total (#{required_amount}) for order #{order.number}"
+        end
+        render plain: "Amount paid (#{paid_amount}) is less than required (#{required_amount})", status: :payment_required
+        return
       end
 
       # iPay status code handling (see docs)
