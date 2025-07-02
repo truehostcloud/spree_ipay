@@ -36,6 +36,7 @@ jobs:
       with:
         ruby-version: 3.0.6
         bundler-cache: true
+        bundler: 2.4.22  # Specific bundler version that works well with Spree 4.5
 
     - name: Install PostgreSQL client
       run: |

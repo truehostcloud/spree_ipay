@@ -16,13 +16,13 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Core dependencies
-  spec.add_dependency 'rails', '~> 6.1.0'
+  spec.add_dependency 'rails', '>= 6.1.0', '< 7.1.0'
   
   # Spree dependencies
   spec.add_dependency 'spree_core', '~> 4.5.0'
   spec.add_dependency 'spree_backend', '~> 4.5.0'
-  spec.add_dependency 'spree_extension', '~> 0.1.0'
   spec.add_dependency 'spree_api', '~> 4.5.0'
+  spec.add_dependency 'spree_extension', '~> 0.1.0'
 
   # Development and test dependencies
   spec.add_development_dependency 'database_cleaner', '~> 2.0'
