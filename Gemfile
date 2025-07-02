@@ -3,8 +3,8 @@ source 'https://rubygems.org'
 gemspec
 
 # Spree version to test against
-gem 'spree', github: 'spree/spree', branch: 'main'
-gem 'spree_gateway', github: 'spree/spree_gateway', branch: 'main'
+gem 'spree', '~> 4.5.0'
+gem 'spree_gateway', '~> 3.15.0'
 
 # Test dependencies
 group :test do
