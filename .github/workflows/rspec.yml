@@ -54,8 +54,12 @@ jobs:
         
         # Set up RSpec
         bundle _2.4.22_ exec rails generate rspec:install
+        
+        # Ensure binstubs are generated for RSpec
+        bundle _2.4.22_ binstubs rspec-core
 
     - name: Run tests
       run: |
         cd spec/dummy
-        bundle _2.4.22_ exec rspec ../../spec
+        # Use the binstub to run RSpec
+        bin/rspec ../../spec
