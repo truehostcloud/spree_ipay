@@ -45,12 +45,18 @@ jobs:
     - name: Install dependencies
       run: |
         bundle config path vendor/bundle
+        bundle config set without 'development'
         bundle install --jobs 4 --retry 3
 
     - name: Set up test database
       run: |
+        # Create the test app
         bundle exec rake test_app
-        bundle exec rails db:create db:migrate RAILS_ENV=test
+        
+        # Set up database
+        cd spec/dummy
+        RAILS_ENV=test bundle exec rails db:create db:migrate
+        cd ../..
 
     - name: Run tests
       run: bundle exec rspec
