@@ -43,11 +43,40 @@ jobs:
           --skip-sprockets \
           --database=sqlite3
         
-        # Add Spree and testing gems to Gemfile
-        echo -e '\n# Spree\ngem "spree", "~> 4.6.0"\ngem "spree_gateway", "~> 3.10.0"\ngem "spree_auth_devise", "~> 4.6.0"\ngem "spree_extension", "~> 0.1.0"\ngem "spree_ipay", path: "../.."\n\n# Ransack with Rails 7.1 compatibility\ngem "ransack", github: "activerecord-hackery/ransack", branch: "main"\ngem "polyamorous", "~> 2.0", require: false\n\n# Testing\ngroup :development, :test do\n  gem "rspec-rails", "~> 6.1.0"\n  gem "factory_bot_rails", "~> 6.2.0"\n  gem "database_cleaner", "~> 2.0"\n  gem "shoulda-matchers", "~> 5.0"\nend' >> Gemfile
+        # Create a new Gemfile with required gems
+        cat > Gemfile << 'EOL'
+source 'https://rubygems.org'
 
-        # Install gems
-        bundle _2.4.22_ install --verbose
+gem 'rails', '~> 7.1.4'
+gem 'sqlite3', '~> 2.0'
+
+# Spree
+gem 'spree', '~> 4.6.0'
+gem 'spree_gateway', '~> 3.10.0'
+gem 'spree_auth_devise', '~> 4.6.0'
+gem 'spree_extension', '~> 0.1.0'
+gem 'spree_ipay', path: '../..'
+
+# Ransack with Rails 7.1 compatibility
+gem 'ransack', github: 'activerecord-hackery/ransack', branch: 'main'
+gem 'polyamorous', '~> 2.0', require: false
+
+# Testing
+group :development, :test do
+  gem 'rspec-rails', '~> 6.1.0'
+  gem 'factory_bot_rails', '~> 6.2.0'
+  gem 'database_cleaner', '~> 2.0'
+  gem 'shoulda-matchers', '~> 5.0'
+end
+
+# Web server
+gem 'puma', '~> 6.0'
+EOL
+
+        # Install gems with specific bundler version
+        gem install bundler -v 2.4.22
+        bundle _2.4.22_ config set --local deployment 'true'
+        bundle _2.4.22_ install --jobs 4 --retry 3 --verbose
         
         # Install RSpec
         bundle _2.4.22_ exec rails generate rspec:install
