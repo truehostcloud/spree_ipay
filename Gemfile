@@ -1,20 +1,39 @@
-# frozen_string_literal: true
+source "https://rubygems.org"
 
-source 'https://rubygems.org'
+ruby '3.3.6'
 
-# Ruby version
-ruby '3.1.4'
+# Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
+gem "rails", "~> 7.1.4"
 
-# Rails version
-gem 'rails', '~> 7.0.4.3'  # Known working version with Ruby 3.1.4
+# The original asset pipeline for Rails [https://github.com/rails/sprockets-rails]
+gem "sprockets-rails"
+gem "mini_racer", platforms: %i[ ruby jruby ] # fixes Could not find a JavaScript runtime
+
+# Use sqlite3 as the database for Active Record
+gem "sqlite3", ">= 1.4"
+
+# Use the Puma web server [https://github.com/puma/puma]
+gem "puma", ">= 5.0"
+
+# JavaScript with ESM import maps [https://github.com/rails/importmap-rails]
+gem "importmap-rails"
+
+# Hotwire's SPA-like page accelerator [https://turbo.hotwired.dev]
+gem "turbo-rails"
+
+# Hotwire's modest JavaScript framework [https://stimulus.hotwired.dev]
+gem "stimulus-rails"
+
+# Build JSON APIs with ease [https://github.com/rails/jbuilder]
+gem "jbuilder"
 
 # Spree gems
-gem 'spree', '~> 4.5.0'  # Stable version with good Ruby 3.1 support
-gem 'spree_gateway', '~> 3.10.0'  # Compatible with Spree 4.5.x
-gem 'spree_auth_devise', '~> 4.5.0'  # Compatible with Spree 4.5.x
+gem 'spree', '~> 4.11.0'
+gem 'spree_gateway', '~> 3.10.0'
+gem 'spree_auth_devise', '~> 4.11.0'
+gem 'spree_extension', '~> 0.1.0'
 
 # This is the current extension being developed
-# It will be loaded from the local filesystem
 gem 'spree_ipay', path: '.'
 
 group :test do

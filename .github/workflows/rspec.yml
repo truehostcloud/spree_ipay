@@ -10,26 +10,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:13
-        ports: [5432:5432]
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: spree_ipay_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     env:
       RAILS_ENV: test
-      DATABASE_URL: postgres://postgres:password@localhost:5432/spree_ipay_test
-      TEST_DATABASE_URL: postgres://postgres:password@localhost:5432/spree_ipay_test
       DISABLE_SPRING: 1
-      RAILS_MASTER_KEY: 1234567890abcdef1234567890abcdef  # Add a dummy key for test environment
+      RAILS_MASTER_KEY: 1234567890abcdef1234567890abcdef
       SECRET_KEY_BASE: 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
 
     steps:
@@ -38,34 +22,34 @@ jobs:
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: 3.1.4
+        ruby-version: 3.3.6
         bundler-cache: true
-        bundler: 2.4.22  # Specific bundler version that works well with Spree 4.5
-
-    - name: Install PostgreSQL client
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libpq-dev
-
-    - name: Install dependencies
-      run: |
-        gem install bundler -v 2.4.22
-        bundle config path vendor/bundle
-        bundle config set without 'development'
-        bundle _2.4.22_ install --jobs 4 --retry 3 --verbose
+        bundler: 2.4.22
 
     - name: Set up test database
       run: |
-        # Create test app using Spree's test_app generator
-        bundle _2.4.22_ exec rails new test_app --skip-git --database=postgresql --skip-test --skip-system-test --skip-turbolinks --skip-jbuilder --skip-hotwire --skip-js --skip-sprockets
-        cd test_app
+        # Create test app directory
+        mkdir -p spec/dummy
+        cd spec/dummy
+        
+        # Create a basic Rails app with SQLite
+        bundle _2.4.22_ exec rails new . --force \
+          --skip-bootsnap \
+          --skip-jbuilder \
+          --skip-test \
+          --skip-system-test \
+          --skip-turbolinks \
+          --skip-webpack-install \
+          --skip-sprockets \
+          --database=sqlite3
         
         # Add Spree to the test app
         echo "\n# Spree" >> Gemfile
-        echo "gem 'spree', '~> 4.5.0'" >> Gemfile
+        echo "gem 'spree', '~> 4.11.0'" >> Gemfile
         echo "gem 'spree_gateway', '~> 3.10.0'" >> Gemfile
-        echo "gem 'spree_auth_devise', '~> 4.5.0'" >> Gemfile
+        echo "gem 'spree_auth_devise', '~> 4.11.0'" >> Gemfile
         echo "gem 'spree_extension', '~> 0.1.0'" >> Gemfile
+        echo "gem 'spree_ipay', path: '../..'" >> Gemfile
         
         # Install gems
         bundle _2.4.22_ install --verbose
@@ -78,10 +62,8 @@ jobs:
         # Set up database
         bundle _2.4.22_ exec rails db:create
         bundle _2.4.22_ exec rails db:migrate
-        
-        # Move the test app to spec/dummy
-        cd ..
-        mv test_app spec/dummy
 
     - name: Run tests
-      run: bundle exec rspec
+      run: |
+        cd spec/dummy
+        bundle _2.4.22_ exec rspec ../../spec
