@@ -38,9 +38,9 @@ jobs:
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: 3.0.6
+        ruby-version: 3.3.8
         bundler-cache: true
-        bundler: 2.4.22  # Specific bundler version that works well with Spree 4.5
+        bundler: 2.4.22  # Specific bundler version that works well with Spree 4.10
 
     - name: Install PostgreSQL client
       run: |
@@ -49,33 +49,39 @@ jobs:
 
     - name: Install dependencies
       run: |
+        gem install bundler -v 2.4.22
         bundle config path vendor/bundle
         bundle config set without 'development'
-        bundle install --jobs 4 --retry 3
+        bundle _2.4.22_ install --jobs 4 --retry 3 --verbose
 
     - name: Set up test database
       run: |
-        # Generate test app if it doesn't exist
-        if [ ! -d "spec/dummy" ]; then
-          bundle exec rails new spec/dummy --skip-git --database=postgresql --skip-test --skip-system-test --skip-turbolinks --skip-webpack-install
-          
-          # Add Spree to the test app
-          cd spec/dummy
-          echo "gem 'spree', '~> 4.5.0'" >> Gemfile
-          echo "gem 'spree_gateway', '~> 3.11.1'" >> Gemfile
-          echo "gem 'spree_auth_devise', '~> 4.5.0'" >> Gemfile
-          bundle install
-          
-          # Run Spree install
-          bundle exec rails g spree:install --auto-accept --user_class=Spree::User
-          bundle exec rails g spree:auth:install
-          bundle exec rails g spree_gateway:install
-          
-          # Set up database
-          bundle exec rails db:create
-          bundle exec rails db:migrate
-          cd ../..
-        fi
+        # Create test app using Spree's test_app generator
+        bundle _2.4.22_ exec rails new test_app --skip-git --database=postgresql --skip-test --skip-system-test --skip-turbolinks --skip-jbuilder --skip-hotwire --skip-js --skip-sprockets
+        cd test_app
+        
+        # Add Spree to the test app
+        echo "\n# Spree" >> Gemfile
+        echo "gem 'spree', '~> 4.10.0'" >> Gemfile
+        echo "gem 'spree_gateway', '~> 3.10.0'" >> Gemfile
+        echo "gem 'spree_auth_devise', '~> 4.10.0'" >> Gemfile
+        echo "gem 'spree_extension', '~> 0.1.0'" >> Gemfile
+        
+        # Install gems
+        bundle _2.4.22_ install --verbose
+        
+        # Run Spree install
+        bundle _2.4.22_ exec rails g spree:install --auto-accept --user_class=Spree::User
+        bundle _2.4.22_ exec rails g spree:auth:install
+        bundle _2.4.22_ exec rails g spree_gateway:install
+        
+        # Set up database
+        bundle _2.4.22_ exec rails db:create
+        bundle _2.4.22_ exec rails db:migrate
+        
+        # Move the test app to spec/dummy
+        cd ..
+        mv test_app spec/dummy
 
     - name: Run tests
       run: bundle exec rspec

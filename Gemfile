@@ -1,13 +1,19 @@
+# frozen_string_literal: true
+
 source 'https://rubygems.org'
 
 gemspec
 
 # Spree version to test against
-ruby '3.0.6'
+ruby '3.3.8'
 
-gem 'spree', '~> 4.5.0'
-gem 'spree_gateway', '~> 3.11.1'  # Latest version compatible with Spree 4.5
-gem 'spree_auth_devise', '~> 4.5.0'
+# Pin Rails to a version compatible with Spree 4.10.0
+gem 'rails', '~> 7.0.8'
+
+# Spree gems
+gem 'spree', '~> 4.10.0'
+gem 'spree_gateway', '~> 3.10.0'  # Compatible with Spree 4.10.0
+gem 'spree_auth_devise', '~> 4.10.0'
 
 group :test do
   gem 'rspec-rails', '~> 5.0'
