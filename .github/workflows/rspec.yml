@@ -2,9 +2,9 @@ name: Run RSpec Tests
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, ipay-feature-update1 ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, ipay-feature-update1 ]
 
 jobs:
   test:
