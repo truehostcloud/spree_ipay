@@ -13,7 +13,7 @@ gem "mini_racer", platforms: %i[ ruby jruby ] # fixes Could not find a JavaScrip
 gem "sqlite3", ">= 1.4"
 
 # Use the Puma web server [https://github.com/puma/puma]
-gem "puma", ">= 5.0"
+gem "puma", "~> 5.6"
 
 # JavaScript with ESM import maps [https://github.com/rails/importmap-rails]
 gem "importmap-rails"
@@ -28,9 +28,9 @@ gem "stimulus-rails"
 gem "jbuilder"
 
 # Spree gems
-gem 'spree', '~> 4.11.0'
+gem 'spree', '~> 4.7.0'
 gem 'spree_gateway', '~> 3.10.0'
-gem 'spree_auth_devise', '~> 4.11.0'
+gem 'spree_auth_devise', '~> 4.7.0'
 gem 'spree_extension', '~> 0.1.0'
 
 # This is the current extension being developed
@@ -44,7 +44,6 @@ group :test do
   gem 'webmock', '~> 3.14'
   gem 'pg', '~> 1.2'  # For GitHub Actions
   gem 'ffaker', '~> 2.21'  # For test data generation
-  gem 'puma', '~> 5.6'  # Web server for test environment
 end
 
 group :development, :test do

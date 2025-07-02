@@ -20,10 +20,10 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'rails', '~> 7.1.4'
   
   # Spree dependencies
-  spec.add_dependency 'spree_core', '~> 4.11.0'
-  spec.add_dependency 'spree_backend', '~> 4.11.0'
-  spec.add_dependency 'spree_api', '~> 4.11.0'
-  spec.add_dependency 'spree_auth_devise', '~> 4.11.0'
+  spec.add_dependency 'spree_core', '~> 4.7.0'
+  spec.add_dependency 'spree_backend', '~> 4.7.0'
+  spec.add_dependency 'spree_api', '~> 4.7.0'
+  spec.add_dependency 'spree_auth_devise', '~> 4.7.0'
   spec.add_dependency 'spree_gateway', '~> 3.10.0'
   spec.add_dependency 'spree_extension', '~> 0.1.0'
 
