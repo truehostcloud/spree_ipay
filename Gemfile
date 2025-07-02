@@ -28,9 +28,9 @@ gem "stimulus-rails"
 gem "jbuilder"
 
 # Spree gems
-gem 'spree', '~> 4.7.0'
+gem 'spree', '~> 4.6.3'
 gem 'spree_gateway', '~> 3.10.0'
-gem 'spree_auth_devise', '~> 4.7.0'
+gem 'spree_auth_devise', '~> 4.6.3'
 gem 'spree_extension', '~> 0.1.0'
 
 # This is the current extension being developed
