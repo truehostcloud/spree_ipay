@@ -44,7 +44,7 @@ jobs:
           --database=sqlite3
         
         # Create a new Gemfile with required gems
-        cat > Gemfile << 'EOL'
+        cat > Gemfile << 'GEMFILE'
 source 'https://rubygems.org'
 
 gem 'rails', '~> 7.1.4'
@@ -71,7 +71,7 @@ end
 
 # Web server
 gem 'puma', '~> 6.0'
-EOL
+GEMFILE
 
         # Install gems with specific bundler version
         gem install bundler -v 2.4.22
