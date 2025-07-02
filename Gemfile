@@ -2,8 +2,6 @@
 
 source 'https://rubygems.org'
 
-gemspec
-
 # Spree version to test against
 ruby '3.3.8'
 
@@ -11,9 +9,13 @@ ruby '3.3.8'
 gem 'rails', '~> 7.0.8'
 
 # Spree gems
-gem 'spree', '~> 4.6.3'  # Latest stable version
-gem 'spree_gateway', '~> 3.10.0'  # Compatible with Spree 4.6.3
-gem 'spree_auth_devise', '~> 4.6.3'  # Latest version available
+gem 'spree', '~> 4.6.0'  # Using ~> to allow patch versions
+gem 'spree_gateway', '~> 3.10.0'  # Compatible with Spree 4.6.x
+gem 'spree_auth_devise', '~> 4.6.0'  # Compatible with Spree 4.6.x
+
+# This is the current extension being developed
+# It will be loaded from the local filesystem
+gem 'spree_ipay', path: '.'
 
 group :test do
   gem 'rspec-rails', '~> 5.0'
