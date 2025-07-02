@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
 
   # Core dependencies
   spec.required_ruby_version = '>= 3.1.0'
-  spec.add_dependency 'rails', '~> 7.0.8'
+  spec.add_dependency 'rails', '~> 7.0.4.3'
   
   # Spree dependencies
   spec.add_dependency 'spree_core', '~> 4.5.0'

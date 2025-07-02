@@ -3,13 +3,13 @@
 source 'https://rubygems.org'
 
 # Ruby version
-ruby '3.2.2'
+ruby '3.1.4'
 
 # Rails version
-gem 'rails', '~> 7.0.8'
+gem 'rails', '~> 7.0.4.3'  # Known working version with Ruby 3.1.4
 
 # Spree gems
-gem 'spree', '~> 4.5.0'  # Stable version with good Ruby 3.2 support
+gem 'spree', '~> 4.5.0'  # Stable version with good Ruby 3.1 support
 gem 'spree_gateway', '~> 3.10.0'  # Compatible with Spree 4.5.x
 gem 'spree_auth_devise', '~> 4.5.0'  # Compatible with Spree 4.5.x
 

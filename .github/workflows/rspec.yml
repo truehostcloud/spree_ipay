@@ -38,7 +38,7 @@ jobs:
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: 3.2.2
+        ruby-version: 3.1.4
         bundler-cache: true
         bundler: 2.4.22  # Specific bundler version that works well with Spree 4.5
 
