@@ -12,15 +12,15 @@ module Spree
         phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
         session[:ipay_phone_number] = phone if phone.present?
       end
-      
+
       # Generate form and redirect during confirm state
       if params[:state] == "confirm" && @order.payments.last&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
         payment = @order.payments.last
         ipay_method = payment.payment_method
-        
+
         # Generate iPay form HTML
         form_html = generate_ipay_form_html(payment, session[:ipay_phone_number], ipay_method)
-        
+
         # Render the form directly
         render html: form_html.html_safe, layout: 'spree/layouts/checkout'
       end
@@ -36,7 +36,7 @@ module Spree
         live = ipay_method.preferred_test_mode ? '0' : '1'
         oid = payment.order.number
         inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-        ttl = (payment.amount.to_f * 100).to_i.to_s  # Amount in cents
+        ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
         eml = payment.order.email
         vid = ipay_method.preferred_vendor_id.presence || ''
         curr = ipay_method.preferred_currency.presence || 'KES'
@@ -48,10 +48,10 @@ module Spree
         rst = ipay_method.preferred_return_url.presence || "https://example.com/ipay/return"
         cst = "1"
         crl = "2"
-        
+
         # Generate the hash with the phone number
         hsh = ipay_method.ipay_signature_hash(payment, phone)
-        
+
         # Prepare iPay parameters - must match the exact order and parameters used in hash generation
         ipay_params = {
           'live' => live,
@@ -71,8 +71,6 @@ module Spree
           'crl' => crl,
           'hsh' => hsh
         }
-        
-
 
         # Add channel parameters based on preferences
         [
@@ -81,8 +79,6 @@ module Spree
         ].each do |channel|
           ipay_params[channel.to_s] = ipay_method.preferences["#{channel}"] ? '1' : '0'
         end
-
-
 
         # Generate the form HTML with full-page flexible layout and improved button positioning
         form_html = <<~HTML
