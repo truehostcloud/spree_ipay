@@ -32,19 +32,9 @@ jobs:
         bundle config set path 'vendor/bundle'
         bundle install
         
-    - name: Find test files
-      id: test_files
-      run: |
-        # Find all _spec.rb files and format as JSON array
-        files=$(find spec -name '*_spec.rb' | jq -R -s -c 'split("\n") | map(select(. != ""))')
-        echo "test_files=$files" >> $GITHUB_OUTPUT
-
     - name: Run tests
       env:
         RAILS_ENV: test
       run: |
-        # Run each test file independently
-        for spec_file in ${{ steps.test_files.outputs.test_files | fromJson }}; do
-          echo "Running: $spec_file"
-          bundle exec rspec $spec_file || exit 1
-        done
+        # Run all tests
+        bundle exec rspec
