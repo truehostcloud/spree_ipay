@@ -1,1 +1,0 @@
-../../spree_starter/spec/rails_helper.rb
