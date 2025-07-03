@@ -38,12 +38,7 @@ module Spree
       paid_amount = params['mc'].to_f
       required_amount = order.total.to_f
       if paid_amount < required_amount
-        if defined?(Omkuu)
-          Omkuu.log(:warn,
-                    "iPay Callback: Amount paid (#{paid_amount}) is less than order total (#{required_amount}) for order #{order.number}")
-        else
-          Rails.logger.warn "[OMKUU] iPay Callback: Amount paid (#{paid_amount}) is less than order total (#{required_amount}) for order #{order.number}"
-        end
+        Rails.logger.warn "iPay Callback: Amount paid (#{paid_amount}) is less than order total (#{required_amount}) for order #{order.number}"
         render plain: "Amount paid (#{paid_amount}) is less than required (#{required_amount})",
                status: :payment_required
         return

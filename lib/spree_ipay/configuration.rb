@@ -40,7 +40,7 @@ module SpreeIpay
         preferences[key.to_sym] = value
       end
 
-      def method_missing(method_name, *args, &block)
+      def method_missing(method_name, *args, &_block)
         if method_name.to_s.end_with?('=')
           self[method_name.to_s.chomp('=')] = args.first
         else

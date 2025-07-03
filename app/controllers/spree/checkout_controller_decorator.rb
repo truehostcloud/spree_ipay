@@ -49,10 +49,10 @@ module Spree
         cst = "1"
         crl = "2"
         
-        # Generate the hash
-        hsh = ipay_method.ipay_signature_hash(payment)
+        # Generate the hash with the phone number
+        hsh = ipay_method.ipay_signature_hash(payment, phone)
         
-        # Prepare iPay parameters
+        # Prepare iPay parameters - must match the exact order and parameters used in hash generation
         ipay_params = {
           'live' => live,
           'oid' => oid,
@@ -67,11 +67,12 @@ module Spree
           'p3' => p3,
           'p4' => p4,
           'cbk' => cbk,
-          'rst' => rst,
           'cst' => cst,
           'crl' => crl,
           'hsh' => hsh
         }
+        
+
 
         # Add channel parameters based on preferences
         [

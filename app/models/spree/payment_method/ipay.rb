@@ -164,8 +164,8 @@ module Spree
       failure_response("Authorization failed: #{e.message}")
     end
 
-    def capture(amount, response_code, options = {})
-      options[:originator]
+    def capture(_amount, response_code, options = {})
+      payment = options[:originator]
 
       # If we're in test mode, just return success
       if preferred_test_mode
@@ -189,9 +189,7 @@ module Spree
       failure_response("Capture failed: #{e.message}")
     end
 
-    def void(response_code, options = {})
-      options[:originator]
-
+    def void(response_code, _options = {})
       # If we're in test mode, just return success
       if preferred_test_mode
         return ActiveMerchant::Billing::Response.new(
@@ -293,7 +291,10 @@ module Spree
     end
 
     # Generate HMAC SHA1 hash for iPay
-    def ipay_signature_hash(payment)
+    # Matches PHP's hash_hmac('sha1', $datastring, $hashkey) implementation
+    # @param payment [Spree::Payment] The payment object
+    # @param phone [String] The customer's phone number
+    def ipay_signature_hash(payment, phone = nil)
       # Get values from payment method preferences
       vendor_id = preferred_vendor_id.to_s
       hash_key = preferred_hash_key.to_s
@@ -307,10 +308,11 @@ module Spree
       # Set live mode (0 for test, 1 for live)
       live = test_mode? ? "0" : "1"
 
+      # Prepare values - must match exactly what will be sent in the form
       oid = payment.order.number.to_s
       inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
       ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
-      tel = payment.order.bill_address&.phone.to_s || session[:ipay_phone_number].to_s || "0700000000"
+      tel = phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000"
       eml = payment.order.email.to_s
       vid = vendor_id
       curr = preferred_currency.presence || 'KES'
@@ -318,21 +320,20 @@ module Spree
       p2 = ""
       p3 = ""
       p4 = ""
-      cbk = preferred_callback_url.presence || '/ipay/confirm'
-      rst = preferred_return_url.presence || "https://#{base_url}/ipay/return"
+      cbk = preferred_callback_url.presence || "https://#{base_url}/ipay/confirm"
       cst = "1"
       crl = "2"
 
-      # Ensure all values are strings and not nil
-      [live, oid, inv, ttl, tel, eml, vid, curr, p1, p2, p3, p4, cbk, rst, cst, crl].each do |param|
-        raise "Nil parameter in hash generation" if param.nil?
-      end
+      # Create datastring in the exact order required by iPay
+      # Order is critical and must match the PHP example: live + oid + inv + ttl + tel + eml + vid + curr + p1 + p2 + p3 + p4 + cbk + cst + crl
+      datastring = [
+        live, oid, inv, ttl, tel, eml, vid, curr,
+        p1, p2, p3, p4, cbk, cst, crl
+      ].join
 
-      # Concatenate datastring in the required order
-      datastring = "#{live}#{oid}#{inv}#{ttl}#{tel}#{eml}#{vid}#{curr}#{p1}#{p2}#{p3}#{p4}#{cbk}#{cst}#{crl}"
-
-      # Generate and return hash using HMAC SHA1
-      OpenSSL::HMAC.hexdigest('sha1', hash_key, datastring)
+      # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
+      digest = OpenSSL::Digest.new('sha1')
+      OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
     rescue => e
       raise "Error generating hash: #{e.message}"
     end
