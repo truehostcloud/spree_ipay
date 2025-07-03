@@ -6,7 +6,7 @@ class ErrorHash < Hash
     self[attribute] ||= []
     self[attribute] << message
   end
-  
+
   def empty?
     values.flatten.empty?
   end
@@ -15,39 +15,40 @@ end
 # Mock the model class
 class Spree::IpaySource
   attr_accessor :phone, :vendor_id, :transaction_id, :errors
-  
+
   def initialize(attributes = {})
     @errors = ErrorHash.new
     attributes.each { |k, v| send("#{k}=", v) }
   end
-  
+
   def valid?
     validate
     errors.empty?
   end
-  
+
   def save
     valid?
   end
-  
+
   def validate
     @errors = ErrorHash.new # Reset errors on each validation
-    
+
     # Use nil? and empty? instead of blank?
     errors.add(:phone, "can't be blank") if phone.nil? || phone.empty?
     errors.add(:vendor_id, "can't be blank") if vendor_id.nil? || vendor_id.empty?
-    
+
     # Skip uniqueness check in tests for simplicity
     # In a real test, you'd mock this to test both cases
-    
+
     normalize_phone unless phone.nil? || phone.empty?
     errors.empty?
   end
-  
+
   private
-  
+
   def normalize_phone
     return if phone.nil? || phone.empty?
+
     @phone = phone.gsub(/\D/, '').sub(/^0/, '254')
   end
 end
@@ -60,7 +61,7 @@ RSpec.describe Spree::IpaySource do
       transaction_id: 'txn_123'
     }
   end
-  
+
   describe 'validations' do
     context 'with valid attributes' do
       it 'is valid' do
