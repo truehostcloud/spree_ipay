@@ -28,7 +28,6 @@ module Spree
       redirect_to checkout_state_path(:payment), error: "Payment processing failed: #{e.message}"
     end
 
-
     def generate_ipay_form_html(payment, phone, ipay_method)
       begin
         # Get required values from payment method preferences
@@ -44,7 +43,7 @@ module Spree
         p3 = ""
         p4 = ""
         cbk = ipay_method.preferred_callback_url.presence || "https://example.com/ipay/callback"
-rst = ipay_method.preferred_return_url.presence || "https://example.com/ipay/return"
+        rst = ipay_method.preferred_return_url.presence || "https://example.com/ipay/return"
         cst = "1"
         crl = "2"
 
