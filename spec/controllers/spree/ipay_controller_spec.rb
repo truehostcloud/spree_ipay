@@ -25,8 +25,8 @@ class Spree::IpayController
 
   def initiate_payment
     order = Spree::Order.find_by(number: params[:order_number])
-    if order
-      @response = {
+    @response = if order
+      {
         status: 200,
         headers: { 'Content-Type' => 'application/json' },
         body: {
@@ -36,12 +36,12 @@ class Spree::IpayController
         }
       }
     else
-      @response = {
+      {
         status: 404,
         headers: { 'Content-Type' => 'application/json' },
         body: { status: 'error', message: 'Order not found' }
       }
-    end
+                end
   end
 
   def callback

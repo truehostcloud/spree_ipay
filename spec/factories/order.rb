@@ -26,7 +26,7 @@ FactoryBot.define do
       payment_state { 'checkout' }
       email { 'test@example.com' }
 
-      after(:create) do |order, evaluator|
+      after(:create) do |order, _evaluator|
         order.shipments.reload
         order.update_with_updater!
         order.next! # Advance to payment state

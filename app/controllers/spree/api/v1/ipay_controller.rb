@@ -155,7 +155,7 @@ module Spree
                 order_number: @payment.order.number
               }, status: :unauthorized
             end
-          rescue StandardError => e
+          rescue StandardError
             render json: { status: 'error', message: 'Internal server error' }, status: :internal_server_error
           end
         end
@@ -194,7 +194,7 @@ module Spree
             # Default fallback
             redirect_to spree.checkout_state_path(order.state),
                         notice: 'Please complete your order.'
-          rescue StandardError => e
+          rescue StandardError
             redirect_to spree.root_path,
                         alert: 'An error occurred while processing your order. Please contact support if the problem persists.'
           end
@@ -214,7 +214,7 @@ module Spree
             end
           rescue ActiveRecord::RecordNotFound
             render json: { status: 'error', message: 'Payment not found' }, status: :not_found
-          rescue StandardError => e
+          rescue StandardError
             render json: { status: 'error', message: 'Internal server error' }, status: :internal_server_error
           end
         end
@@ -254,7 +254,7 @@ module Spree
             begin
               expected_hash = payment_method.send(:generate_status_hash, @payment.response_code)
               received_hash == expected_hash
-            rescue => e
+            rescue 
               false
             end
           else

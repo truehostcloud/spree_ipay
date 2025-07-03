@@ -165,7 +165,7 @@ module Spree
     end
 
     def capture(amount, response_code, options = {})
-      payment = options[:originator]
+      options[:originator]
 
       # If we're in test mode, just return success
       if preferred_test_mode
@@ -190,7 +190,7 @@ module Spree
     end
 
     def void(response_code, options = {})
-      payment = options[:originator]
+      options[:originator]
 
       # If we're in test mode, just return success
       if preferred_test_mode
@@ -242,7 +242,7 @@ module Spree
         end
 
         # Validate phone number format
-        unless phone.to_s.match(/^\+?\d{10,15}$/)
+        unless /^\+?\d{10,15}$/.match?(phone.to_s)
           error_msg = "Invalid phone number format: #{phone}"
           payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
           return failure_response('Please enter a valid phone number')
@@ -383,7 +383,7 @@ module Spree
         end
 
         cbk = callback_uri.to_s
-      rescue URI::InvalidURIError => e
+      rescue URI::InvalidURIError
         # Fallback to a safe default in case of errors
         cbk = "https://#{default_host}/api/v1/ipay/callback"
         cbk += '?test=1' if test_mode?

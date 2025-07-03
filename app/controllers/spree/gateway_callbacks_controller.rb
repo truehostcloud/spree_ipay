@@ -61,20 +61,20 @@ module Spree
       }
       code = status.to_s
       meta = status_map[code] || { label: 'Unknown', color: '#d32f2f', icon: 'fail', heading: 'Payment Failed' }
-      reason = params[:reasonCode] || meta[:label]
+      params[:reasonCode] || meta[:label]
       message = params[:message] || 'There was an issue processing your payment.'
-      txncd = params[:txncd] || ''
+      params[:txncd] || ''
       msisdn_id = params[:msisdn_id] || ''
       msisdn_idnum = params[:msisdn_idnum] || ''
-      mc = params[:mc] || ''
-      agt = params[:agt] || ''
-      card_mask = params[:card_mask] || ''
-      ivm = params[:ivm] || ''
-      id_param = params[:id] || ''
-      p1 = params[:p1] || ''
-      p2 = params[:p2] || ''
-      p3 = params[:p3] || ''
-      p4 = params[:p4] || ''
+      params[:mc] || ''
+      params[:agt] || ''
+      params[:card_mask] || ''
+      params[:ivm] || ''
+      params[:id] || ''
+      params[:p1] || ''
+      params[:p2] || ''
+      params[:p3] || ''
+      params[:p4] || ''
       # State handling
       if code == 'aei7p7yrx4ae34'
         payment.update(response_code: txn_id) if txn_id.present?
@@ -89,14 +89,14 @@ module Spree
           while !order.completed? && order.can_advance?
             begin
               order.next!
-            rescue => e
+            rescue 
               break
             end
           end
         else
           begin
             order.next! until order.completed?
-          rescue => e
+          rescue 
             # Swallow error, do not log
           end
         end
@@ -158,7 +158,7 @@ module Spree
       end
       render html: html.html_safe, status: (code == 'aei7p7yrx4ae34' ? :ok : :payment_required)
       return
-    rescue => e
+    rescue 
       render plain: "An error occurred", status: :internal_server_error
     end
   end
