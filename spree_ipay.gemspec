@@ -16,23 +16,23 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Core dependencies
-  spec.required_ruby_version = '>= 3.3.6'
-  spec.add_dependency 'rails', '~> 7.1.4'
+  spec.required_ruby_version = '>= 3.0.0'
+  spec.add_dependency 'rails', '~> 7.0.0'
   
   # Spree dependencies
-  spec.add_dependency 'spree_core', '~> 4.6.0'
-  spec.add_dependency 'spree_backend', '~> 4.6.0'
-  spec.add_dependency 'spree_api', '~> 4.6.0'
-  spec.add_dependency 'spree_auth_devise', '~> 4.6.0'
-  spec.add_dependency 'spree_gateway', '~> 3.10.0'
+  spec.add_dependency 'spree', '>= 4.5.0', '< 5.0.0'
+  spec.add_dependency 'spree_backend', '>= 4.5.0', '< 5.0.0'
   spec.add_dependency 'spree_extension', '~> 0.1.0'
+  spec.add_dependency 'deface', '~> 1.9.0'
+  
+  # HTTP client for API calls
+  spec.add_dependency 'httparty', '~> 0.16.0'
 
   # Development and test dependencies
-  spec.add_development_dependency 'database_cleaner', '~> 2.0'
-  spec.add_development_dependency 'factory_bot_rails', '~> 6.2'
-  spec.add_development_dependency 'pg', '~> 1.2'  # For testing with PostgreSQL
-  spec.add_development_dependency 'rspec-rails', '~> 5.0'
-  spec.add_development_dependency 'shoulda-matchers', '~> 5.0'
-  spec.add_development_dependency 'sqlite3', '~> 1.4'  # For local testing
-  spec.add_development_dependency 'webmock', '~> 3.14'  # For stubbing HTTP requests
+  spec.add_development_dependency 'capybara', '~> 3.38'
+  spec.add_development_dependency 'database_cleaner-active_record', '~> 2.0'
+  spec.add_development_dependency 'factory_bot_rails', '~> 6.2.0'
+  spec.add_development_dependency 'pry', '~> 0.14.1'
+  spec.add_development_dependency 'rspec-rails', '~> 6.0.0'
+  spec.add_development_dependency 'sqlite3', '~> 1.4.0'
 end

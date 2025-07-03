@@ -2,11 +2,18 @@
 
 FactoryBot.define do
   factory :payment_method_ipay, class: 'Spree::PaymentMethod::Ipay' do
-    name { 'iPay' }
-    type { 'Spree::PaymentMethod::Ipay' }
-    stores { [Spree::Store.first || association(:store)] }
-    preferred_vendor_id { 'demo' }
-    preferred_hash_key { 'demohash' }
-    preferred_test_mode { true }
+    name 'iPay'
+    description 'iPay Payment Method'
+    active true
+    display_on :both
+    auto_capture true
+
+    preferences do
+      {
+        vendor_id: 'demo',
+        hash_key: 'demoCHANGED',
+        test_mode: true
+      }
+    end
   end
 end

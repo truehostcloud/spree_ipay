@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, ipay-feature-update1 ]
+  pull_request:
+    branches: [ main, master, ipay-feature-update1 ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: 3.3.8
+        bundler-cache: true
+    
+    - name: Install SQLite
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sqlite3 libsqlite3-dev
+        
+    - name: Setup test environment
+      env:
+        RAILS_ENV: test
+      run: |
+        gem install bundler
+        bundle config set path 'vendor/bundle'
+        bundle install
+        
+    - name: Find test files
+      id: test_files
+      run: |
+        # Find all _spec.rb files and format as JSON array
+        files=$(find spec -name '*_spec.rb' | jq -R -s -c 'split("\n") | map(select(. != ""))')
+        echo "test_files=$files" >> $GITHUB_OUTPUT
+
+    - name: Run tests
+      env:
+        RAILS_ENV: test
+      run: |
+        # Run each test file independently
+        for spec_file in ${{ steps.test_files.outputs.test_files | fromJson }}; do
+          echo "Running: $spec_file"
+          bundle exec rspec $spec_file || exit 1
+        done

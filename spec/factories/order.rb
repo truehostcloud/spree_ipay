@@ -2,18 +2,35 @@
 
 FactoryBot.define do
   factory :order, class: 'Spree::Order' do
-    sequence(:number) { |n| "R#{1000 + n}" }
-    email { 'customer@example.com' }
-    total { 100.0 }
+    user
+    bill_address
+    ship_address
+    email { user&.email || generate(:random_email) }
+    store
     state { 'cart' }
-    store { Spree::Store.first || association(:store) }
-    trait :with_totals do
-      after(:create) do |order|
-        order.update_columns(total: 100.0)
+    currency { 'KES' }
+
+    transient do
+      line_items_price { BigDecimal('100') }
+      line_items_count { 1 }
+    end
+
+    after(:create) do |order, evaluator|
+      create_list(:line_item, evaluator.line_items_count, order: order, price: evaluator.line_items_price)
+      order.line_items.reload
+      order.update_with_updater!
+    end
+
+    factory :order_ready_for_payment do
+      state { 'payment' }
+      payment_state { 'checkout' }
+      email { 'test@example.com' }
+
+      after(:create) do |order, evaluator|
+        order.shipments.reload
+        order.update_with_updater!
+        order.next! # Advance to payment state
       end
     end
-  end
-  factory :order_with_totals, parent: :order do
-    with_totals
   end
 end
