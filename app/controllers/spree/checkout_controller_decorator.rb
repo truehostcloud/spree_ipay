@@ -4,7 +4,6 @@ module Spree
       base.before_action :handle_ipay_redirect, only: [:update]
     end
 
-
     def handle_ipay_redirect
       # Get phone number and store in session during payment state
       if params[:state] == "payment"
@@ -42,7 +41,7 @@ module Spree
         p3 = ""
         p4 = ""
         cbk = ipay_method.preferred_callback_url.presence || "https://example.com/ipay/callback"
-rst = ipay_method.preferred_return_url.presence || "https://example.com/ipay/return"
+        rst = ipay_method.preferred_return_url.presence || "https://example.com/ipay/return"
         cst = "1"
         crl = "2"
 
