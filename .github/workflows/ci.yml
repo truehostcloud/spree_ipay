@@ -19,7 +19,7 @@ jobs:
         ruby-version: 3.3.8
         bundler-cache: true
     
-    - name: Install SQLite
+    - name: Install SQLite and dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y sqlite3 libsqlite3-dev
@@ -30,11 +30,16 @@ jobs:
       run: |
         gem install bundler
         bundle config set path 'vendor/bundle'
-        bundle install
+        bundle install --jobs 4 --retry 3
         
     - name: Run tests
       env:
         RAILS_ENV: test
+        BUNDLE_GEMFILE: ${{ github.workspace }}/Gemfile
+      working-directory: ${{ github.workspace }}
       run: |
-        # Run all tests
-        bundle exec rspec
+        # Add current directory to load path
+        export RUBYLIB=$RUBYLIB:$PWD
+        
+        # Run all tests with documentation format
+        bundle exec rspec --format documentation
