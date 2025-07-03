@@ -28,9 +28,33 @@ jobs:
       env:
         RAILS_ENV: test
       run: |
+        # Print current directory and file structure for debugging
+        echo "=== Current directory ==="
+        pwd
+        echo "\n=== Directory structure ==="
+        find . -type d | sort
+        
         gem install bundler
         bundle config set path 'vendor/bundle'
         bundle install --jobs 4 --retry 3
+        
+        # Verify spec_helper.rb exists in the spec directory
+        SPEC_HELPER_PATH="spec/spec_helper.rb"
+        echo "\n=== Looking for spec_helper.rb at: $SPEC_HELPER_PATH ==="
+        
+        if [ ! -f "$SPEC_HELPER_PATH" ]; then
+          echo "Error: spec_helper.rb not found at $SPEC_HELPER_PATH"
+          echo "Current directory contents:"
+          ls -la .
+          echo -e "\nspec/ directory contents:"
+          ls -la spec/ 2>/dev/null || echo "spec/ directory not found"
+          exit 1
+        fi
+        
+        echo "\n=== spec_helper.rb found ==="
+        echo "File size: $(wc -l < "$SPEC_HELPER_PATH") lines"
+        echo -e "\n=== First 10 lines of spec_helper.rb ==="
+        head -n 10 "$SPEC_HELPER_PATH"
         
     - name: Run tests
       env:
@@ -38,6 +62,14 @@ jobs:
         BUNDLE_GEMFILE: ${{ github.workspace }}/Gemfile
       working-directory: ${{ github.workspace }}
       run: |
-        # Make the test script executable and run it
-        chmod +x run_tests.sh
-        ./run_tests.sh
+        # Verify spec_helper.rb exists before running tests
+        if [ ! -f "spec/spec_helper.rb" ]; then
+          echo "Error: spec_helper.rb not found at spec/spec_helper.rb"
+          echo "Current directory: $(pwd)"
+          echo -e "\nDirectory contents:"
+          ls -la
+          exit 1
+        fi
+        
+        echo "=== Running tests ==="
+        bundle exec rspec --require "./spec/spec_helper.rb" spec/
