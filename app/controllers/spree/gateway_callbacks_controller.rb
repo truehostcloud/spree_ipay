@@ -89,14 +89,14 @@ module Spree
           while !order.completed? && order.can_advance?
             begin
               order.next!
-            rescue 
+            rescue
               break
             end
           end
         else
           begin
             order.next! until order.completed?
-          rescue 
+          rescue
             # Swallow error, do not log
           end
         end
@@ -158,7 +158,7 @@ module Spree
       end
       render html: html.html_safe, status: (code == 'aei7p7yrx4ae34' ? :ok : :payment_required)
       return
-    rescue 
+    rescue
       render plain: "An error occurred", status: :internal_server_error
     end
   end

@@ -254,7 +254,7 @@ module Spree
             begin
               expected_hash = payment_method.send(:generate_status_hash, @payment.response_code)
               received_hash == expected_hash
-            rescue 
+            rescue
               false
             end
           else
