@@ -165,7 +165,7 @@ module Spree
     end
 
     def capture(_amount, response_code, options = {})
-      payment = options[:originator]
+      options[:originator]
 
       # If we're in test mode, just return success
       if preferred_test_mode
