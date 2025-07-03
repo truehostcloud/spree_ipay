@@ -116,7 +116,7 @@ module Spree
     end
 
     def authorize(amount, source, options = {})
-      payment = options[:originator]
+      options[:originator]
       order = payment.order
 
       # Ensure the order is in the correct state
