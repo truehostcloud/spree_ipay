@@ -121,7 +121,7 @@ module Spree
       esc_payer_phone = ERB::Util.html_escape(msisdn_idnum)
       esc_heading = ERB::Util.html_escape(meta[:heading])
       esc_color = ERB::Util.html_escape(meta[:color])
-      esc_icon_svg = icon_svg # assumed safe, as it's generated SVG markup
+      icon_svg # assumed safe, as it's generated SVG markup
       esc_root_path = ERB::Util.html_escape(spree.root_path)
       esc_payment_path = ERB::Util.html_escape(spree.checkout_state_path(order.state))
 
