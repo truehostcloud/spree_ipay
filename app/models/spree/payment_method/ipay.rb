@@ -3,11 +3,14 @@
 require 'httparty'
 
 module Spree
-  class PaymentMethod::Ipay < PaymentMethod
-    include HTTParty
+  # iPay payment method integration for Spree Commerce.
+  # Handles payment processing, callbacks, and communication with the iPay payment gateway.
+  # Supports various payment channels including M-PESA, Airtel Money, and credit cards.
+  class PaymentMethod::Ipay < ::Spree::PaymentMethod
+      include HTTParty
 
-    # Core settings
-    preference :vendor_id, :string
+      # Core settings
+      preference :vendor_id, :string
     preference :hash_key, :string
     preference :test_mode, :boolean, default: true
     preference :live_mode, :boolean, default: false
@@ -264,8 +267,8 @@ module Spree
           return failure_response('Payment configuration error. Please check your iPay settings.')
         end
 
-        # Update payment amount if needed
-        if payment.amount.to_f != amount.to_f
+        # Update payment amount if needed (using epsilon for float comparison)
+        if (payment.amount.to_f - amount.to_f).abs > Float::EPSILON
           payment.amount = amount
           payment.save!
         end
@@ -407,24 +410,24 @@ module Spree
 
       # Prepare iPay parameters
       ipay_params = {
-        live: live,
-        oid: oid,
-        inv: inv,
-        ttl: ttl,
-        tel: tel,
-        eml: eml,
-        vid: vid,
-        curr: curr,
-        p1: p1,
-        p2: p2,
-        p3: p3,
-        p4: p4,
-        cbk: cbk,
-        rst: rst,
-        cst: cst,
-        crl: crl,
-        hsh: hsh
-      }
+          live: live,
+          oid: oid,
+          inv: inv,
+          ttl: ttl,
+          tel: tel,
+          eml: eml,
+          vid: vid,
+          curr: curr,
+          p1: p1,
+          p2: p2,
+          p3: p3,
+          p4: p4,
+          cbk: cbk,
+          rst: rst,
+          cst: cst,
+          crl: crl,
+          hsh: hsh
+        }
 
       # Add channel parameters based on preferences
 
@@ -502,19 +505,6 @@ module Spree
       end
     end
 
-    def void(response_code, options = {})
-      begin
-        response = cancel_payment(response_code)
-
-        if response['status'] == 'success'
-          success_response
-        else
-          failure_response(response['message'] || 'Payment void failed')
-        end
-      rescue => e
-        failure_response("Payment void failed: #{e.message}")
-      end
-    end
 
     def initiate_payment(payment, phone: nil)
       # Log the start of payment initiation
@@ -556,14 +546,7 @@ module Spree
         params[channel.to_s] = send("preferred_#{channel}") ? '1' : '0'
       end
 
-      # Determine API endpoint based on test mode
-      def api_endpoint
-        endpoint = test_mode? ?
-          'https://sandbox.ipayafrica.com/v3/ke' :
-          'https://payments.ipayafrica.com/v3/ke'
-
-        endpoint
-      end
+      # Use the class-level api_endpoint method
       # Log the final parameters being sent
       log_params = params.dup
       log_params[:hsh] = '[FILTERED]' if log_params[:hsh].present?
@@ -739,9 +722,6 @@ module Spree
         'https://payments.ipayafrica.com/v3/ke'
     end
 
-    def source_required?
-      true
-    end
 
     def success_response(message = 'Success')
       ActiveMerchant::Billing::Response.new(

@@ -1,4 +1,7 @@
 module Spree
+  # Decorates the Spree::CheckoutController to add iPay payment processing functionality.
+  # Handles the payment form submission and redirection to iPay's payment page.
+  # Manages the payment flow during the checkout process.
   module CheckoutControllerDecorator
     def self.prepended(base)
       base.before_action :handle_ipay_redirect, only: [:update]
@@ -18,9 +21,9 @@ module Spree
 
         # Generate iPay form HTML
         form_html = generate_ipay_form_html(payment, session[:ipay_phone_number], ipay_method)
-
-        # Render the form directly
-        render html: form_html.html_safe, layout: 'spree/layouts/checkout'
+        
+        # Render the form using content_type for security
+        render inline: form_html, content_type: 'text/html', layout: 'spree/layouts/checkout'
       end
     rescue => e
       redirect_to checkout_state_path(:payment), error: "Payment processing failed: #{e.message}"
@@ -41,7 +44,6 @@ module Spree
         p3 = ""
         p4 = ""
         cbk = ipay_method.preferred_callback_url.presence || "https://example.com/ipay/callback"
-        rst = ipay_method.preferred_return_url.presence || "https://example.com/ipay/return"
         cst = "1"
         crl = "2"
 

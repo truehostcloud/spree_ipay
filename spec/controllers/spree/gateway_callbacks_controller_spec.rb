@@ -3,7 +3,7 @@ require 'spec_helper'
 # Mock the controller class
 class Spree::GatewayCallbacksController < ActionController::Base
   def confirm
-    order = Spree::Order.find_by_number(params[:order_id])
+    order = Spree::Order.find_by(number: params[:order_id])
 
     # Check if order exists
     unless order

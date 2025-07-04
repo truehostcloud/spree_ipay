@@ -1,4 +1,7 @@
 module Spree
+  # Handles callbacks from the iPay payment gateway.
+  # Processes payment confirmations and updates order statuses based on iPay responses.
+  # This controller skips CSRF protection for the confirm action to allow external callbacks.
   class GatewayCallbacksController < ApplicationController
     skip_before_action :verify_authenticity_token, only: [:confirm]
 
@@ -151,7 +154,7 @@ module Spree
           </div>
         HTML
       end
-      render html: html.html_safe, status: (code == 'aei7p7yrx4ae34' ? :ok : :payment_required)
+      render inline: html, content_type: 'text/html', status: (code == 'aei7p7yrx4ae34' ? :ok : :payment_required)
       return
     rescue
       render plain: "An error occurred", status: :internal_server_error

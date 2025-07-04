@@ -3,6 +3,9 @@
 module Spree
   module Api
     module V1
+      # Handles API endpoints for iPay payment processing.
+      # Provides endpoints for callbacks from iPay and payment status checks.
+      # Skips authentication for callback endpoints to allow external access.
       class IpayController < Spree::Api::V1::BaseController
         # Only load payment for :return, not for :callback (GET/POST)
         before_action :load_payment, only: [:return]
@@ -56,7 +59,7 @@ module Spree
 
           # Update the response code with the transaction ID if we have one
           if params[:txncd].present? && @payment.response_code != params[:txncd]
-            @payment.update_columns(response_code: params[:txncd], updated_at: Time.current)
+            @payment.update(response_code: params[:txncd])
           end
 
           begin

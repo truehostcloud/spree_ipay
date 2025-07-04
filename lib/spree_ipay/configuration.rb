@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
+# The SpreeIpay module provides integration between Spree Commerce and the iPay payment gateway.
+# It handles payment processing, callbacks, and configuration for iPay payments.
 module SpreeIpay
+  # Handles configuration for the SpreeIpay integration.
+  # Allows setting and retrieving preferences for the iPay payment gateway.
   class Configuration
     class << self
       def preferences
