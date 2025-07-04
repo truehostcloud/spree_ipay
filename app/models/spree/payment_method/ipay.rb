@@ -7,10 +7,10 @@ module Spree
   # Handles payment processing, callbacks, and communication with the iPay payment gateway.
   # Supports various payment channels including M-PESA, Airtel Money, and credit cards.
   class PaymentMethod::Ipay < ::Spree::PaymentMethod
-      include HTTParty
+    include HTTParty
 
-      # Core settings
-      preference :vendor_id, :string
+    # Core settings
+    preference :vendor_id, :string
     preference :hash_key, :string
     preference :test_mode, :boolean, default: true
     preference :live_mode, :boolean, default: false
@@ -410,24 +410,24 @@ module Spree
 
       # Prepare iPay parameters
       ipay_params = {
-          live: live,
-          oid: oid,
-          inv: inv,
-          ttl: ttl,
-          tel: tel,
-          eml: eml,
-          vid: vid,
-          curr: curr,
-          p1: p1,
-          p2: p2,
-          p3: p3,
-          p4: p4,
-          cbk: cbk,
-          rst: rst,
-          cst: cst,
-          crl: crl,
-          hsh: hsh
-        }
+        live: live,
+        oid: oid,
+        inv: inv,
+        ttl: ttl,
+        tel: tel,
+        eml: eml,
+        vid: vid,
+        curr: curr,
+        p1: p1,
+        p2: p2,
+        p3: p3,
+        p4: p4,
+        cbk: cbk,
+        rst: rst,
+        cst: cst,
+        crl: crl,
+        hsh: hsh
+      }
 
       # Add channel parameters based on preferences
 
@@ -504,7 +504,6 @@ module Spree
         failure_response("Payment completion failed: #{e.message}")
       end
     end
-
 
     def initiate_payment(payment, phone: nil)
       # Log the start of payment initiation
@@ -721,7 +720,6 @@ module Spree
         'https://sandbox.ipayafrica.com/v3/ke' :
         'https://payments.ipayafrica.com/v3/ke'
     end
-
 
     def success_response(message = 'Success')
       ActiveMerchant::Billing::Response.new(

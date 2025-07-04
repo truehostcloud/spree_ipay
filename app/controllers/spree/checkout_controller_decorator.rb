@@ -21,7 +21,7 @@ module Spree
 
         # Generate iPay form HTML
         form_html = generate_ipay_form_html(payment, session[:ipay_phone_number], ipay_method)
-        
+
         # Render the form using content_type for security
         render inline: form_html, content_type: 'text/html', layout: 'spree/layouts/checkout'
       end
