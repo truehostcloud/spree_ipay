@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, ipay-feature-update1 ]
+  pull_request:
+    branches: [ main, master, ipay-feature-update1 ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: 3.3.8
+        bundler-cache: true
+    
+    - name: Install SQLite and dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sqlite3 libsqlite3-dev
+        
+    - name: Setup test environment
+      env:
+        RAILS_ENV: test
+      run: |
+        gem install bundler
+        bundle config set path 'vendor/bundle'
+        bundle install --jobs 4 --retry 3
+        
+        # Verify spec_helper.rb exists
+        if [ ! -f "spec/spec_helper.rb" ]; then
+          echo "Error: spec_helper.rb not found in spec/ directory"
+          echo "Current directory: $(pwd)"
+          echo -e "\nDirectory contents:"
+          ls -la
+          echo -e "\nspec/ directory contents:"
+          ls -la spec/
+          exit 1
+        fi
+        
+        echo -e "\n=== Found spec_helper.rb ==="
+        ls -la spec/spec_helper.rb
+        
+    - name: Run tests
+      env:
+        RAILS_ENV: test
+        BUNDLE_GEMFILE: ${{ github.workspace }}/Gemfile
+      working-directory: ${{ github.workspace }}
+      run: bundle exec rspec

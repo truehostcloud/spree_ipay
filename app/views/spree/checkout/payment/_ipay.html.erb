@@ -1,0 +1,64 @@
+<fieldset id="payment-method-<%= payment_method.id %>" class="ipay-payment-method">
+  <legend class="payment-method-name">
+    <%= payment_method.name %>
+  </legend>
+
+  <div class="payment-method-description mb-3">
+    <p><%= Spree.t(:ipay_description) %></p>
+    <div class="payment-logos">
+      <span class="badge badge-info">M-Pesa</span>
+      <span class="badge badge-info">Airtel Money</span>
+      <span class="badge badge-info">Bank Cards</span>
+      <span class="badge badge-info">Bank Transfer</span>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <%= label_tag "order[payments_attributes][][source_attributes][phone]", Spree.t(:phone_number), class: "required" %>
+    <%= telephone_field_tag "order[payments_attributes][][source_attributes][phone]", session[:ipay_phone_number] || @order.bill_address&.phone, class: "form-control", required: true, id: "ipay_phone_number", pattern: "\\d{10}", maxlength: 10, minlength: 10, autocomplete: "tel" %>
+    <small class="form-text text-muted">
+      <%= Spree.t(:ipay_phone_help, default: "We'll use this phone number for mobile money payment.") %>
+    </small>
+    <div id="ipay-phone-error" class="text-danger" style="display:none;font-size:0.95em;margin-top:4px;"></div>
+  </div>
+
+  <div class="alert alert-info mt-3">
+    <i class="fa fa-info-circle"></i>
+    <%= Spree.t(:ipay_redirect_notice, default: "After clicking continue, you'll be redirected to iPay to complete your payment.") %>
+  </div>
+
+  <div class="alert alert-warning mt-2">
+    <strong>Important:</strong> If you click "Save and Continue", do not close your browser window during payment processing.
+  </div>
+</fieldset>
+
+<script type="text/javascript">
+  $(document).ready(function() {
+    // Sync iPay phone with billing address phone
+    $('#ipay_phone_number').on('change', function() {
+      var phone = $(this).val();
+      if ($('#order_bill_address_attributes_phone').length) {
+        $('#order_bill_address_attributes_phone').val(phone);
+      }
+    });
+
+    // Disable Turbo/UJS for iPay form submission
+    $('#checkout_form_payment').on('submit', function(e) {
+      if ($('#payment_method_<%= payment_method.id %>').is(':checked')) {
+        var phone = $('#ipay_phone_number').val();
+        var phoneError = $('#ipay-phone-error');
+        if (!/^\d{10}$/.test(phone)) {
+          phoneError.text('Please enter a valid 10-digit mobile number.').show();
+          $('#ipay_phone_number').focus();
+          e.preventDefault();
+          return false;
+        } else {
+          phoneError.hide();
+        }
+        $(this).find('input[type="submit"]').prop('disabled', true).val('Redirecting to iPay...');
+        $(this).attr('data-turbo', 'false');
+        $(this).removeAttr('data-remote');
+      }
+    });
+  });
+</script>

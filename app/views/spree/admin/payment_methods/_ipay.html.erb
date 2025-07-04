@@ -1,0 +1,197 @@
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">iPay Payment Settings</h5>
+      </div>
+      <div class="card-body">
+        <!-- 1. Test Mode -->
+        <div class="form-group mb-4">
+          <%= label_tag "test_mode_toggle", "Test Mode", class: 'form-label' %>
+          <div class="form-check">
+            <%= preference_field_tag(
+              "payment_method[preferences][test_mode]",
+              @payment_method.preferred_test_mode,
+              type: :boolean,
+              class: 'form-check-input',
+              id: 'test_mode_toggle',
+              onchange: "confirmTestModeToggle(this)"
+            ) %>
+            <label class="form-check-label" for="test_mode_toggle">Enable Test Mode</label>
+            <small class="form-text text-muted d-block">
+              When enabled, all transactions will be processed in iPay's sandbox environment.
+              When disabled, transactions will be processed in live mode.
+            </small>
+          </div>
+        </div>
+
+        <!-- 2. Vendor ID -->
+        <div class="form-group mb-3">
+          <%= label_tag :vendor_id, "Vendor ID", class: 'form-label' %>
+          <%= preference_field_tag(
+            "payment_method[preferences][vendor_id]",
+            @payment_method.preferred_vendor_id,
+            type: :string,
+            class: 'form-control',
+            id: 'pref_vendor_id',
+            required: true
+          ) %>
+        </div>
+
+        <!-- 3. Hash Key -->
+        <div class="form-group mb-3">
+          <%= label_tag :hash_key, "Hash Key", class: 'form-label' %>
+          <div class="input-group">
+            <%= preference_field_tag(
+              "payment_method[preferences][hash_key]",
+              @payment_method.preferred_hash_key,
+              type: :password,
+              class: 'form-control',
+              id: 'pref_hash_key',
+              required: true
+            ) %>
+            <button type="button" class="btn btn-outline-secondary" onclick="togglePasswordVisibility('pref_hash_key')">
+              <i class="bi bi-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4. Currency -->
+        <div class="form-group mb-4">
+          <%= label_tag :currency, "Currency", class: 'form-label' %>
+          <%= preference_field_tag(
+            "payment_method[preferences][currency]",
+            @payment_method.preferred_currency || 'KES',
+            type: :string,
+            class: 'form-control',
+            id: 'pref_currency',
+            placeholder: 'e.g., KES, USD, EUR',
+            required: true
+          ) %>
+        </div>
+
+        <!-- 5. Callback URL -->
+        <div class="form-group mb-3">
+          <%= label_tag :callback_url, "Callback URL", class: 'form-label' %>
+          <div class="input-group">
+            <%= preference_field_tag(
+              "payment_method[preferences][callback_url]",
+              @payment_method.preferred_callback_url,
+              type: :url,
+              class: 'form-control',
+              id: 'pref_callback_url',
+              required: true
+            ) %>
+            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard(this)">
+              <i class="bi bi-clipboard"></i> Copy
+            </button>
+          </div>
+          <small class="form-text text-muted">
+            URL where iPay will send payment notifications
+          </small>
+        </div>
+
+        <!-- 6. Return URL -->
+        <div class="form-group mb-4">
+          <%= label_tag :return_url, "Return URL", class: 'form-label' %>
+          <div class="input-group">
+            <%= preference_field_tag(
+              "payment_method[preferences][return_url]",
+              @payment_method.preferred_return_url,
+              type: :url,
+              class: 'form-control',
+              id: 'pref_return_url',
+              required: true
+            ) %>
+            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard(this)">
+              <i class="bi bi-clipboard"></i> Copy
+            </button>
+          </div>
+          <small class="form-text text-muted">
+            URL where customers will be redirected after payment
+          </small>
+        </div>
+
+        <!-- 7. Payment Channels -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h6 class="mb-0">Payment Channels</h6>
+          </div>
+          <div class="card-body">
+            <% # Define the order of payment channels
+               payment_channels = [
+                 { key: :mpesa, label: 'M-PESA' },
+                 { key: :airtel, label: 'Airtel Money' },
+                 { key: :equity, label: 'Equity' },
+                 { key: :mobilebanking, label: 'Mobile Banking' },
+                 { key: :creditcard, label: 'Credit/Debit Card' },
+                 { key: :unionpay, label: 'UnionPay' },
+                 { key: :mvisa, label: 'mVisa' },
+                 { key: :vooma, label: 'Vooma' },
+                 { key: :pesalink, label: 'PesaLink' },
+                 { key: :autopay, label: 'AutoPay' }
+               ]
+               
+               # Render each payment channel
+               payment_channels.each do |channel|
+                 pref_key = channel[:key]
+                 next unless @payment_method.preferences.key?(pref_key.to_s)
+            %>
+              <div class="form-check mb-2">
+                <%= preference_field_tag(
+                  "payment_method[preferences][#{pref_key}]",
+                  @payment_method.preferences[pref_key.to_s],
+                  type: :boolean,
+                  class: 'form-check-input',
+                  id: "channel_#{pref_key}"
+                ) %>
+                <%= label_tag "channel_#{pref_key}", channel[:label], class: 'form-check-label' %>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Copy to clipboard function
+function copyToClipboard(button) {
+  const input = button.parentElement.querySelector('input');
+  if (input) {
+    input.select();
+    document.execCommand('copy');
+    // Visual feedback
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-check"></i> Copied!';
+    setTimeout(() => {
+      button.innerHTML = originalText;
+    }, 2000);
+  }
+}
+
+// Toggle password visibility
+function togglePasswordVisibility(inputId) {
+  const input = document.getElementById(inputId);
+  if (input) {
+    input.type = input.type === 'password' ? 'text' : 'password';
+  }
+}
+
+// Confirm test mode toggle
+function confirmTestModeToggle(checkbox) {
+  if (!checkbox.checked) {
+    if (!confirm('Are you sure you want to switch to LIVE mode? This will process real payments.')) {
+      checkbox.checked = true; // Keep test mode enabled
+      return false;
+    }
+  }
+  return true;
+}
+
+// Initialize any necessary event listeners when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('iPay admin form initialized');
+});
+</script>

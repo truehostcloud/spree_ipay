@@ -1,0 +1,128 @@
+# This is the configuration file for RuboCop, a static code analyzer and formatter for Ruby.
+# This configuration is very permissive to avoid style complaints in legacy code.
+
+# Disable all cops by default
+AllCops:
+  DisabledByDefault: true
+  TargetRubyVersion: 3.3.0
+  Exclude:
+    - 'bin/**/*'
+    - 'db/**/*'
+    - 'config/**/*'
+    - 'spec/**/*'
+    - 'script/**/*'
+    - 'vendor/**/*'
+    - 'node_modules/**/*'
+    - 'tmp/**/*'
+    - 'log/**/*'
+    - 'public/**/*'
+    - '**/*.gemspec'
+
+# Enable only critical security-related cops
+Security/JSONLoad:
+  Enabled: true
+
+Security/MarshalLoad:
+  Enabled: true
+
+Security/Open:
+  Enabled: true
+
+Security/YAMLLoad:
+  Enabled: true
+
+# Basic syntax validation
+Lint/DeprecatedClassMethods:
+  Enabled: true
+
+Lint/DuplicateMethods:
+  Enabled: true
+
+Lint/NonDeterministicRequireOrder:
+  Enabled: true
+
+Lint/OrderedMagicComments:
+  Enabled: true
+
+Lint/Syntax:
+  Enabled: true
+
+# Performance cops are in a separate gem and disabled for simplicity
+
+# Disable all style cops
+Style/AndOr:
+  Enabled: false
+
+Style/ClassAndModuleChildren:
+  Enabled: false
+
+Style/ClassVars:
+  Enabled: false
+
+Style/Documentation:
+  Enabled: false
+
+Style/DoubleNegation:
+  Enabled: false
+
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+Style/IfUnlessModifier:
+  Enabled: false
+
+Style/Lambda:
+  Enabled: false
+
+# Line length is under Layout, not Style
+Layout/LineLength:
+  Enabled: false
+
+Style/MethodDefParentheses:
+  Enabled: false
+
+Style/PercentLiteralDelimiters:
+  Enabled: false
+
+Style/RedundantSelf:
+  Enabled: false
+
+Style/RescueStandardError:
+  Enabled: false
+
+Style/SignalException:
+  Enabled: false
+
+Style/SingleLineMethods:
+  Enabled: false
+
+Style/StringLiterals:
+  Enabled: false
+
+Style/TrivialAccessors:
+  Enabled: false
+
+# Disable metrics
+Metrics/AbcSize:
+  Enabled: false
+
+Metrics/BlockLength:
+  Enabled: false
+
+Metrics/ClassLength:
+  Enabled: false
+
+Metrics/CyclomaticComplexity:
+  Enabled: false
+
+Metrics/MethodLength:
+  Enabled: false
+
+Metrics/ModuleLength:
+  Enabled: false
+
+Metrics/ParameterLists:
+  Enabled: false
+
+Metrics/PerceivedComplexity:
+  Enabled: false
