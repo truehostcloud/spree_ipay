@@ -1,10 +1,34 @@
 version = 1
 
+[exclude]
+paths = [
+  "**/*_test.rb",
+  "**/spec/**",
+  "**/test/**",
+  "**/features/**",
+  "**/fixtures/**",
+  "**/dummy/**"
+]
+
 [[analyzers]]
 name = "javascript"
 
+disabled = false
+
+[analyzers.meta]
+environment = [
+  "browser"
+]
+
 [[analyzers]]
 name = "ruby"
+
+disabled = false
+
+[analyzers.meta]
+  [analyzers.meta.rails]
+  enabled = true
+  version = "6.1"
 
 [[transformers]]
 name = "rubocop"

@@ -155,9 +155,24 @@ module Spree
         HTML
       end
       render inline: html, content_type: 'text/html', status: (code == 'aei7p7yrx4ae34' ? :ok : :payment_required)
-      return
-    rescue
-      render plain: "An error occurred", status: :internal_server_error
+    rescue => e
+      error_html = <<~HTML
+        <div style='max-width:600px;margin:40px auto;padding:32px;background:#d32f2f11;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
+          <svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;">
+            <circle cx="12" cy="12" r="10" fill="#ffe6e6"/>
+            <path d="M8 12l4 4 4-8" stroke="#d32f2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <h1 style="color:#d32f2f;">Error Processing Payment</h1>
+          <p style="margin:18px 0 0 0;font-size:1.2em;">An error occurred while processing your payment. Please try again or contact support.</p>
+          <table style='margin:24px auto 0 auto;font-size:1em;text-align:left;'>
+            <tr><td style='padding:4px 12px;font-weight:bold;'>Error:</td><td>#{ERB::Util.html_escape(e.message)}</td></tr>
+          </table>
+          <div style="margin-top:32px;">
+            <a href='#{spree.root_path}' style='display:inline-block;padding:12px 28px;background:#d32f2f;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
+          </div>
+        </div>
+      HTML
+      render html: error_html.html_safe, status: :internal_server_error
     end
   end
 end
