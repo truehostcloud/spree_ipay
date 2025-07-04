@@ -1,21 +1,19 @@
 version = 1
 
-[exclude]
-# Exclude all test and spec files
-paths = [
+test_patterns = [
   "**/*_test.rb",
-  "**/*_spec.rb",
-  "**/spec/**",
-  "**/test/**",
-  "**/features/**",
-  "**/fixtures/**",
-  "**/dummy/**",
-  "**/test/**/*",
-  "**/spec/**/*",
-  ".rspec",
-  ".simplecov",
-  "spec_helper.rb",
-  "rails_helper.rb"
+  "  **/*_spec.rb",
+  "  **/spec/**",
+  "  **/test/**",
+  "  **/features/**",
+  "  **/fixtures/**",
+  "  **/dummy/**",
+  "  **/test/**/*",
+  "  **/spec/**/*",
+  "  .rspec",
+  "  .simplecov",
+  "  spec_helper.rb",
+  "  rails_helper.rb"
 ]
 
 # Ignore code coverage for test files
