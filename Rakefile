@@ -3,7 +3,7 @@
 require 'bundler/setup'
 require 'rspec/core/rake_task'
 
-task :default => :spec
+task default: :spec
 
 desc 'Run all specs'
 RSpec::Core::RakeTask.new(:spec) do |t|
@@ -11,7 +11,7 @@ RSpec::Core::RakeTask.new(:spec) do |t|
 end
 
 desc 'Run a specific test file'
-task :spec_file, [:file] do |t, args|
+task :spec_file, [:file] do |_t, args|
   if args.file
     sh "bundle exec rspec #{args.file}"
   else

@@ -33,9 +33,7 @@ module Spree
         begin
           status_response = check_payment_status(payment)
 
-          if status_response.nil?
-            raise 'Invalid response from payment gateway'
-          end
+          raise 'Invalid response from payment gateway' if status_response.nil?
 
           if status_response['status'] == 'success' && status_response.dig('data', 'payment_status') == 'COMPLETED'
             payment.update!(state: 'completed')
@@ -53,7 +51,7 @@ module Spree
               { test: true }
             )
           end
-        rescue => e
+        rescue StandardError => e
           ActiveMerchant::Billing::Response.new(
             false,
             "Payment completion failed: #{e.message}",

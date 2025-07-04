@@ -7,7 +7,7 @@ require 'active_support/core_ext/hash/indifferent_access'
 # Mock Spree modules
 module Spree
   class Base
-    def self.table_name_prefix; 'spree_'; end
+    def self.table_name_prefix = 'spree_'
   end
 
   class Order < Base
@@ -21,23 +21,23 @@ module Spree
 
     attr_accessor :number, :total, :email, :state
 
-    def complete!; true; end
+    def complete! = true
   end
 
   class PaymentMethod < Base; end
 
   class PaymentMethod::Ipay < PaymentMethod
-    def self.find(_id); new; end
+    def self.find(_id) = new
 
-    def preferred_vendor_id; 'demo'; end
-    def preferred_hash_key; 'demoCHANGED'; end
-    def preferred_test_mode; true; end
+    def preferred_vendor_id = 'demo'
+    def preferred_hash_key = 'demoCHANGED'
+    def preferred_test_mode = true
   end
 
   class IpaySource < Base
     attr_accessor :phone, :vendor_id, :transaction_id
 
-    def save; true; end
+    def save = true
   end
 end
 

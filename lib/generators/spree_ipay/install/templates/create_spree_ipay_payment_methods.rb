@@ -3,17 +3,13 @@
 class CreateSpreeIpayPaymentMethods < ActiveRecord::Migration[7.1]
   def up
     # Add iPay specific fields to spree_payment_methods if they don't exist
-    unless column_exists?(:spree_payment_methods, :vendor_id)
-      add_column :spree_payment_methods, :vendor_id, :string
-    end
-    
-    unless column_exists?(:spree_payment_methods, :hash_key)
-      add_column :spree_payment_methods, :hash_key, :string
-    end
-    
-    unless column_exists?(:spree_payment_methods, :test_mode)
-      add_column :spree_payment_methods, :test_mode, :boolean, default: true
-    end
+    add_column :spree_payment_methods, :vendor_id, :string unless column_exists?(:spree_payment_methods, :vendor_id)
+
+    add_column :spree_payment_methods, :hash_key, :string unless column_exists?(:spree_payment_methods, :hash_key)
+
+    return if column_exists?(:spree_payment_methods, :test_mode)
+
+    add_column :spree_payment_methods, :test_mode, :boolean, default: true
   end
 
   def down

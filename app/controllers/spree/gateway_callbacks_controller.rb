@@ -88,30 +88,28 @@ module Spree
           while !order.completed? && order.can_advance?
             begin
               order.next!
-            rescue
+            rescue StandardError
               break
             end
           end
         else
           begin
             order.next! until order.completed?
-          rescue
+          rescue StandardError
             # Swallow error, do not log
           end
         end
       elsif code == 'bdi6p2yy76etrs' # Pending, do not fail payment
         # leave payment as pending
       else
-        unless payment.failed?
-          payment.failure!
-        end
+        payment.failure! unless payment.failed?
       end
       # Icon SVGs
-      icon_svg = case meta[:icon]
-                 when 'success' then '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#e6ffe6"/><path d="M8.5 12.5l2.5 2.5 4.5-4.5" stroke="#3bb143" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-                 when 'pending' then '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#fffbe6"/><path d="M12 8v4l3 3" stroke="#fbc02d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-                 else '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#ffe6e6"/><path d="M8 12l4 4 4-8" stroke="#d32f2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-                 end
+      case meta[:icon]
+      when 'success' then '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#e6ffe6"/><path d="M8.5 12.5l2.5 2.5 4.5-4.5" stroke="#3bb143" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      when 'pending' then '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#fffbe6"/><path d="M12 8v4l3 3" stroke="#fbc02d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      else '<svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;"><circle cx="12" cy="12" r="10" fill="#ffe6e6"/><path d="M8 12l4 4 4-8" stroke="#d32f2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      end
 
       # Escape all dynamic/user variables
       esc_order_number = ERB::Util.html_escape(order.number)
@@ -120,19 +118,41 @@ module Spree
       esc_payer_name = ERB::Util.html_escape(msisdn_id)
       esc_payer_phone = ERB::Util.html_escape(msisdn_idnum)
       esc_heading = ERB::Util.html_escape(meta[:heading])
-      esc_color = ERB::Util.html_escape(meta[:color])
-      icon_svg # assumed safe, as it's generated SVG markup
+      esc_color = ERB::Util.html_escape(meta[:color]) # assumed safe, as it's generated SVG markup
       esc_root_path = ERB::Util.html_escape(spree.root_path)
       esc_payment_path = ERB::Util.html_escape(spree.checkout_state_path(order.state))
 
-      # Details table (only show Order #, Status, Message, Payer Name, Payer Phone)
-      details = "<table style='margin:24px auto 0 auto;font-size:1em;text-align:left;'><tr><td style='padding:4px 12px;font-weight:bold;'>Order #:</td><td>#{esc_order_number}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Status:</td><td>#{esc_status}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Message:</td><td>#{esc_message}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Payer Name:</td><td>#{esc_payer_name}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Payer Phone:</td><td>#{esc_payer_phone}</td></tr></table>"
+      # Build details table safely using helpers
+      @details = helpers.content_tag(:table,
+                                     helpers.safe_join([
+                                                         helpers.content_tag(:tr,
+                                                                             helpers.content_tag(:th, 'Order #:',
+                                                                                                 style: 'padding:4px 12px;font-weight:bold;text-align:left;') +
+                                                                             helpers.content_tag(:td,
+                                                                                                 esc_order_number)),
+                                                         helpers.content_tag(:tr,
+                                                                             helpers.content_tag(:th, 'Status:',
+                                                                                                 style: 'padding:4px 12px;font-weight:bold;text-align:left;') +
+                                                                             helpers.content_tag(:td, esc_status)),
+                                                         helpers.content_tag(:tr,
+                                                                             helpers.content_tag(:th, 'Message:',
+                                                                                                 style: 'padding:4px 12px;font-weight:bold;text-align:left;') +
+                                                                             helpers.content_tag(:td, esc_message)),
+                                                         helpers.content_tag(:tr,
+                                                                             helpers.content_tag(:th, 'Payer Name:',
+                                                                                                 style: 'padding:4px 12px;font-weight:bold;text-align:left;') +
+                                                                             helpers.content_tag(:td, esc_payer_name)),
+                                                         helpers.content_tag(:tr,
+                                                                             helpers.content_tag(:th, 'Payer Phone:',
+                                                                                                 style: 'padding:4px 12px;font-weight:bold;text-align:left;') +
+                                                                             helpers.content_tag(:td, esc_payer_phone))
+                                                       ]),
+                                     style: 'margin:24px auto 0 auto;font-size:1em;text-align:left;border-collapse:collapse;width:100%;max-width:600px;')
 
       # Set template variables
       @color = esc_color
       @icon = meta[:icon]
       @heading = esc_heading
-      @details = details.html_safe
       @root_path = esc_root_path
 
       if code == 'aei7p7yrx4ae34'
@@ -144,7 +164,7 @@ module Spree
         @payment_path = esc_payment_path
         render 'failure', status: :payment_required
       end
-    rescue => e
+    rescue StandardError => e
       # Prepare error metadata
       @meta = {
         heading: 'Error Processing Payment',

@@ -12,10 +12,10 @@ module Spree
         skip_before_action :load_payment, only: [:callback]
 
         # SKIP ALL USER-RELATED AUTH FOR CALLBACK (SECURITY BY HASH ONLY)
-        skip_before_action :authenticate_user, only: [:callback, :return]
+        skip_before_action :authenticate_user, only: %i[callback return]
         # skip_before_action :authenticate_spree_user, only: [:callback, :return]
-        skip_before_action :load_user, only: [:callback, :return] # If present in base
-        skip_before_action :set_locale, only: [:callback, :return] # Avoids user-locale issues
+        skip_before_action :load_user, only: %i[callback return] # If present in base
+        skip_before_action :set_locale, only: %i[callback return] # Avoids user-locale issues
 
         # iPay callback endpoint
         def callback
@@ -45,7 +45,7 @@ module Spree
           end
 
           # If still not found, try to find any pending/checkout payment
-          @payment ||= all_payments.detect { |p| ['pending', 'checkout'].include?(p.state) }
+          @payment ||= all_payments.detect { |p| %w[pending checkout].include?(p.state) }
 
           if @payment.nil?
             render json: {
@@ -165,61 +165,57 @@ module Spree
 
         # iPay return endpoint (customer redirect)
         def return
-          begin
-            order = @payment.order
+          order = @payment.order
 
-            # If payment is already completed, redirect to order confirmation
-            if @payment.completed?
+          # If payment is already completed, redirect to order confirmation
+          if @payment.completed?
 
-              redirect_to spree.order_path(order, order_token: order.guest_token),
-                          notice: Spree.t(:order_processed_successfully)
-              return
-            end
-
-            # If payment is processing, check with iPay for status
-            if @payment.pending? || @payment.processing?
-
-              # Here you might want to implement a status check with iPay
-              # For now, we'll just redirect to payment info page
-              redirect_to spree.checkout_state_path(:payment),
-                          notice: 'We are still processing your payment. Please check back soon.'
-              return
-            end
-
-            # If payment failed
-            if @payment.failed? || @payment.void?
-
-              redirect_to spree.checkout_state_path(:payment),
-                          alert: 'Payment was not completed. Please try again or use a different payment method.'
-              return
-            end
-
-            # Default fallback
-            redirect_to spree.checkout_state_path(order.state),
-                        notice: 'Please complete your order.'
-          rescue StandardError
-            redirect_to spree.root_path,
-                        alert: 'An error occurred while processing your order. Please contact support if the problem persists.'
+            redirect_to spree.order_path(order, order_token: order.guest_token),
+                        notice: Spree.t(:order_processed_successfully)
+            return
           end
+
+          # If payment is processing, check with iPay for status
+          if @payment.pending? || @payment.processing?
+
+            # Here you might want to implement a status check with iPay
+            # For now, we'll just redirect to payment info page
+            redirect_to spree.checkout_state_path(:payment),
+                        notice: 'We are still processing your payment. Please check back soon.'
+            return
+          end
+
+          # If payment failed
+          if @payment.failed? || @payment.void?
+
+            redirect_to spree.checkout_state_path(:payment),
+                        alert: 'Payment was not completed. Please try again or use a different payment method.'
+            return
+          end
+
+          # Default fallback
+          redirect_to spree.checkout_state_path(order.state),
+                      notice: 'Please complete your order.'
+        rescue StandardError
+          redirect_to spree.root_path,
+                      alert: 'An error occurred while processing your order. Please contact support if the problem persists.'
         end
 
         # Check payment status endpoint
         def status
-          begin
-            payment = Spree::Payment.find(params[:payment_id])
-            payment_method = payment.payment_method
+          payment = Spree::Payment.find(params[:payment_id])
+          payment_method = payment.payment_method
 
-            if payment_method.is_a?(Spree::PaymentMethod::Ipay)
-              status_response = payment_method.send(:check_payment_status, payment.response_code)
-              render json: status_response
-            else
-              render json: { status: 'error', message: 'Invalid payment method' }, status: :bad_request
-            end
-          rescue ActiveRecord::RecordNotFound
-            render json: { status: 'error', message: 'Payment not found' }, status: :not_found
-          rescue StandardError
-            render json: { status: 'error', message: 'Internal server error' }, status: :internal_server_error
+          if payment_method.is_a?(Spree::PaymentMethod::Ipay)
+            status_response = payment_method.send(:check_payment_status, payment.response_code)
+            render json: status_response
+          else
+            render json: { status: 'error', message: 'Invalid payment method' }, status: :bad_request
           end
+        rescue ActiveRecord::RecordNotFound
+          render json: { status: 'error', message: 'Payment not found' }, status: :not_found
+        rescue StandardError
+          render json: { status: 'error', message: 'Internal server error' }, status: :internal_server_error
         end
 
         private
@@ -242,22 +238,16 @@ module Spree
           # Verify callback hash for payment
 
           # Skip verification if no hash is provided (for testing)
-          if received_hash.blank?
-
-            return true
-          end
+          return true if received_hash.blank?
 
           # Only require hash verification for real iPay payment methods
           if payment_method.class.name.demodulize.downcase.include?("ipay") && payment_method.respond_to?(:generate_status_hash)
-            if @payment.response_code.blank?
-
-              return false
-            end
+            return false if @payment.response_code.blank?
 
             begin
               expected_hash = payment_method.send(:generate_status_hash, @payment.response_code)
               received_hash == expected_hash
-            rescue
+            rescue StandardError
               false
             end
           else

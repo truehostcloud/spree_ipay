@@ -123,14 +123,10 @@ module Spree
       order = payment.order
 
       # Ensure the order is in the correct state
-      unless order.checkout_steps.include?('confirm')
-        return failure_response("Order is not in a confirmable state")
-      end
+      return failure_response("Order is not in a confirmable state") unless order.checkout_steps.include?('confirm')
 
       # Ensure we have a valid source
-      if source.blank? || !source.is_a?(Spree::IpaySource)
-        return failure_response("Invalid payment source")
-      end
+      return failure_response("Invalid payment source") if source.blank? || !source.is_a?(Spree::IpaySource)
 
       # Ensure source is associated with payment method
       if source.payment_method_id != id && !source.update(payment_method_id: id)
@@ -141,9 +137,7 @@ module Spree
       phone = source.phone
 
       # Store phone number in session if we have a controller context
-      if options[:controller]&.respond_to?(:session)
-        options[:controller].session[:ipay_phone_number] = phone
-      end
+      options[:controller].session[:ipay_phone_number] = phone if options[:controller]&.respond_to?(:session)
 
       # Ensure payment has the source assigned
       if payment.source.nil? || !payment.source.is_a?(Spree::IpaySource)
@@ -156,14 +150,12 @@ module Spree
         end
       else
         payment.source.phone = phone
-        if payment.source.changed? && !payment.source.save
-          return failure_response("Failed to update payment source")
-        end
+        return failure_response("Failed to update payment source") if payment.source.changed? && !payment.source.save
       end
 
       # Process the payment
       process!(phone: phone, payment: payment, amount: amount, options: options)
-    rescue => e
+    rescue StandardError => e
       failure_response("Authorization failed: #{e.message}")
     end
 
@@ -188,7 +180,7 @@ module Spree
         { authorization: response_code },
         {}
       )
-    rescue => e
+    rescue StandardError => e
       failure_response("Capture failed: #{e.message}")
     end
 
@@ -210,87 +202,83 @@ module Spree
       else
         failure_response(response['message'] || 'Payment void failed')
       end
-    rescue => e
+    rescue StandardError => e
       failure_response("Payment void failed: #{e.message}")
     end
 
     def process!(phone: nil, payment: nil, amount: nil, options: {})
       # Process iPay payment
 
-      begin
-        # Log the start of payment processing
+      # Log the start of payment processing
 
-        # Validate required parameters
-        unless phone.present? && payment.present? && payment.order.present? && amount.present?
-          error_msg = "Missing required parameters for iPay payment"
+      # Validate required parameters
+      unless phone.present? && payment.present? && payment.order.present? && amount.present?
+        error_msg = "Missing required parameters for iPay payment"
 
-          payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
-          return failure_response(error_msg)
-        end
-
-        # Validate phone is a 10-digit number
-        unless phone.to_s.match?(/^\d{10}$/)
-          error_msg = "Invalid phone number. Please enter a valid 10-digit mobile number."
-          payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
-          return failure_response(error_msg)
-        end
-
-        # Validate credentials are set
-        if preferred_vendor_id.blank? || preferred_hash_key.blank?
-          error_msg = "iPay vendor ID or hash key is not configured"
-          payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
-          return failure_response(error_msg)
-        end
-
-        # Validate phone number format
-        unless /^\+?\d{10,15}$/.match?(phone.to_s)
-          error_msg = "Invalid phone number format: #{phone}"
-          payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
-          return failure_response('Please enter a valid phone number')
-        end
-
-        # Validate payment amount
-        unless amount.to_f > 0
-          error_msg = "Invalid payment amount: #{amount}"
-          payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
-          return failure_response('Invalid payment amount')
-        end
-
-        # Validate iPay credentials with detailed logging
-        vendor_id = preferred_vendor_id
-        hash_key = preferred_hash_key
-
-        unless vendor_id.present? && hash_key.present?
-          error_msg = "Missing iPay credentials. Please configure vendor_id and hash_key in the payment method settings."
-
-          payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
-          return failure_response('Payment configuration error. Please check your iPay settings.')
-        end
-
-        # Update payment amount if needed (using epsilon for float comparison)
-        if (payment.amount.to_f - amount.to_f).abs > Float::EPSILON
-          payment.amount = amount
-          payment.save!
-        end
-
-        # Store phone number in session if we have a controller context
-        if options[:controller]&.respond_to?(:session)
-          options[:controller].session[:ipay_phone_number] = phone
-        end
-
-        # Transition payment to processing state
-        payment.started_processing! if payment.respond_to?(:started_processing!)
-
-        # Payment processing started
-        payment.log_entries.create(details: 'Payment processing started') if payment.respond_to?(:log_entries)
-
-        # Return success response
-        success_response('Payment processing started')
-      rescue => e
-        error_msg = "Payment processing failed: #{e.message}"
         payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
-        failure_response(error_msg)
+        return failure_response(error_msg)
       end
+
+      # Validate phone is a 10-digit number
+      unless phone.to_s.match?(/^\d{10}$/)
+        error_msg = "Invalid phone number. Please enter a valid 10-digit mobile number."
+        payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
+        return failure_response(error_msg)
+      end
+
+      # Validate credentials are set
+      if preferred_vendor_id.blank? || preferred_hash_key.blank?
+        error_msg = "iPay vendor ID or hash key is not configured"
+        payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
+        return failure_response(error_msg)
+      end
+
+      # Validate phone number format
+      unless /^\+?\d{10,15}$/.match?(phone.to_s)
+        error_msg = "Invalid phone number format: #{phone}"
+        payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
+        return failure_response('Please enter a valid phone number')
+      end
+
+      # Validate payment amount
+      unless amount.to_f > 0
+        error_msg = "Invalid payment amount: #{amount}"
+        payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
+        return failure_response('Invalid payment amount')
+      end
+
+      # Validate iPay credentials with detailed logging
+      vendor_id = preferred_vendor_id
+      hash_key = preferred_hash_key
+
+      unless vendor_id.present? && hash_key.present?
+        error_msg = "Missing iPay credentials. Please configure vendor_id and hash_key in the payment method settings."
+
+        payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
+        return failure_response('Payment configuration error. Please check your iPay settings.')
+      end
+
+      # Update payment amount if needed (using epsilon for float comparison)
+      if (payment.amount.to_f - amount.to_f).abs > Float::EPSILON
+        payment.amount = amount
+        payment.save!
+      end
+
+      # Store phone number in session if we have a controller context
+      options[:controller].session[:ipay_phone_number] = phone if options[:controller]&.respond_to?(:session)
+
+      # Transition payment to processing state
+      payment.started_processing! if payment.respond_to?(:started_processing!)
+
+      # Payment processing started
+      payment.log_entries.create(details: 'Payment processing started') if payment.respond_to?(:log_entries)
+
+      # Return success response
+      success_response('Payment processing started')
+    rescue StandardError => e
+      error_msg = "Payment processing failed: #{e.message}"
+      payment.log_entries.create(details: error_msg) if payment.respond_to?(:log_entries)
+      failure_response(error_msg)
     end
 
     # Generate HMAC SHA1 hash for iPay
@@ -337,7 +325,7 @@ module Spree
       # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
       digest = OpenSSL::Digest.new('sha1')
       OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
-    rescue => e
+    rescue StandardError => e
       raise "Error generating hash: #{e.message}"
     end
 
@@ -404,7 +392,7 @@ module Spree
 
       begin
         hsh = ipay_signature_hash(payment)
-      rescue => e
+      rescue StandardError => e
         raise "Error generating payment hash: #{e.message}"
       end
 
@@ -431,13 +419,13 @@ module Spree
 
       # Add channel parameters based on preferences
 
-      channels = [
-        :mpesa, :bonga, :airtel, :equity, :mobilebanking,
-        :creditcard, :unionpay, :mvisa, :vooma, :pesalink, :autopay
+      channels = %i[
+        mpesa bonga airtel equity mobilebanking
+        creditcard unionpay mvisa vooma pesalink autopay
       ]
 
       channels.each do |channel|
-        channel_value = self.send("preferred_#{channel}") ? '1' : '0'
+        channel_value = send("preferred_#{channel}") ? '1' : '0'
         ipay_params[channel] = channel_value
       end
 
@@ -482,7 +470,7 @@ module Spree
         else
           failure_response(response['message'] || 'Payment confirmation failed')
         end
-      rescue => e
+      rescue StandardError => e
         failure_response("Payment confirmation failed: #{e.message}")
       end
     end
@@ -500,7 +488,7 @@ module Spree
         else
           failure_response(status['message'] || 'Payment completion failed')
         end
-      rescue => e
+      rescue StandardError => e
         failure_response("Payment completion failed: #{e.message}")
       end
     end
@@ -536,9 +524,9 @@ module Spree
       params[:hsh] = generate_hash(payment)
 
       # Add channel parameters
-      [
-        :mpesa, :bonga, :airtel, :equity, :mobilebanking,
-        :creditcard, :unionpay, :mvisa, :vooma, :pesalink, :autopay
+      %i[
+        mpesa bonga airtel equity mobilebanking
+        creditcard unionpay mvisa vooma pesalink autopay
       ].each do |channel|
         next unless respond_to?("preferred_#{channel}")
 
@@ -565,8 +553,6 @@ module Spree
       form_html += "</form>"
       form_html += "<script>document.getElementById('ipay_form').submit();</script>"
 
-      form_html
-
       # Store form HTML in session
       options[:controller].session[:ipay_form_html] = form_html
 
@@ -578,7 +564,7 @@ module Spree
           form_html: form_html
         }
       )
-    rescue => e
+    rescue StandardError => e
       failure_response("Payment initiation failed: #{e.message}")
     end
 
@@ -599,7 +585,7 @@ module Spree
 
       # Parse and return response
       JSON.parse(response.body)
-    rescue => e
+    rescue StandardError => e
       {
         status: 'error',
         message: "Failed to check payment status: #{e.message}"
@@ -623,7 +609,7 @@ module Spree
 
       # Parse and return response
       JSON.parse(response.body)
-    rescue => e
+    rescue StandardError => e
       {
         status: 'error',
         message: "Failed to cancel payment: #{e.message}"
@@ -663,9 +649,7 @@ module Spree
       ].join
 
       # Generate the hash
-      hash = OpenSSL::HMAC.hexdigest('sha1', preferred_hash_key, data_string)
-
-      hash
+      OpenSSL::HMAC.hexdigest('sha1', preferred_hash_key, data_string)
 
       # Generate and return hash using HMAC SHA1
       OpenSSL::HMAC.hexdigest('sha1', preferred_hash_key, data_string)
@@ -716,9 +700,11 @@ module Spree
     end
 
     def api_endpoint
-      test_mode? ?
-        'https://sandbox.ipayafrica.com/v3/ke' :
+      if test_mode?
+        'https://sandbox.ipayafrica.com/v3/ke'
+      else
         'https://payments.ipayafrica.com/v3/ke'
+      end
     end
 
     def success_response(message = 'Success')

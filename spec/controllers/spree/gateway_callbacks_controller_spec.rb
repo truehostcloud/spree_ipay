@@ -54,7 +54,7 @@ class Spree::GatewayCallbacksController < ActionController::Base
         headers: { 'Content-Type' => 'text/plain' },
         body: "Order #{order.number} completed successfully"
       }
-    rescue => e
+    rescue StandardError => e
       @response = {
         status: 422,
         headers: { 'Content-Type' => 'text/plain' },
@@ -182,7 +182,7 @@ RSpec.describe Spree::GatewayCallbacksController do
     end
 
     context 'with missing required parameters' do
-      let(:params) { { 'order_id' => order_number } }  # Missing status, ttl, etc.
+      let(:params) { { 'order_id' => order_number } } # Missing status, ttl, etc.
 
       it 'does not complete the order' do
         expect(order).not_to have_received(:complete!)
