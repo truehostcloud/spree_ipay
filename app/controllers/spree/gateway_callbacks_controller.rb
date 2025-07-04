@@ -3,6 +3,7 @@ module Spree
   # Processes payment confirmations and updates order statuses based on iPay responses.
   # This controller skips CSRF protection for the confirm action to allow external callbacks.
   class GatewayCallbacksController < ApplicationController
+    layout false  # Don't use the application layout
     skip_before_action :verify_authenticity_token, only: [:confirm]
 
     def confirm
@@ -127,52 +128,43 @@ module Spree
       # Details table (only show Order #, Status, Message, Payer Name, Payer Phone)
       details = "<table style='margin:24px auto 0 auto;font-size:1em;text-align:left;'><tr><td style='padding:4px 12px;font-weight:bold;'>Order #:</td><td>#{esc_order_number}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Status:</td><td>#{esc_status}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Message:</td><td>#{esc_message}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Payer Name:</td><td>#{esc_payer_name}</td></tr><tr><td style='padding:4px 12px;font-weight:bold;'>Payer Phone:</td><td>#{esc_payer_phone}</td></tr></table>"
 
+      # Set template variables
+      @color = esc_color
+      @icon = meta[:icon]
+      @heading = esc_heading
+      @details = details.html_safe
+      @root_path = esc_root_path
+      
       if code == 'aei7p7yrx4ae34'
         # Show success page
-        html = <<~HTML
-          <div style='max-width:600px;margin:40px auto;padding:32px;background:#{esc_color}11;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
-            #{esc_icon_svg}
-            <h1 style="color:#{esc_color};">#{esc_heading}</h1>
-            #{details}
-            <div style="margin-top:32px;">
-              <a href='#{esc_root_path}' style='display:inline-block;padding:12px 28px;background:#{esc_color};color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
-            </div>
-          </div>
-        HTML
+        render 'success', status: :ok
       else
-        # Show two buttons: Retry Payment and Return to Store
-        html = <<~HTML
-          <div style='max-width:600px;margin:40px auto;padding:32px;background:#{esc_color}11;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
-            #{esc_icon_svg}
-            <h1 style="color:#{esc_color};">#{esc_heading}</h1>
-            <p style="margin:18px 0 0 0;font-size:1.2em;">#{esc_message}</p>
-            #{details}
-            <div style="margin-top:32px;display:flex;gap:16px;justify-content:center;">
-              <a href='#{esc_payment_path}' style='display:inline-block;padding:12px 28px;background:#1976d2;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Retry Payment</a>
-              <a href='#{esc_root_path}' style='display:inline-block;padding:12px 28px;background:#{esc_color};color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
-            </div>
-          </div>
-        HTML
+        # Show failure page with retry option
+        @message = esc_message
+        @payment_path = esc_payment_path
+        render 'failure', status: :payment_required
       end
-      render inline: html, content_type: 'text/html', status: (code == 'aei7p7yrx4ae34' ? :ok : :payment_required)
     rescue => e
-      error_html = <<~HTML
-        <div style='max-width:600px;margin:40px auto;padding:32px;background:#d32f2f11;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.07);text-align:center;'>
-          <svg width="64" height="64" fill="none" viewBox="0 0 24 24" style="margin-bottom:24px;">
-            <circle cx="12" cy="12" r="10" fill="#ffe6e6"/>
-            <path d="M8 12l4 4 4-8" stroke="#d32f2f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <h1 style="color:#d32f2f;">Error Processing Payment</h1>
-          <p style="margin:18px 0 0 0;font-size:1.2em;">An error occurred while processing your payment. Please try again or contact support.</p>
-          <table style='margin:24px auto 0 auto;font-size:1em;text-align:left;'>
-            <tr><td style='padding:4px 12px;font-weight:bold;'>Error:</td><td>#{ERB::Util.html_escape(e.message)}</td></tr>
-          </table>
-          <div style="margin-top:32px;">
-            <a href='#{spree.root_path}' style='display:inline-block;padding:12px 28px;background:#d32f2f;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;font-size:1em;'>Return to Store</a>
-          </div>
-        </div>
-      HTML
-      render html: error_html.html_safe, status: :internal_server_error
+      # Prepare error metadata
+      @meta = {
+        heading: 'Error Processing Payment',
+        message: 'An error occurred while processing your payment. Please try again or contact support.',
+        color: '#d32f2f',
+        icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z',
+        error: e.message,
+        root_path: spree.root_path
+      }
+      
+      # Set instance variables for the view
+      @heading = @meta[:heading]
+      @message = @meta[:message]
+      @color = @meta[:color]
+      @icon = @meta[:icon]
+      @error = @meta[:error]
+      @root_path = @meta[:root_path]
+      
+      # Render the error template
+      render 'error', status: :internal_server_error
     end
   end
 end
