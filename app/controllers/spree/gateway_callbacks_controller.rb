@@ -3,7 +3,7 @@ module Spree
   # Processes payment confirmations and updates order statuses based on iPay responses.
   # This controller skips CSRF protection for the confirm action to allow external callbacks.
   class GatewayCallbacksController < ApplicationController
-    layout false  # Don't use the application layout
+    layout false # Don't use the application layout
     skip_before_action :verify_authenticity_token, only: [:confirm]
 
     def confirm
@@ -134,7 +134,7 @@ module Spree
       @heading = esc_heading
       @details = details.html_safe
       @root_path = esc_root_path
-      
+
       if code == 'aei7p7yrx4ae34'
         # Show success page
         render 'success', status: :ok
@@ -154,7 +154,7 @@ module Spree
         error: e.message,
         root_path: spree.root_path
       }
-      
+
       # Set instance variables for the view
       @heading = @meta[:heading]
       @message = @meta[:message]
@@ -162,7 +162,7 @@ module Spree
       @icon = @meta[:icon]
       @error = @meta[:error]
       @root_path = @meta[:root_path]
-      
+
       # Render the error template
       render 'error', status: :internal_server_error
     end
