@@ -1,385 +1,153 @@
-<div class="row mb-3">
+<div class="row">
   <div class="col-12">
     <div class="card">
       <div class="card-header">
         <h5 class="mb-0">iPay Payment Settings</h5>
       </div>
       <div class="card-body">
-        <!-- Main Configurations -->
-        <div class="form-group mb-3">
-          <%= label_tag :vendor_id, "Vendor ID" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_vendor_id]",
-            @payment_method.preferred_vendor_id,
-            type: :string,
-            class: 'form-control'
-          ) %>
-        </div>
-
-        <div class="form-group mb-3">
-          <%= label_tag :hash_key, "Hash Key" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_hash_key]",
-            @payment_method.preferred_hash_key,
-            type: :password,
-            class: 'form-control'
-          ) %>
-        </div>
-
-        <div class="form-group mb-3">
-          <%= label_tag :currency, "Currency" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_currency]",
-            @payment_method.preferred_currency || 'KES',
-            type: :string,
-            class: 'form-control'
-          ) %>
-        </div>
-
-        <div class="form-group mb-3">
-          <%= label_tag :callback_url, "Callback URL" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_callback_url]",
-            @payment_method.preferred_callback_url,
-            type: :string,
-            class: 'form-control',
-            placeholder: 'https://yourdomain.com/api/v1/ipay/:payment_id/callback'
-          ) %>
-        </div>
-
+        <!-- 1. Test Mode -->
         <div class="form-group mb-4">
-          <%= label_tag :return_url, "Return URL" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_return_url]",
-            @payment_method.preferred_return_url,
-            type: :string,
-            class: 'form-control',
-            placeholder: 'https://yourdomain.com/ipay/checkout/:id'
-          ) %>
-        </div>
-
-        <!-- Test Mode just before payment channels -->
-        <hr>
-        <div class="form-group mb-4">
-          <%= label_tag :test_mode, "Test Mode", class: "form-label" %>
-          <div>
+          <%= label_tag "test_mode_toggle", "Test Mode", class: 'form-label' %>
+          <div class="form-check">
             <%= preference_field_tag(
-              "payment_method[preferred_test_mode]",
+              "payment_method[preferences][test_mode]",
               @payment_method.preferred_test_mode,
               type: :boolean,
-              class: 'form-check-input'
+              class: 'form-check-input',
+              id: 'test_mode_toggle',
+              onchange: "confirmTestModeToggle(this)"
             ) %>
-            <%= label_tag "payment_method_preferred_test_mode", "Enable Test Mode", class: "form-check-label ms-2" %>
-            <small class="form-text text-muted ms-3">
-              Enable test mode to use iPay's sandbox environment.
+            <label class="form-check-label" for="test_mode_toggle">Enable Test Mode</label>
+            <small class="form-text text-muted d-block">
+              When enabled, all transactions will be processed in iPay's sandbox environment.
+              When disabled, transactions will be processed in live mode.
             </small>
           </div>
         </div>
 
-        <!-- Payment Channels Section -->
-        <h6 class="mt-4">Payment Channels</h6>
-        <div class="form-group">
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_mpesa]",
-              @payment_method.preferred_channel_mpesa,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_mpesa'
-            ) %>
-            <%= label_tag 'channel_mpesa', 'M-PESA', class: 'form-check-label' %>
-          </div>
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_airtel]",
-              @payment_method.preferred_channel_airtel,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_airtel'
-            ) %>
-            <%= label_tag 'channel_airtel', 'Airtel Money', class: 'form-check-label' %>
-          </div>
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_equitel]",
-              @payment_method.preferred_channel_equitel,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_equitel'
-            ) %>
-            <%= label_tag 'channel_equitel', 'Equitel', class: 'form-check-label' %>
-          </div>
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_visa]",
-              @payment_method.preferred_channel_visa,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_visa'
-            ) %>
-            <%= label_tag 'channel_visa', 'VISA/MasterCard', class: 'form-check-label' %>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-  <div class="col-12">
-    <div class="card">
-      <div class="card-header">
-        <h5 class="mb-0">iPay Payment Settings</h5>
-      </div>
-      <div class="card-body">
-        <!-- Test Mode at the top -->
-        <div class="form-group mb-4">
-          <%= label_tag :test_mode, "Test Mode", class: "form-label" %>
-          <div>
-            <%= preference_field_tag(
-              "payment_method[preferred_test_mode]",
-              @payment_method.preferred_test_mode,
-              type: :boolean,
-              class: 'form-check-input'
-            ) %>
-            <%= label_tag "payment_method_preferred_test_mode", "Enable Test Mode", class: "form-check-label ms-2" %>
-            <small class="form-text text-muted ms-3">
-              Enable test mode to use iPay's sandbox environment.
-            </small>
-          </div>
-        </div>
-
-        <!-- Main Configurations -->
+        <!-- 2. Vendor ID -->
         <div class="form-group mb-3">
-          <%= label_tag :vendor_id, "Vendor ID" %>
+          <%= label_tag :vendor_id, "Vendor ID", class: 'form-label' %>
           <%= preference_field_tag(
-            "payment_method[preferred_vendor_id]",
+            "payment_method[preferences][vendor_id]",
             @payment_method.preferred_vendor_id,
             type: :string,
-            class: 'form-control'
-          ) %>
-        </div>
-
-        <div class="form-group mb-3">
-          <%= label_tag :hash_key, "Hash Key" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_hash_key]",
-            @payment_method.preferred_hash_key,
-            type: :password,
-            class: 'form-control'
-          ) %>
-        </div>
-
-        <div class="form-group mb-3">
-          <%= label_tag :currency, "Currency" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_currency]",
-            @payment_method.preferred_currency || 'KES',
-            type: :string,
-            class: 'form-control'
-          ) %>
-        </div>
-
-        <div class="form-group mb-3">
-          <%= label_tag :callback_url, "Callback URL" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_callback_url]",
-            @payment_method.preferred_callback_url,
-            type: :string,
             class: 'form-control',
-            placeholder: 'https://yourdomain.com/api/v1/ipay/:payment_id/callback'
+            id: 'pref_vendor_id',
+            required: true
           ) %>
         </div>
 
-        <div class="form-group mb-4">
-          <%= label_tag :return_url, "Return URL" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_return_url]",
-            @payment_method.preferred_return_url,
-            type: :string,
-            class: 'form-control',
-            placeholder: 'https://yourdomain.com/ipay/checkout/:id'
-          ) %>
-        </div>
-
-        <!-- Payment Channels Section -->
-        <hr>
-        <h6 class="mt-4">Payment Channels</h6>
-        <div class="form-group">
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_mpesa]",
-              @payment_method.preferred_channel_mpesa,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_mpesa'
-            ) %>
-            <%= label_tag 'channel_mpesa', 'M-PESA', class: 'form-check-label' %>
-          </div>
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_airtel]",
-              @payment_method.preferred_channel_airtel,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_airtel'
-            ) %>
-            <%= label_tag 'channel_airtel', 'Airtel Money', class: 'form-check-label' %>
-          </div>
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_equitel]",
-              @payment_method.preferred_channel_equitel,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_equitel'
-            ) %>
-            <%= label_tag 'channel_equitel', 'Equitel', class: 'form-check-label' %>
-          </div>
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_visa]",
-              @payment_method.preferred_channel_visa,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_visa'
-            ) %>
-            <%= label_tag 'channel_visa', 'VISA/MasterCard', class: 'form-check-label' %>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-  <div class="col-12">
-    <div class="card">
-      <div class="card-header">
-        <h5 class="mb-0">iPay Payment Settings</h5>
-      </div>
-      <div class="card-body">
-        <div class="form-group">
-          <%= label_tag :test_mode, Spree.t(:test_mode) %>
-          <div class="mt-2">
-            <%= preference_field_tag(
-              "payment_method[preferred_test_mode]",
-              @payment_method.preferred_test_mode,
-              type: :boolean
-            ) %>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <%= label_tag :vendor_id, "Vendor ID" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_vendor_id]",
-            @payment_method.preferred_vendor_id,
-            type: :string,
-            class: 'form-control'
-          ) %>
-        </div>
-
-        <div class="form-group">
-          <%= label_tag :hash_key, "Hash Key" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_hash_key]",
-            @payment_method.preferred_hash_key,
-            type: :password,
-            class: 'form-control'
-          ) %>
-        </div>
-
-        <!-- Add other fields as needed -->
-        <div class="form-group">
-          <%= label_tag :currency, "Currency" %>
-          <%= preference_field_tag(
-            "payment_method[preferred_currency]",
-            @payment_method.preferred_currency || 'KES',
-            type: :string,
-            class: 'form-control'
-          ) %>
-        </div>
-
-        <div class="form-group">
-          <%= label_tag :callback_url, "Callback URL" %>
+        <!-- 3. Hash Key -->
+        <div class="form-group mb-3">
+          <%= label_tag :hash_key, "Hash Key", class: 'form-label' %>
           <div class="input-group">
             <%= preference_field_tag(
-              "payment_method[preferred_callback_url]",
+              "payment_method[preferences][hash_key]",
+              @payment_method.preferred_hash_key,
+              type: :password,
+              class: 'form-control',
+              id: 'pref_hash_key',
+              required: true
+            ) %>
+            <button type="button" class="btn btn-outline-secondary" onclick="togglePasswordVisibility('pref_hash_key')">
+              <i class="bi bi-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4. Currency -->
+        <div class="form-group mb-4">
+          <%= label_tag :currency, "Currency", class: 'form-label' %>
+          <%= preference_field_tag(
+            "payment_method[preferences][currency]",
+            @payment_method.preferred_currency || 'KES',
+            type: :string,
+            class: 'form-control',
+            id: 'pref_currency',
+            placeholder: 'e.g., KES, USD, EUR',
+            required: true
+          ) %>
+        </div>
+
+        <!-- 5. Callback URL -->
+        <div class="form-group mb-3">
+          <%= label_tag :callback_url, "Callback URL", class: 'form-label' %>
+          <div class="input-group">
+            <%= preference_field_tag(
+              "payment_method[preferences][callback_url]",
               @payment_method.preferred_callback_url,
-              type: :string,
+              type: :url,
               class: 'form-control',
-              placeholder: 'https://yourstore.com/ipay/confirm',
-              id: 'callback-url-field-admin'
+              id: 'pref_callback_url',
+              required: true
             ) %>
-            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard('#callback-url-field-admin')">Copy</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard(this)">
+              <i class="bi bi-clipboard"></i> Copy
+            </button>
           </div>
           <small class="form-text text-muted">
-            <strong>Required:</strong> Enter your store domain followed by <code>/ipay/confirm</code>.<br>
-            <strong>Example:</strong> <code>https://yourstore.com/ipay/confirm</code><br>
-            <span style="color:#c00">This URL must be accessible from the public internet (not localhost).</span>
+            URL where iPay will send payment notifications
           </small>
         </div>
-        <div class="form-group">
-          <%= label_tag :return_url, "Return URL" %>
+
+        <!-- 6. Return URL -->
+        <div class="form-group mb-4">
+          <%= label_tag :return_url, "Return URL", class: 'form-label' %>
           <div class="input-group">
             <%= preference_field_tag(
-              "payment_method[preferred_return_url]",
+              "payment_method[preferences][return_url]",
               @payment_method.preferred_return_url,
-              type: :string,
+              type: :url,
               class: 'form-control',
-              placeholder: 'https://yourstore.com/ipay/confirm',
-              id: 'return-url-field-admin'
+              id: 'pref_return_url',
+              required: true
             ) %>
-            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard('#return-url-field-admin')">Copy</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="copyToClipboard(this)">
+              <i class="bi bi-clipboard"></i> Copy
+            </button>
           </div>
           <small class="form-text text-muted">
-            This is where customers are redirected after payment. You can use any page, such as a thank you or order summary page. It does not affect payment processing.<br>
-            <strong>Note:</strong> Only the Callback URL above is used for payment confirmation.<br>
-            <strong>Example:</strong> <code>https://yourstore.com/ipay/confirm</code>
+            URL where customers will be redirected after payment
           </small>
         </div>
-        <!-- Payment Channels Section -->
-        <hr>
-        <h6 class="mt-4">Payment Channels</h6>
-        <div class="form-group">
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_mpesa]",
-              @payment_method.preferred_channel_mpesa,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_mpesa'
-            ) %>
-            <%= label_tag 'channel_mpesa', 'M-PESA', class: 'form-check-label' %>
+
+        <!-- 7. Payment Channels -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h6 class="mb-0">Payment Channels</h6>
           </div>
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_airtel]",
-              @payment_method.preferred_channel_airtel,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_airtel'
-            ) %>
-            <%= label_tag 'channel_airtel', 'Airtel Money', class: 'form-check-label' %>
-          </div>
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_equitel]",
-              @payment_method.preferred_channel_equitel,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_equitel'
-            ) %>
-            <%= label_tag 'channel_equitel', 'Equitel', class: 'form-check-label' %>
-          </div>
-          <div class="form-check">
-            <%= preference_field_tag(
-              "payment_method[preferred_channel_visa]",
-              @payment_method.preferred_channel_visa,
-              type: :boolean,
-              class: 'form-check-input',
-              id: 'channel_visa'
-            ) %>
-            <%= label_tag 'channel_visa', 'VISA/MasterCard', class: 'form-check-label' %>
+          <div class="card-body">
+            <% # Define the order of payment channels
+               payment_channels = [
+                 { key: :mpesa, label: 'M-PESA' },
+                 { key: :airtel, label: 'Airtel Money' },
+                 { key: :equity, label: 'Equity' },
+                 { key: :mobilebanking, label: 'Mobile Banking' },
+                 { key: :creditcard, label: 'Credit/Debit Card' },
+                 { key: :unionpay, label: 'UnionPay' },
+                 { key: :mvisa, label: 'mVisa' },
+                 { key: :vooma, label: 'Vooma' },
+                 { key: :pesalink, label: 'PesaLink' },
+                 { key: :autopay, label: 'AutoPay' }
+               ]
+               
+               # Render each payment channel
+               payment_channels.each do |channel|
+                 pref_key = channel[:key]
+                 next unless @payment_method.preferences.key?(pref_key.to_s)
+            %>
+              <div class="form-check mb-2">
+                <%= preference_field_tag(
+                  "payment_method[preferences][#{pref_key}]",
+                  @payment_method.preferences[pref_key.to_s],
+                  type: :boolean,
+                  class: 'form-check-input',
+                  id: "channel_#{pref_key}"
+                ) %>
+                <%= label_tag "channel_#{pref_key}", channel[:label], class: 'form-check-label' %>
+              </div>
+            <% end %>
           </div>
         </div>
       </div>
@@ -388,55 +156,42 @@
 </div>
 
 <script>
-// Copy to clipboard helper for admin fields
-function copyToClipboard(selector) {
-  var input = document.querySelector(selector);
+// Copy to clipboard function
+function copyToClipboard(button) {
+  const input = button.parentElement.querySelector('input');
   if (input) {
     input.select();
     document.execCommand('copy');
-    input.blur();
-    alert('Copied to clipboard!');
+    // Visual feedback
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-check"></i> Copied!';
+    setTimeout(() => {
+      button.innerHTML = originalText;
+    }, 2000);
   }
 }
 
-// Basic debounce implementation
-function debounce(func, wait) {
-  let timeout;
-  return function() {
-    const context = this, args = arguments;
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(context, args), wait);
-  };
-}
-
-// Copy to clipboard helper
-function copyToClipboard(selector) {
-  var input = document.querySelector(selector);
+// Toggle password visibility
+function togglePasswordVisibility(inputId) {
+  const input = document.getElementById(inputId);
   if (input) {
-    input.select();
-    document.execCommand('copy');
-    alert('Copied to clipboard!');
+    input.type = input.type === 'password' ? 'text' : 'password';
   }
 }
 
-// Example: Debounced logging for callback_url and return_url fields
-function setupDebouncedLogging() {
-  var callbackInput = document.querySelector('[name="payment_method[preferred_callback_url]"]');
-  var returnInput = document.querySelector('[name="payment_method[preferred_return_url]"]');
-
-  if (callbackInput) {
-    callbackInput.addEventListener('input', debounce(function(e) {
-      console.log('Callback URL changed to:', e.target.value);
-      // Place any AJAX or validation logic here
-    }, 500));
+// Confirm test mode toggle
+function confirmTestModeToggle(checkbox) {
+  if (!checkbox.checked) {
+    if (!confirm('Are you sure you want to switch to LIVE mode? This will process real payments.')) {
+      checkbox.checked = true; // Keep test mode enabled
+      return false;
+    }
   }
-  if (returnInput) {
-    returnInput.addEventListener('input', debounce(function(e) {
-      console.log('Return URL changed to:', e.target.value);
-      // Place any AJAX or validation logic here
-    }, 500));
-  }
+  return true;
 }
 
-document.addEventListener('DOMContentLoaded', setupDebouncedLogging);
+// Initialize any necessary event listeners when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('iPay admin form initialized');
+});
 </script>

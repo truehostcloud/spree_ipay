@@ -9,20 +9,18 @@ module Spree
   class PaymentMethod::Ipay < ::Spree::PaymentMethod
     include HTTParty
 
-    # Core settings
+    # Core settings (in display order)
     preference :vendor_id, :string
     preference :hash_key, :string
     preference :test_mode, :boolean, default: true
-    preference :live_mode, :boolean, default: false
     preference :currency, :string, default: 'KES'
     preference :callback_url, :string, default: '/ipay/confirm'
     preference :return_url, :string, default: -> {
-                                                "#{Rails.application.routes.url_helpers.root_url.chomp('/')}/ipay/confirm"
-                                              }
+                                              "#{Rails.application.routes.url_helpers.root_url.chomp('/')}/ipay/confirm"
+                                            }
 
-    # Channel settings
+    # Payment channels (in display order)
     preference :mpesa, :boolean, default: true
-    preference :bonga, :boolean, default: false
     preference :airtel, :boolean, default: false
     preference :equity, :boolean, default: false
     preference :mobilebanking, :boolean, default: false
@@ -32,6 +30,22 @@ module Spree
     preference :vooma, :boolean, default: false
     preference :pesalink, :boolean, default: false
     preference :autopay, :boolean, default: false
+
+    # Ensure preferences are sorted in the desired display order
+    def self.preference_order
+      [
+        :vendor_id, :hash_key, :test_mode, :currency,
+        :callback_url, :return_url,
+        :mpesa, :airtel, :equity, :mobilebanking, :creditcard, :unionpay,
+        :mvisa, :vooma, :pesalink, :autopay
+      ]
+    end
+    
+    # Override preferences getter to maintain order
+    def self.preferences
+      @preferences ||= super.slice(*preference_order)
+    end
+
     def initialize(*args)
       super
       # Initialize with empty preferences - don't use environment variables
@@ -39,7 +53,6 @@ module Spree
 
       # Set default values if not already set
       self.preferred_test_mode = true if preferred_test_mode.nil?
-      self.preferred_live_mode = false if preferred_live_mode.nil?
     end
     preference :currency, :string, default: 'KES'
     preference :callback_url, :string, default: '/ipay/confirm'
@@ -87,34 +100,29 @@ module Spree
     end
 
     def process_payment(payment)
-      # First, authorize the payment
-      response = authorize(
-        payment.amount_in_cents,
-        payment.source,
-        originator: payment,
-        order_id: payment.order.number
+      # Create a payment source if one doesn't exist
+      if payment.source.nil?
+        payment.source = Spree::IpaySource.create!(
+          payment_method: self,
+          user: payment.order.user
+        )
+        payment.save!
+      end
+
+      # For iPay, we don't actually process the payment here
+      # We just mark it as pending and let the callback handle the rest
+      payment.started_processing!
+      
+      # Return a success response to allow the order to proceed
+      ActiveMerchant::Billing::Response.new(
+        true,
+        'Payment processing started',
+        {},
+        authorization: "ipay_#{payment.order.number}_#{Time.now.to_i}"
       )
-
-      return response unless response.success?
-
-      # If authorization is successful, capture the payment
-      capture_response = capture(
-        payment.amount_in_cents,
-        response.authorization,
-        originator: payment
-      )
-
-      return capture_response unless capture_response.success?
-
-      # Update payment with the captured response
-      payment.update!(
-        state: 'completed',
-        response_code: capture_response.authorization,
-        avs_response: capture_response.avs_result['code']
-      )
-
-      capture_response
     rescue StandardError => e
+      Rails.logger.error "iPay Payment Error: #{e.message}"
+      Rails.logger.error e.backtrace.join("\n")
       failure_response(e.message)
     end
 
@@ -690,21 +698,11 @@ module Spree
     end
 
     def test_mode?
-      # If both are set, prefer test mode
-      return true if preferred_test_mode && preferred_live_mode
-      # Default to test mode if neither is set
-      return true if preferred_test_mode.nil? && preferred_live_mode.nil?
-
-      # Otherwise use the preferred_test_mode value
-      !!preferred_test_mode
+      preferred_test_mode == true || preferred_test_mode == '1' || preferred_test_mode == 'true'
     end
 
     def api_endpoint
-      if test_mode?
-        'https://sandbox.ipayafrica.com/v3/ke'
-      else
-        'https://payments.ipayafrica.com/v3/ke'
-      end
+      preferred_test_mode ? 'https://sandbox.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'
     end
 
     def success_response(message = 'Success')
