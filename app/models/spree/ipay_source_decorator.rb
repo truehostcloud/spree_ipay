@@ -2,7 +2,7 @@
 
 module Spree
   module IpaySourceDecorator
-    KENYAN_PHONE_REGEX = /^254[17]\d{8}$/ # Matches Kenyan phone numbers in international format
+    KENYAN_PHONE_REGEX = /\A254[17]\d{8}\z/ # Matches Kenyan phone numbers in international format
     
     def self.prepended(base)
       base.belongs_to :payment_method, 
@@ -38,7 +38,7 @@ module Spree
         self.phone = "254#{phone[1..-1]}" if phone.start_with?('0')
       when 9
         # Handle numbers without leading zero (7XXXXXXXX) by adding country code
-        self.phone = "254#{phone}" if phone.match?(/^[7-9]\d{8}$/)
+        self.phone = "254#{phone}" if phone.match?(/\A[7-9]\d{8}\z/)
       end
       
       # Validate final format
