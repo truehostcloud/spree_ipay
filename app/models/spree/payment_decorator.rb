@@ -29,47 +29,22 @@ module Spree
       
       if source.is_a?(Spree::IpaySource) && source.persisted?
         Rails.logger.debug "OMKUU: Using existing iPay source: #{source.id}"
+      if phone.blank?
+        errors.add(:base, :phone_required)
         return
       end
       
-      # Get phone from params or existing source
-      phone = source_attributes.try(:[], :phone) || 
-              source_attributes.try(:[], 'phone') ||
-              (order.billing_address&.phone if order.billing_address.present?)
-
-      Rails.logger.debug "OMKUU: Phone number from source: #{phone}"
-
-      if phone.blank?
-        error_msg = 'Phone number is required for iPay payments'
-        Rails.logger.error "OMKUU ERROR: #{error_msg}"
-        errors.add(:base, error_msg)
-        return
-      end
-
-      # Create or find existing source
-      Rails.logger.debug "OMKUU: Finding or initializing iPay source for phone: #{phone}"
-      new_source = Spree::IpaySource.find_or_initialize_by(
-        payment_method_id: payment_method_id,
-        phone: phone
-      )
-
+      new_source = Spree::IpaySource.find_or_initialize_by(payment_method_id: payment_method_id, phone: phone)
+      
       if new_source.new_record?
-        Rails.logger.debug "OMKUU: Creating new iPay source"
         unless new_source.save
-          error_msg = "Could not save payment source: #{new_source.errors.full_messages.to_sentence}"
-          Rails.logger.error "OMKUU ERROR: #{error_msg}"
-          errors.add(:base, error_msg)
+          errors.add(:base, "Could not save payment source: #{new_source.errors.full_messages.to_sentence}")
           return
         end
-        Rails.logger.debug "OMKUU: Created new iPay source: #{new_source.id}"
-      else
-        Rails.logger.debug "OMKUU: Using existing iPay source: #{new_source.id}"
       end
-
-      # Associate the source with the payment
+      
       self.source = new_source
       self.payment_method_id = payment_method_id
-      Rails.logger.debug "OMKUU: Successfully associated payment with source"
     rescue => e
       Rails.logger.error "OMKUU ERROR in ensure_payment_source: #{e.message}"
       Rails.logger.error e.backtrace.join("\n")

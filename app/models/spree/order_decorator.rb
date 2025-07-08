@@ -2,6 +2,10 @@
 
 module Spree
   module OrderDecorator
+    def self.prepended(base)
+      base.has_many :ipay_sources, class_name: 'Spree::IpaySource', through: :payments, source: :source, source_type: 'Spree::IpaySource'
+    end
+
     def payment_required?
       return false if payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
       super
