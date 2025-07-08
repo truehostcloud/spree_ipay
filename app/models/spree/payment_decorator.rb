@@ -3,59 +3,77 @@
 module Spree
   module PaymentDecorator
     def self.prepended(base)
-      Rails.logger.debug "OMKUU: Loading iPay payment decorator from gem"
-      
       base.before_validation :ensure_payment_source, if: :ipay_payment?
       base.validates :source, presence: { message: 'must be present for iPay payments' }, if: :ipay_payment?
     end
     
     def ipay_payment?
-      is_ipay = payment_method&.is_a?(Spree::PaymentMethod::Ipay)
-      Rails.logger.debug "OMKUU: Checking if payment is iPay: #{is_ipay}"
-      is_ipay
+      payment_method&.is_a?(Spree::PaymentMethod::Ipay)
     end
     
     def source_required?
-      required = !(payment_method.respond_to?(:source_required?) && !payment_method.source_required?)
-      Rails.logger.debug "OMKUU: Source required for payment: #{required}"
-      required
+      !(payment_method.respond_to?(:source_required?) && !payment_method.source_required?)
     end
     
     private
     
     def ensure_payment_source
-      Rails.logger.debug "OMKUU: Ensuring payment source for iPay"
-      return unless ipay_payment?
+      return false unless ipay_payment?
       
+      # Use existing valid source if available
       if source.is_a?(Spree::IpaySource) && source.persisted?
-        Rails.logger.debug "OMKUU: Using existing iPay source: #{source.id}"
+        return source.valid?
+      end
+      
+      # Get phone from source or order billing address
+      phone = source&.phone.presence || order.bill_address&.phone.to_s.strip
+      
+      # Validate phone presence and format
       if phone.blank?
-        errors.add(:base, :phone_required)
-        return
+        errors.add(:base, 'Phone number is required for iPay payments')
+        return false
       end
       
-      new_source = Spree::IpaySource.find_or_initialize_by(payment_method_id: payment_method_id, phone: phone)
+      # Normalize phone number (remove non-digits)
+      phone = phone.gsub(/\D/, '')
       
-      if new_source.new_record?
-        unless new_source.save
-          errors.add(:base, "Could not save payment source: #{new_source.errors.full_messages.to_sentence}")
-          return
+      begin
+        # Find or initialize payment source
+        new_source = Spree::IpaySource.find_or_initialize_by(
+          payment_method_id: payment_method_id,
+          phone: phone
+        )
+        
+        # Set additional attributes if new record
+        if new_source.new_record?
+          new_source.attributes = {
+            user_id: order.user_id,
+            status: 'pending'
+          }
+          
+          unless new_source.save
+            errors.add(:base, "Invalid payment details: #{new_source.errors.full_messages.to_sentence}")
+            return false
+          end
         end
+        
+        # Associate the source with payment
+        self.source = new_source
+        self.payment_method_id = payment_method_id
+        true
+        
+      rescue ActiveRecord::RecordInvalid => e
+        errors.add(:base, "Could not process payment: #{e.record.errors.full_messages.to_sentence}")
+        false
+      rescue => e
+        errors.add(:base, 'An unexpected error occurred while processing your payment')
+        Rails.logger.error("Payment processing error: #{e.message}\n#{e.backtrace.join("\n")}")
+        false
       end
-      
-      self.source = new_source
-      self.payment_method_id = payment_method_id
-    rescue => e
-      Rails.logger.error "OMKUU ERROR in ensure_payment_source: #{e.message}"
-      Rails.logger.error e.backtrace.join("\n")
-      raise
     end
   end
 end
 
 if defined?(Spree::Payment)
   Spree::Payment.prepend(Spree::PaymentDecorator)
-  Rails.logger.debug "OMKUU: Successfully prepended PaymentDecorator"
-else
-  Rails.logger.error "OMKUU ERROR: Spree::Payment is not defined"
 end
