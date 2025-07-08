@@ -2,23 +2,13 @@
 
 module Spree
   module IpaySourceDecorator
-    KENYAN_PHONE_REGEX = /\A254[17]\d{8}\z/ # Matches Kenyan phone numbers in international format
-    
     def self.prepended(base)
-      base.belongs_to :payment_method, 
-                     class_name: 'Spree::PaymentMethod::Ipay', 
-                     optional: true
-                     
-      base.belongs_to :user, 
-                     class_name: Spree.user_class.to_s, 
-                     optional: true
+      Rails.logger.debug "OMKUU: Setting up iPay source decorator"
       
-      base.validates :phone, 
-                    presence: true,
-                    format: { 
-                      with: KENYAN_PHONE_REGEX, 
-                      message: 'must be a valid Kenyan phone number (e.g., 254712345678)' 
-                    }
+      base.belongs_to :payment_method, class_name: 'Spree::PaymentMethod::Ipay', optional: true
+      base.belongs_to :user, class_name: Spree.user_class.to_s, optional: true
+      
+      base.validates :phone, presence: true, format: { with: /\A\d{10,15}\z/, message: 'must be 10-15 digits' }
       
       base.before_validation :normalize_phone
     end
@@ -26,32 +16,37 @@ module Spree
     private
     
     def normalize_phone
+      Rails.logger.debug "OMKUU: Normalizing phone number: #{phone}"
       return if phone.blank?
       
-      # Remove any non-digit characters and trim whitespace
-      self.phone = phone.to_s.gsub(/\D/, '').strip
+      # Remove any non-digit characters
+      self.phone = phone.gsub(/\D/, '')
       
-      # Handle Kenyan phone numbers
-      case phone.length
-      when 10
-        # Convert local format (07XXXXXXXX) to international format (2547XXXXXXXX)
-        self.phone = "254#{phone[1..-1]}" if phone.start_with?('0')
-      when 9
-        # Handle numbers without leading zero (7XXXXXXXX) by adding country code
-        self.phone = "254#{phone}" if phone.match?(/\A[7-9]\d{8}\z/)
+      # Add country code if missing (assuming Kenya +254)
+      if phone.start_with?('0') && phone.length == 10
+        self.phone = "254" + phone[1..-1]
+        Rails.logger.debug "OMKUU: Converted local number to international format: #{self.phone}"
+      elsif phone.length == 9 && !phone.start_with?('0')
+        self.phone = "254" + phone
+        Rails.logger.debug "OMKUU: Added country code to number: #{self.phone}"
       end
       
       # Validate final format
-      unless phone.match?(KENYAN_PHONE_REGEX)
+      unless phone.match?(/\A254[17]\d{8}\z/)
+        Rails.logger.warn "OMKUU: Invalid phone number format: #{phone}"
         errors.add(:phone, 'must be a valid Kenyan phone number (e.g., 254712345678)')
       end
     rescue => e
-      errors.add(:phone, 'could not be processed')
-      Rails.logger.error("Phone normalization error: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
+      Rails.logger.error "OMKUU ERROR: Error normalizing phone number: #{e.message}"
+      Rails.logger.error e.backtrace.join("\n")
+      raise
     end
   end
 end
 
 if defined?(Spree::IpaySource)
   Spree::IpaySource.prepend Spree::IpaySourceDecorator
+  Rails.logger.debug "OMKUU: Successfully prepended IpaySourceDecorator"
+else
+  Rails.logger.error "OMKUU ERROR: Spree::IpaySource is not defined"
 end
