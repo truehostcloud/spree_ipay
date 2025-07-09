@@ -21,13 +21,29 @@ coverage = { exclude_patterns = ["**/*_spec.rb", "**/spec/**/*", "**/test/**/*"]
 
 [[analyzers]]
 name = "javascript"
-
 disabled = false
 
 [analyzers.meta]
 environment = [
-  "browser"
+  "browser",
+  "jquery"
 ]
+
+# Use project's ESLint configuration
+[analyzers.meta.eslint]
+  config = ".eslintrc.json"
+  ignore = [
+    "**/vendor/**",
+    "**/node_modules/**",
+    "**/public/**",
+    "**/tmp/**"
+  ]
+
+# Disable specific rules that are handled by our ESLint config
+[analyzers.meta.rules]
+  "no-var" = "off"  # Handled by ESLint
+  "strict" = "off"  # Handled by ESLint
+  "no-shadow" = "off"  # Handled by ESLint
 
 [[analyzers]]
 name = "ruby"
