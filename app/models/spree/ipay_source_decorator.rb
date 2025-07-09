@@ -18,13 +18,15 @@ module Spree
       return if phone.blank?
       
       # Remove any non-digit characters
-      self.phone = phone.gsub(/\D/, '')
-      
+      cleaned_phone = phone.gsub(/\D/, '')
+  
       # Add country code if missing (assuming Kenya +254)
-      if phone.start_with?('0') && phone.length == 10
-        self.phone = "254" + phone[1..-1]
-      elsif phone.length == 9 && !phone.start_with?('0')
-        self.phone = "254" + phone
+      if cleaned_phone.start_with?('0') && cleaned_phone.length == 10
+        self.phone = "254" + cleaned_phone[1..-1]
+      elsif cleaned_phone.length == 9 && !cleaned_phone.start_with?('0')
+        self.phone = "254" + cleaned_phone
+      else
+        self.phone = cleaned_phone
       end
     end
   end
