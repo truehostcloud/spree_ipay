@@ -171,16 +171,20 @@ This extension includes a full RSpec test suite. To run the tests:
 This extension includes JavaScript for both frontend and admin interfaces. We use ESLint to maintain code quality.
 
 ### Prerequisites
+
 - Node.js (v14 or later)
 - npm (v6 or later)
 
 ### Setup
+
 1. Install dependencies:
+
    ```bash
    npm install
    ```
 
 2. Run the linter:
+
    ```bash
    npx eslint app/assets/javascripts/
    ```
@@ -188,6 +192,7 @@ This extension includes JavaScript for both frontend and admin interfaces. We us
 3. (Optional) Add a pre-commit hook using Husky to run the linter before each commit.
 
 ### Linting Rules
+
 - Uses ESLint with recommended settings
 - Includes jQuery plugin for Spree compatibility
 - Custom rules for consistent code style
