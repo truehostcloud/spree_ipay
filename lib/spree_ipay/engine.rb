@@ -23,9 +23,19 @@ module SpreeIpay
       config.paths['app/views'] << 'app/views/spree'
     end
 
-    # Configure assets precompilation
+    # Configure assets
     initializer 'spree_ipay.assets' do |app|
-      app.config.assets.precompile += %w[spree/backend/ipay.js]
+      app.config.assets.precompile += %w[
+        spree/frontend/spree_ipay.js
+        spree/frontend/checkout/payment/ipay.js
+        spree/backend/spree_ipay.js
+        spree/frontend/spree_ipay.css
+        spree/backend/spree_ipay.css
+      ]
+      
+      # Add asset paths
+      app.config.assets.paths << root.join('app', 'assets', 'javascripts')
+      app.config.assets.paths << root.join('app', 'assets', 'stylesheets')
     end
 
     # Register the payment method
@@ -44,5 +54,8 @@ module SpreeIpay
         Rails.configuration.cache_classes ? require_dependency(c) : load(c)
       end
     end
+    
+    # Enable asset debugging in development
+    config.assets.debug = true if Rails.env.development?
   end
 end

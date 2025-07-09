@@ -1,0 +1,32 @@
+/* iPay Admin Styles */
+.ipay-settings {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+.ipay-settings .form-group {
+  margin-bottom: 15px;
+}
+
+.ipay-settings label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+
+.ipay-settings input[type="text"],
+.ipay-settings input[type="password"],
+.ipay-settings select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+}
+
+/* Hide settings by default, shown via JS when iPay is selected */
+.ipay-settings {
+  display: none;
+}
