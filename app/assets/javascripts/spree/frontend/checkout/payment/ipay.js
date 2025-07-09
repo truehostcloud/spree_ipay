@@ -94,8 +94,8 @@ Spree.ready(function ($) {
                 }
               });
             }
-          } catch (e) {
-            console.error("Error parsing error response:", e);
+          } catch (error) {
+            console.error("Error parsing error response:", error);
           }
 
           showFlash("error", errorMessage);
