@@ -2,7 +2,7 @@
 Spree.ready(function ($) {
   "use strict";
 
-  console.log("Spree iPay Admin integration loaded");
+  
 
   // Add any backend-specific JavaScript here
   // For example, you might want to add admin panel functionality

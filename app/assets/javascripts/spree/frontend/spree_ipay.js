@@ -4,7 +4,7 @@
 Spree.ready(function ($) {
   "use strict";
 
-  console.log("Spree iPay integration loaded");
+  
 
   // Initialize iPay payment method
   const initIpay = function () {
