@@ -2,8 +2,6 @@
 Spree.ready(function ($) {
   "use strict";
 
-  
-
   // Add any backend-specific JavaScript here
   // For example, you might want to add admin panel functionality
   // or payment method configuration options

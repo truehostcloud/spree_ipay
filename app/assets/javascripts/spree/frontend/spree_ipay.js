@@ -4,8 +4,6 @@
 Spree.ready(function ($) {
   "use strict";
 
-  
-
   // Initialize iPay payment method
   const initIpay = function () {
     const $ipayMethod = $("#payment_method_spree_ipay");
