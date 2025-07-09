@@ -1,0 +1,75 @@
+{
+  "env": {
+    "browser": true,
+    "es2021": true,
+    "jquery": true,
+    "node": true
+  },
+  "globals": {
+    "Spree": "readonly",
+    "$": "readonly",
+    "Turbolinks": "readonly"
+  },
+  "extends": [
+    "eslint:recommended",
+    "plugin:jquery/slim"
+  ],
+  "parserOptions": {
+    "ecmaVersion": 2021,
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "impliedStrict": true
+    }
+  },
+  "rules": {
+    // Turn off rules
+    "no-console": "off",
+    "no-undef": "off",
+    "no-unused-vars": "off",
+    "strict": "off", // JS-0118: Disable strict mode check
+    
+    // Variable declarations
+    "no-var": "error", // JS-0239: Force using let/const instead of var
+    "prefer-const": ["error", {
+      "destructuring": "any",
+      "ignoreReadBeforeAssign": false
+    }],
+    
+    // Function rules
+    "prefer-arrow-callback": ["error", {
+      "allowNamedFunctions": true,
+      "allowUnboundThis": true
+    }],
+    
+    // Shadowing
+    "no-shadow": ["error", {
+      "builtinGlobals": false,
+      "hoist": "functions",
+      "allow": ["resolve", "reject", "done", "next", "err", "error"]
+    }],
+    "no-param-reassign": ["error", {
+      "props": true,
+      "ignorePropertyModificationsFor": ["element", "el", "e", "event", "$el", "$event"]
+    }],
+    
+    // Common rules
+    "no-alert": "error",
+    "no-debugger": "error",
+    "semi": ["error", "always"],
+    "quotes": ["error", "single", { "avoidEscape": true }],
+    "indent": ["error", 2],
+    "comma-dangle": ["error", "never"],
+    "object-curly-spacing": ["error", "always"],
+    "array-bracket-spacing": ["error", "never"],
+    "prefer-template": "error",
+    "template-curly-spacing": ["error", "never"]
+  },
+  "overrides": [
+    {
+      "files": ["**/*.js"],
+      "rules": {
+        "strict": "off"
+      }
+    }
+  ]
+}

@@ -2,42 +2,38 @@ version = 1
 
 test_patterns = [
   "**/*_test.rb",
-  "  **/*_spec.rb",
-  "  **/spec/**",
-  "  **/test/**",
-  "  **/features/**",
-  "  **/fixtures/**",
-  "  **/dummy/**",
-  "  **/test/**/*",
-  "  **/spec/**/*",
-  "  .rspec",
-  "  .simplecov",
-  "  spec_helper.rb",
-  "  rails_helper.rb"
+  "**/*_spec.rb",
+  "**/spec/**",
+  "**/test/**",
+  "**/features/**",
+  "**/fixtures/**",
+  "**/dummy/**",
+  "**/test/**/*",
+  "**/spec/**/*",
+  ".rspec",
+  ".simplecov",
+  "spec_helper.rb",
+  "rails_helper.rb"
 ]
 
 # Ignore code coverage for test files
-coverage = { exclude_patterns = ["**/*_spec.rb", "**/spec/**/*", "**/test/**/*"] }
+[coverage]
+exclude_patterns = ["**/*_spec.rb", "**/spec/**/*", "**/test/**/*"]
 
 [[analyzers]]
 name = "javascript"
-
 disabled = false
 
 [analyzers.meta]
-environment = [
-  "browser"
-]
+environment = ["browser"]
 
 [[analyzers]]
 name = "ruby"
-
 disabled = false
 
-[analyzers.meta]
-  [analyzers.meta.rails]
-  enabled = true
-  version = "6.1"
+[analyzers.meta.rails]
+enabled = true
+version = "6.1"
 
 [[transformers]]
 name = "rubocop"
