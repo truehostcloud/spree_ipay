@@ -52,7 +52,7 @@ Spree.ready(($) => {
           "X-CSRF-Token": $('meta[name="csrf-token"]').attr("content"),
         },
       })
-        .done(function (response) {
+        .done((response) => {
           if (response.redirect) {
             // Redirect to payment gateway or next step
             window.location.href = response.redirect;
@@ -69,7 +69,7 @@ Spree.ready(($) => {
             $submitButton.prop("disabled", false).val(originalText);
           }
         })
-        .fail(function (xhr) {
+        .fail((xhr) => {
           let errorMessage =
             Spree.translables.payment_processing_failed ||
             "Payment processing failed";
