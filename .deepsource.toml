@@ -8,6 +8,8 @@ test_patterns = [
   "**/features/**",
   "**/fixtures/**",
   "**/dummy/**",
+  "**/test/**/*",
+  "**/spec/**/*",
   ".rspec",
   ".simplecov",
   "spec_helper.rb",
@@ -15,30 +17,20 @@ test_patterns = [
 ]
 
 # Ignore code coverage for test files
-coverage = { exclude_patterns = ["**/*_spec.rb", "**/spec/**/*", "**/test/**/*"] }
+[coverage]
+exclude_patterns = ["**/*_spec.rb", "**/spec/**/*", "**/test/**/*"]
 
 [[analyzers]]
 name = "javascript"
-enabled = true
+disabled = false
 
 [analyzers.meta]
-environment = ["browser", "jquery"]
-
-# Use project's ESLint configuration
-[analyzers.meta.eslint]
-config = ".eslintrc.json"
-
-# Disable specific rules that are handled by our ESLint config
-[analyzers.meta.rules]
-"no-var" = "off"  # Handled by ESLint
-"strict" = "off"  # Handled by ESLint
-"no-shadow" = "off"  # Handled by ESLint
+environment = ["browser"]
 
 [[analyzers]]
 name = "ruby"
-enabled = true
+disabled = false
 
-[analyzers.meta]
 [analyzers.meta.rails]
 enabled = true
 version = "6.1"
