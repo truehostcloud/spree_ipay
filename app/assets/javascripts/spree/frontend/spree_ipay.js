@@ -1,11 +1,11 @@
 //= require spree/frontend/checkout/payment/ipay
 
 // iPay payment integration for Spree
-Spree.ready(function ($) {
+Spree.ready(($) => {
   "use strict";
 
   // Initialize iPay payment method
-  const initIpay = function () {
+  const initIpay = () => {
     const $ipayMethod = $("#payment_method_spree_ipay");
 
     if ($ipayMethod.length) {
@@ -18,8 +18,9 @@ Spree.ready(function ($) {
       // Handle payment method change
       $(
         'input[type="radio"][name="order[payments_attributes][][payment_method_id]"]',
-      ).on("change", function () {
-        if ($(this).attr("id") === "payment_method_spree_ipay") {
+      ).on("change", (event) => {
+        const $target = $(event.target);
+        if ($target.attr("id") === "payment_method_spree_ipay") {
           $(".payment-sources").hide();
           $("#ipay-details").show();
         } else {

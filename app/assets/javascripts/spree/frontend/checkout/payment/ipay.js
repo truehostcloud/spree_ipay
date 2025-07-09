@@ -2,25 +2,25 @@
 Spree.routes = Spree.routes || {};
 Spree.routes.ipay_payments = Spree.pathFor("api/ipay/payments");
 
-Spree.ready(function ($) {
+Spree.ready(($) => {
   "use strict";
 
   // Show flash message
-  function showFlash(type, message) {
+  const showFlash = (type, message) => {
     const flashDiv = $(`<div class="alert alert-${type}">${message}</div>`);
     $(".progress-steps").before(flashDiv);
     flashDiv.slideDown();
 
     // Auto-hide after 5 seconds
     setTimeout(() => {
-      flashDiv.slideUp(400, function () {
-        $(this).remove();
+      flashDiv.slideUp(400, () => {
+        flashDiv.remove();
       });
     }, 5000);
-  }
+  };
 
   // Handle iPay payment form submission
-  $(".checkout_form_payment").on("submit", function (e) {
+  $(".checkout_form_payment").on("submit", (e) => {
     const $form = $(this);
     const $submitButton = $form.find(
       'input[type="submit"], button[type="submit"]',
@@ -81,7 +81,7 @@ Spree.ready(function ($) {
 
             // Handle form validation errors
             if (response.errors) {
-              $.each(response.errors, function (field, messages) {
+              $.each(response.errors, (field, messages) => {
                 const $field = $(`[name*="${field}"]`).first();
                 if ($field.length) {
                   const $errorDiv = $(
