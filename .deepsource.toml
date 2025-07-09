@@ -2,18 +2,16 @@ version = 1
 
 test_patterns = [
   "**/*_test.rb",
-  "  **/*_spec.rb",
-  "  **/spec/**",
-  "  **/test/**",
-  "  **/features/**",
-  "  **/fixtures/**",
-  "  **/dummy/**",
-  "  **/test/**/*",
-  "  **/spec/**/*",
-  "  .rspec",
-  "  .simplecov",
-  "  spec_helper.rb",
-  "  rails_helper.rb"
+  "**/*_spec.rb",
+  "**/spec/**",
+  "**/test/**",
+  "**/features/**",
+  "**/fixtures/**",
+  "**/dummy/**",
+  ".rspec",
+  ".simplecov",
+  "spec_helper.rb",
+  "rails_helper.rb"
 ]
 
 # Ignore code coverage for test files
@@ -21,39 +19,29 @@ coverage = { exclude_patterns = ["**/*_spec.rb", "**/spec/**/*", "**/test/**/*"]
 
 [[analyzers]]
 name = "javascript"
-disabled = false
+enabled = true
 
 [analyzers.meta]
-environment = [
-  "browser",
-  "jquery"
-]
+environment = ["browser", "jquery"]
 
 # Use project's ESLint configuration
 [analyzers.meta.eslint]
-  config = ".eslintrc.json"
-  ignore = [
-    "**/vendor/**",
-    "**/node_modules/**",
-    "**/public/**",
-    "**/tmp/**"
-  ]
+config = ".eslintrc.json"
 
 # Disable specific rules that are handled by our ESLint config
 [analyzers.meta.rules]
-  "no-var" = "off"  # Handled by ESLint
-  "strict" = "off"  # Handled by ESLint
-  "no-shadow" = "off"  # Handled by ESLint
+"no-var" = "off"  # Handled by ESLint
+"strict" = "off"  # Handled by ESLint
+"no-shadow" = "off"  # Handled by ESLint
 
 [[analyzers]]
 name = "ruby"
-
-disabled = false
+enabled = true
 
 [analyzers.meta]
-  [analyzers.meta.rails]
-  enabled = true
-  version = "6.1"
+[analyzers.meta.rails]
+enabled = true
+version = "6.1"
 
 [[transformers]]
 name = "rubocop"
