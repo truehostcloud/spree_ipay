@@ -1,0 +1,8 @@
+{
+  "name": "spree_ipay",
+  "private": true,
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "eslint-plugin-jquery": "^1.5.1"
+  }
+}
