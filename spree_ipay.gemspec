@@ -3,8 +3,8 @@
 Gem::Specification.new do |spec|
   spec.name          = 'spree_ipay'
   spec.version       = '1.0.1'
-  spec.authors       = ['Simon kiongozi']
-  spec.email         = ['your.email@example.com']
+  spec.authors       = ['Simon Njunge']
+  spec.email         = ['simon.k@cloudoon.com']
   spec.summary       = 'iPay payment integration for Spree Commerce'
   spec.description   = 'Spree extension that integrates iPay payment gateway with server-to-server communication'
   spec.homepage      = 'https://github.com/yourusername/spree_ipay'
