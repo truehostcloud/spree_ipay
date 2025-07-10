@@ -7,11 +7,18 @@ module SpreeIpay
     config.autoload_paths += %W[
       #{config.root}/lib
       #{config.root}/app/models
+      #{config.root}/app/serializers
     ]
 
     # Configure generators
     config.generators do |g|
       g.test_framework :rspec
+    end
+
+    # Load initializers
+    initializer 'spree_ipay.config', before: :load_config_initializers do |app|
+      # Load and inject the default configuration
+      require_relative '../../config/initializers/spree_ipay'
     end
 
     # Add views to load paths
