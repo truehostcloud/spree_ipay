@@ -68,13 +68,9 @@ module Spree
       Spree::Ipay::Logger.debug("State changing from #{transition.from} to #{transition.to} - Current state: #{state}, Order state: #{order&.state}", order&.number)
       
       if ipay_payment?
-        transaction = ElasticAPM.current_transaction
-        transaction.set_label(:order_id, order&.number)
-        transaction.set_label(:message, "iPay payment method: #{payment_method.inspect} - Source attributes: #{source&.attributes.inspect}")
-        transaction.set_custom_context(
-          payment_method: 'iPay',
-          environment: Rails.env,
-          version: Spree::Ipay::VERSION
+        Spree::Ipay::Logger.debug(
+          "iPay payment method: #{payment_method.inspect} - Source attributes: #{source&.attributes.inspect}",
+          order&.number
         )
       end
     end

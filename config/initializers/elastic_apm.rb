@@ -6,31 +6,45 @@ module Spree
   module Ipay
     class Logger
       def self.debug(message, order_id = nil)
-        transaction = ElasticAPM.current_transaction
-        transaction.set_label(:order_id, order_id) if order_id
-        transaction.set_label(:message, message)
-        transaction.set_label(:timestamp, Time.now)
+        return unless (transaction = ElasticAPM.current_transaction)
         
-        # Add custom metadata
-        transaction.set_custom_context(
+        # Add labels
+        transaction.set_label(:order_id, order_id) if order_id
+        
+        # Add custom context
+        context = {
+          message: message,
+          timestamp: Time.now.iso8601,
           payment_method: 'iPay',
           environment: Rails.env,
           version: Spree::Ipay::VERSION
-        )
+        }
+        
+        transaction.set_custom_context(context)
+      rescue => e
+        Rails.logger.error("Error in Ipay::Logger.debug: #{e.message}")
       end
 
       def self.error(exception, order_id = nil)
-        ElasticAPM.capture_exception(exception) do |report|
-          report.set_label(:order_id, order_id) if order_id
-          report.set_label(:timestamp, Time.now)
+        # Add context to current transaction if it exists
+        if (transaction = ElasticAPM.current_transaction)
+          transaction.set_label(:order_id, order_id) if order_id
           
-          # Add custom metadata
-          report.set_custom_context(
+          context = {
+            error_class: exception.class.name,
+            backtrace: exception.backtrace.take(5),
             payment_method: 'iPay',
             environment: Rails.env,
             version: Spree::Ipay::VERSION
-          )
+          }
+          
+          transaction.set_custom_context(context)
         end
+        
+        # Report the error
+        ElasticAPM.report(exception, handled: false)
+      rescue => e
+        Rails.logger.error("Error in Ipay::Logger.error: #{e.message}")
       end
     end
   end
