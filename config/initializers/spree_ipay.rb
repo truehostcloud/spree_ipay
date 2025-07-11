@@ -5,7 +5,7 @@ Rails.application.config.after_initialize do |app|
   # For Spree 4.10.1, we'll use the class_eval approach to add the serializer
   Spree::Api::V2::Platform::PaymentMethodSerializer.class_eval do
     def self.serializer_for(model, options = {})
-      if model.is_a?(Spree::PaymentMethod) && model.type == 'Spree::PaymentMethod::Ipay'
+      if model.is_a?(Spree::PaymentMethod::Ipay)
         Spree::Api::V2::Platform::IpaySourceSerializer
       else
         super
