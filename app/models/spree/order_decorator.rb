@@ -34,14 +34,21 @@ module Spree
     end
     
     def log_before_confirm
+      current_index = checkout_steps.index(state)
+      next_step = current_index ? checkout_steps[current_index + 1] : 'unknown'
+      
       Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Before confirm transition - State: #{state}")
       Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Checkout steps: #{checkout_steps.inspect}")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Next step index: #{checkout_steps.index(state) + 1}")
+      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Current step index: #{current_index}")
+      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Next step: #{next_step}")
     end
     
     def log_after_confirm
+      current_index = checkout_steps.index(state)
+      next_step = current_index ? checkout_steps[current_index + 1] : 'unknown'
+      
       Rails.logger.info("[IPAY_DEBUG][Order-#{number}] After confirm transition - State: #{state}")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Next step: #{checkout_steps[checkout_steps.index(state) + 1]}")
+      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Next step: #{next_step}")
       Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Payment state: #{payment_state}")
       payments.each do |payment|
         Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Payment #{payment.id} - State: #{payment.state}, Method: #{payment.payment_method&.type}")
@@ -49,10 +56,12 @@ module Spree
     end
     
     def log_complete_transition
+      current_index = checkout_steps.index(state)
+      
       Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Order completed!")
       Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Final state: #{state}, Payment state: #{payment_state}")
       Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Final checkout steps: #{checkout_steps.inspect}")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Current step index: #{checkout_steps.index(state)}")
+      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Current step index: #{current_index}")
       
       payments.each do |payment|
         Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Final payment #{payment.id} - State: #{payment.state}, " \

@@ -7,11 +7,18 @@ module Spree
       base.validates :source, presence: { message: 'must be present for iPay payments' }, if: :ipay_payment?
       
       # Log all state transitions
-      base.state_machine.before_transition(
-        from: :_,  # Use :_ to match any state
-        to: :_,    # Use :_ to match any state
-        do: :log_payment_state_change
-      )
+      states = base.state_machines[:state].states.map(&:name)
+      states.each do |from_state|
+        states.each do |to_state|
+          next if from_state == to_state  # Skip transitions to same state
+          
+          base.state_machine.before_transition(
+            from: from_state,
+            to: to_state,
+            do: :log_payment_state_change
+          )
+        end
+      end
       
       # Additional logging for specific states
       base.state_machine.after_transition(
@@ -114,8 +121,6 @@ module Spree
       Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Current amount: #{amount}, Captured amount: #{captured_amount}")
       Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Response code: #{response_code}, State: #{state}")
     end
-    
-    private
     
     def ensure_payment_source
       return unless ipay_payment?
