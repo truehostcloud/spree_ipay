@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |spec|
   spec.name          = 'spree_ipay'
-  spec.version       = '1.0.3'
+  spec.version       = '1.0.4'
   spec.authors       = ['Simon Njunge']
   spec.email         = ['simon.k@cloudoon.com']
   spec.summary       = 'iPay payment integration for Spree Commerce'

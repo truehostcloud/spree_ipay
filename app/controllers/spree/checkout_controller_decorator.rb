@@ -4,7 +4,20 @@ module Spree
   # Manages the payment flow during the checkout process.
   module CheckoutControllerDecorator
     def self.prepended(base)
+      base.before_action :log_checkout_state, only: [:update]
       base.before_action :handle_ipay_redirect, only: [:update]
+    end
+    
+    def log_checkout_state
+      return unless @order
+      
+      Rails.logger.info("[IPAY_DEBUG][Order-#{@order.number}] Checkout update - State: #{@order.state}, Step: #{params[:state]}")
+      Rails.logger.info("[IPAY_DEBUG][Order-#{@order.number}] Payment state: #{@order.payment_state}")
+      
+      if @order.payments.any?
+        payment_info = @order.payments.map { |p| "#{p.id}:#{p.state}:#{p.payment_method&.type}" }.join(', ')
+        Rails.logger.info("[IPAY_DEBUG][Order-#{@order.number}] Payments: #{payment_info}")
+      end
     end
 
     def handle_ipay_redirect

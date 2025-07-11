@@ -5,6 +5,21 @@ module Spree
     def self.prepended(base)
       base.before_validation :ensure_payment_source, if: :ipay_payment?
       base.validates :source, presence: { message: 'must be present for iPay payments' }, if: :ipay_payment?
+      
+      base.state_machine.before_transition(
+        to: :processing,
+        do: :log_payment_processing
+      )
+      
+      base.state_machine.after_transition(
+        to: :completed,
+        do: :log_payment_completed
+      )
+      
+      base.state_machine.after_transition(
+        to: :failed,
+        do: :log_payment_failed
+      )
     end
     
     def ipay_payment?
@@ -13,6 +28,18 @@ module Spree
     
     def source_required?
       !(payment_method.respond_to?(:source_required?) && !payment_method.source_required?)
+    end
+    
+    def log_payment_processing
+      Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Processing payment - State: #{state}")
+    end
+    
+    def log_payment_completed
+      Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Payment completed - State: #{state}, Response code: #{response_code}")
+    end
+    
+    def log_payment_failed
+      Rails.logger.error("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Payment failed - State: #{state}, Response code: #{response_code}")
     end
     
     private

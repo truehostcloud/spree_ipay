@@ -454,16 +454,28 @@ module Spree
     end
 
     def confirm(payment, phone: nil)
-      return success_response if payment.completed?
+      log_prefix = "[IPAY_DEBUG][Payment-#{payment.id}][Order-#{payment.order&.number}]"
+      Rails.logger.info("#{log_prefix} Starting confirm - State: #{payment.state}")
+      
+      if payment.completed?
+        Rails.logger.info("#{log_prefix} Already completed, skipping confirm")
+        return success_response 
+      end
 
       begin
+        Rails.logger.info("#{log_prefix} Initiating payment with phone: #{phone}")
         response = initiate_payment(payment, phone: phone)
+        Rails.logger.info("#{log_prefix} Initiate response: #{response.inspect}")
 
         if response['status'] == 'success'
+          Rails.logger.info("#{log_prefix} Payment initiated successfully - Transaction: #{response['data']['transaction_id']}")
+          
           payment.update!(
             response_code: response['data']['transaction_id'],
             avs_response: response['data']['checkout_url']
           )
+          
+          Rails.logger.info("#{log_prefix} Payment updated with transaction ID")
 
           ActiveMerchant::Billing::Response.new(
             true,
@@ -476,9 +488,13 @@ module Spree
             }
           )
         else
-          failure_response(response['message'] || 'Payment confirmation failed')
+          error_msg = response['message'] || 'Payment confirmation failed'
+          Rails.logger.error("#{log_prefix} Payment failed: #{error_msg}")
+          failure_response(error_msg)
         end
       rescue StandardError => e
+        Rails.logger.error("#{log_prefix} Exception during confirm: #{e.class} - #{e.message}")
+        Rails.logger.error("#{log_prefix} Backtrace: #{e.backtrace.first(5).join("\n")}")
         failure_response("Payment confirmation failed: #{e.message}")
       end
     end
