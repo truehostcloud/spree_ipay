@@ -3,6 +3,7 @@ PATH
   specs:
     spree_ipay (1.0.7)
       deface (~> 1.9.0)
+      elastic-apm (~> 4.8.0)
       httparty (~> 0.16.0)
       rails (~> 7.1.4)
       spree (>= 4.5.0, < 5.0.0)
