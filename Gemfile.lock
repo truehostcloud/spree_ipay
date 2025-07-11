@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    spree_ipay (1.0.0)
+    spree_ipay (1.0.2)
       deface (~> 1.9.0)
       httparty (~> 0.16.0)
       rails (~> 7.1.4)
