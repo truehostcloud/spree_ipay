@@ -54,7 +54,9 @@ module Spree
     
     def ipay_payment?
       is_ipay = payment_method&.is_a?(Spree::PaymentMethod::Ipay)
-      transaction = ElasticAPM.start_transaction(name: "IPAY_DEBUG", type: "debug")
+      transaction = ElasticAPM.start_transaction
+      transaction.name = "IPAY_DEBUG"
+      transaction.type = "debug"
       transaction.set_label(:order_id, order&.number)
       transaction.set_label(:message, "Checking if iPay payment: #{is_ipay}")
       transaction.set_label(:timestamp, Time.now)
@@ -69,7 +71,9 @@ module Spree
     
     def source_required?
       required = !(payment_method.respond_to?(:source_required?) && !payment_method.source_required?)
-      transaction = ElasticAPM.start_transaction(name: "IPAY_DEBUG", type: "debug")
+      transaction = ElasticAPM.start_transaction
+      transaction.name = "IPAY_DEBUG"
+      transaction.type = "debug"
       transaction.set_label(:order_id, order&.number)
       transaction.set_label(:message, "Source required: #{required}")
       transaction.set_label(:timestamp, Time.now)
@@ -83,7 +87,9 @@ module Spree
     end
     
     def log_payment_state_change(transition)
-      transaction = ElasticAPM.start_transaction(name: "IPAY_DEBUG", type: "debug")
+      transaction = ElasticAPM.start_transaction
+      transaction.name = "IPAY_DEBUG"
+      transaction.type = "debug"
       transaction.set_label(:order_id, order&.number)
       transaction.set_label(:message, "State changing from #{transition.from} to #{transition.to} - Current state: #{state}, Order state: #{order&.state}")
       transaction.set_label(:timestamp, Time.now)
@@ -95,7 +101,9 @@ module Spree
       transaction.end_transaction
       
       if ipay_payment?
-        transaction = ElasticAPM.start_transaction(name: "IPAY_DEBUG", type: "debug")
+        transaction = ElasticAPM.start_transaction
+        transaction.name = "IPAY_DEBUG"
+        transaction.type = "debug"
         transaction.set_label(:order_id, order&.number)
         transaction.set_label(:message, "iPay payment method: #{payment_method.inspect} - Source attributes: #{source&.attributes.inspect}")
         transaction.set_label(:timestamp, Time.now)
@@ -116,7 +124,9 @@ module Spree
       log_payment_state('processing')
       
       if ipay_payment? && order.confirmation_required?
-        transaction = ElasticAPM.start_transaction(name: "IPAY_DEBUG", type: "debug")
+        transaction = ElasticAPM.start_transaction
+        transaction.name = "IPAY_DEBUG"
+        transaction.type = "debug"
         transaction.set_label(:order_id, order.number)
         transaction.set_label(:message, "Order requires confirmation")
         transaction.set_label(:timestamp, Time.now)
@@ -137,7 +147,9 @@ module Spree
       log_payment_state('completed')
       
       if ipay_payment?
-        transaction = ElasticAPM.start_transaction(name: "IPAY_DEBUG", type: "debug")
+        transaction = ElasticAPM.start_transaction
+        transaction.name = "IPAY_DEBUG"
+        transaction.type = "debug"
         transaction.set_label(:order_id, order.number)
         transaction.set_label(:message, "iPay payment completed - Response code: #{response_code} - AVS response: #{avs_response}")
         transaction.set_label(:timestamp, Time.now)
