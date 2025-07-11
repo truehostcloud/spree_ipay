@@ -6,7 +6,7 @@ module Spree
   module Ipay
     class Logger
       def self.debug(message, order_id = nil)
-        transaction = ElasticAPM.start_transaction(name: "IPAY_DEBUG", type: "debug")
+        transaction = ElasticAPM.current_transaction
         transaction.set_label(:order_id, order_id) if order_id
         transaction.set_label(:message, message)
         transaction.set_label(:timestamp, Time.now)
@@ -17,7 +17,6 @@ module Spree
           environment: Rails.env,
           version: Spree::Ipay::VERSION
         )
-        transaction.end_transaction
       end
 
       def self.error(exception, order_id = nil)
