@@ -8,8 +8,8 @@ module Spree
       
       # Log all state transitions
       base.state_machine.before_transition(
-        from: any,
-        to: any,
+        from: :_,  # Use :_ to match any state
+        to: :_,    # Use :_ to match any state
         do: :log_payment_state_change
       )
       
