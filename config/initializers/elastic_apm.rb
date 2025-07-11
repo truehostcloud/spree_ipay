@@ -1,16 +1,4 @@
-# Configure Elastic APM
-ElasticAPM.config do |config|
-  config.service_name = 'spree_ipay_extension'
-  config.server_url = 'http://localhost:8200'
-  config.environment = Rails.env
-  config.secret_token = 'development_secret_token' if Rails.env.development?
-  config.api_request_time = 30
-  config.api_request_size = 1024 * 1024
-  config.log_level = :debug if Rails.env.development?
-  config.transaction_sample_rate = 1.0 if Rails.env.development?
-end
-
-# Initialize Elastic APM
+# Initialize Elastic APM with configuration from YAML
 ElasticAPM.start
 
 # Configure logging for iPay integration
