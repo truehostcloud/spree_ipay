@@ -54,56 +54,48 @@ module Spree
     
     def ipay_payment?
       is_ipay = payment_method&.is_a?(Spree::PaymentMethod::Ipay)
-      ElasticAPM.capture_message(
-        "Checking if iPay payment: #{is_ipay}",
-        level: 'debug',
-        context: {
-          order_id: order&.number,
-          payment_method: 'iPay',
-          environment: Rails.env,
-          version: Spree::Ipay::VERSION
-        }
+      transaction = ElasticAPM.current_transaction
+      transaction.set_label(:order_id, order&.number)
+      transaction.set_label(:message, "Checking if iPay payment: #{is_ipay}")
+      transaction.set_custom_context(
+        payment_method: 'iPay',
+        environment: Rails.env,
+        version: Spree::Ipay::VERSION
       )
       is_ipay
     end
     
     def source_required?
       required = !(payment_method.respond_to?(:source_required?) && !payment_method.source_required?)
-      ElasticAPM.capture_message(
-        "Source required: #{required}",
-        level: 'debug',
-        context: {
-          order_id: order&.number,
-          payment_method: 'iPay',
-          environment: Rails.env,
-          version: Spree::Ipay::VERSION
-        }
+      transaction = ElasticAPM.current_transaction
+      transaction.set_label(:order_id, order&.number)
+      transaction.set_label(:message, "Source required: #{required}")
+      transaction.set_custom_context(
+        payment_method: 'iPay',
+        environment: Rails.env,
+        version: Spree::Ipay::VERSION
       )
       required
     end
     
     def log_payment_state_change(transition)
-      ElasticAPM.capture_message(
-        "State changing from #{transition.from} to #{transition.to} - Current state: #{state}, Order state: #{order&.state}",
-        level: 'debug',
-        context: {
-          order_id: order&.number,
-          payment_method: 'iPay',
-          environment: Rails.env,
-          version: Spree::Ipay::VERSION
-        }
+      transaction = ElasticAPM.current_transaction
+      transaction.set_label(:order_id, order&.number)
+      transaction.set_label(:message, "State changing from #{transition.from} to #{transition.to} - Current state: #{state}, Order state: #{order&.state}")
+      transaction.set_custom_context(
+        payment_method: 'iPay',
+        environment: Rails.env,
+        version: Spree::Ipay::VERSION
       )
       
       if ipay_payment?
-        ElasticAPM.capture_message(
-          "iPay payment method: #{payment_method.inspect} - Source attributes: #{source&.attributes.inspect}",
-          level: 'debug',
-          context: {
-            order_id: order&.number,
-            payment_method: 'iPay',
-            environment: Rails.env,
-            version: Spree::Ipay::VERSION
-          }
+        transaction = ElasticAPM.current_transaction
+        transaction.set_label(:order_id, order&.number)
+        transaction.set_label(:message, "iPay payment method: #{payment_method.inspect} - Source attributes: #{source&.attributes.inspect}")
+        transaction.set_custom_context(
+          payment_method: 'iPay',
+          environment: Rails.env,
+          version: Spree::Ipay::VERSION
         )
       end
     end
@@ -116,15 +108,13 @@ module Spree
       log_payment_state('processing')
       
       if ipay_payment? && order.confirmation_required?
-        ElasticAPM.capture_message(
-          "Order requires confirmation",
-          level: 'debug',
-          context: {
-            order_id: order.number,
-            payment_method: 'iPay',
-            environment: Rails.env,
-            version: Spree::Ipay::VERSION
-          }
+        transaction = ElasticAPM.current_transaction
+        transaction.set_label(:order_id, order.number)
+        transaction.set_label(:message, "Order requires confirmation")
+        transaction.set_custom_context(
+          payment_method: 'iPay',
+          environment: Rails.env,
+          version: Spree::Ipay::VERSION
         )
       end
     end
@@ -137,15 +127,13 @@ module Spree
       log_payment_state('completed')
       
       if ipay_payment?
-        ElasticAPM.capture_message(
-          "iPay payment completed - Response code: #{response_code} - AVS response: #{avs_response}",
-          level: 'debug',
-          context: {
-            order_id: order.number,
-            payment_method: 'iPay',
-            environment: Rails.env,
-            version: Spree::Ipay::VERSION
-          }
+        transaction = ElasticAPM.current_transaction
+        transaction.set_label(:order_id, order.number)
+        transaction.set_label(:message, "iPay payment completed - Response code: #{response_code} - AVS response: #{avs_response}")
+        transaction.set_custom_context(
+          payment_method: 'iPay',
+          environment: Rails.env,
+          version: Spree::Ipay::VERSION
         )
       end
     end
