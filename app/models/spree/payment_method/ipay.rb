@@ -3,6 +3,10 @@
 require 'httparty'
 
 module Spree
+  module Ipay
+    VERSION = '1.0.7'
+  end
+
   # iPay payment method integration for Spree Commerce.
   # Handles payment processing, callbacks, and communication with the iPay payment gateway.
   # Supports various payment channels including M-PESA, Airtel Money, and credit cards.
