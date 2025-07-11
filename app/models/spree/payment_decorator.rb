@@ -57,11 +57,11 @@ module Spree
       transaction = ElasticAPM.current_transaction
       transaction.set_tag('order_id', order&.number)
       transaction.set_tag('message', "Checking if iPay payment: #{is_ipay}")
-      transaction.set_user(
+      transaction.set_custom_context({
         payment_method: 'iPay',
         environment: Rails.env,
         version: Spree::Ipay::VERSION
-      )
+      })
       is_ipay
     end
     
@@ -70,11 +70,11 @@ module Spree
       transaction = ElasticAPM.current_transaction
       transaction.set_tag('order_id', order&.number)
       transaction.set_tag('message', "Source required: #{required}")
-      transaction.set_user(
+      transaction.set_custom_context({
         payment_method: 'iPay',
         environment: Rails.env,
         version: Spree::Ipay::VERSION
-      )
+      })
       required
     end
     
@@ -82,11 +82,11 @@ module Spree
       transaction = ElasticAPM.current_transaction
       transaction.set_tag('order_id', order&.number)
       transaction.set_tag('message', "State changing from #{transition.from} to #{transition.to} - Current state: #{state}, Order state: #{order&.state}")
-      transaction.set_user(
+      transaction.set_custom_context({
         payment_method: 'iPay',
         environment: Rails.env,
         version: Spree::Ipay::VERSION
-      )
+      })
       
       if ipay_payment?
         transaction = ElasticAPM.current_transaction
@@ -111,11 +111,11 @@ module Spree
         transaction = ElasticAPM.current_transaction
         transaction.set_tag('order_id', order.number)
         transaction.set_tag('message', "Order requires confirmation")
-        transaction.set_user(
+        transaction.set_custom_context({
           payment_method: 'iPay',
           environment: Rails.env,
           version: Spree::Ipay::VERSION
-        )
+        })
       end
     end
     
@@ -130,11 +130,11 @@ module Spree
         transaction = ElasticAPM.current_transaction
         transaction.set_tag('order_id', order.number)
         transaction.set_tag('message', "iPay payment completed - Response code: #{response_code} - AVS response: #{avs_response}")
-        transaction.set_user(
+        transaction.set_custom_context({
           payment_method: 'iPay',
           environment: Rails.env,
           version: Spree::Ipay::VERSION
-        )
+        })
       end
     end
     
