@@ -54,23 +54,23 @@ module Spree
     
     def ipay_payment?
       is_ipay = payment_method&.is_a?(Spree::PaymentMethod::Ipay)
-      Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Checking if iPay payment: #{is_ipay}")
+      Spree::Ipay::Logger.debug("Checking if iPay payment: #{is_ipay}", order&.number)
       is_ipay
     end
     
     def source_required?
       required = !(payment_method.respond_to?(:source_required?) && !payment_method.source_required?)
-      Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Source required: #{required}")
+      Spree::Ipay::Logger.debug("Source required: #{required}", order&.number)
       required
     end
     
     def log_payment_state_change(transition)
-      Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] State changing from #{transition.from} to #{transition.to}")
-      Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Current state: #{state}, Order state: #{order&.state}")
+      Spree::Ipay::Logger.debug("State changing from #{transition.from} to #{transition.to}", order&.number)
+      Spree::Ipay::Logger.debug("Current state: #{state}, Order state: #{order&.state}", order&.number)
       
       if ipay_payment?
-        Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] iPay payment method: #{payment_method.inspect}")
-        Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Source attributes: #{source&.attributes.inspect}")
+        Spree::Ipay::Logger.debug("iPay payment method: #{payment_method.inspect}", order&.number)
+        Spree::Ipay::Logger.debug("Source attributes: #{source&.attributes.inspect}", order&.number)
       end
     end
     
@@ -82,7 +82,7 @@ module Spree
       log_payment_state('processing')
       
       if ipay_payment? && order.confirmation_required?
-        Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order.number}] Order requires confirmation")
+        Spree::Ipay::Logger.debug("Order requires confirmation", order.number)
       end
     end
     
@@ -94,9 +94,9 @@ module Spree
       log_payment_state('completed')
       
       if ipay_payment?
-        Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order.number}] iPay payment completed")
-        Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order.number}] Response code: #{response_code}")
-        Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order.number}] AVS response: #{avs_response}")
+        Spree::Ipay::Logger.debug("iPay payment completed", order.number)
+        Spree::Ipay::Logger.debug("Response code: #{response_code}", order.number)
+        Spree::Ipay::Logger.debug("AVS response: #{avs_response}", order.number)
       end
     end
     
@@ -104,9 +104,9 @@ module Spree
       log_payment_state('failed')
       
       if ipay_payment?
-        Rails.logger.error("[IPAY_DEBUG][Payment-#{id}][Order-#{order.number}] iPay payment failed")
-        Rails.logger.error("[IPAY_DEBUG][Payment-#{id}][Order-#{order.number}] Response code: #{response_code}")
-        Rails.logger.error("[IPAY_DEBUG][Payment-#{id}][Order-#{order.number}] AVS response: #{avs_response}")
+        Spree::Ipay::Logger.error("iPay payment failed", order.number)
+        Spree::Ipay::Logger.error("Response code: #{response_code}", order.number)
+        Spree::Ipay::Logger.error("AVS response: #{avs_response}", order.number)
       end
     end
     
@@ -117,9 +117,9 @@ module Spree
     private
     
     def log_payment_state(state_name)
-      Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Now in #{state_name} state")
-      Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Current amount: #{amount}, Captured amount: #{captured_amount}")
-      Rails.logger.info("[IPAY_DEBUG][Payment-#{id}][Order-#{order&.number}] Response code: #{response_code}, State: #{state}")
+      Spree::Ipay::Logger.debug("Now in #{state_name} state", order&.number)
+      Spree::Ipay::Logger.debug("Current amount: #{amount}, Captured amount: #{captured_amount}", order&.number)
+      Spree::Ipay::Logger.debug("Response code: #{response_code}, State: #{state}", order&.number)
     end
     
     def ensure_payment_source

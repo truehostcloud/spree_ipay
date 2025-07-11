@@ -1,0 +1,70 @@
+# Elastic APM configuration
+service_name: spree_ipay_extension
+environment: <%= Rails.env %>
+
+# Enable transaction and span collection
+transaction_sample_rate: 1.0
+
+# Enable error collection
+error_collect: true
+
+# Enable logging
+log_level: debug
+
+# Filter sensitive data from logs
+filter:
+  - "*.phone"
+  - "*.hash_key"
+  - "*.transaction_id"
+  - "*.transaction_reference"
+  - "*.transaction_amount"
+  - "*.transaction_timestamp"
+  - "*.metadata"
+
+# Development specific settings
+development:
+  server_url: http://localhost:8200
+  log_level: debug
+  transaction_sample_rate: 1.0
+  transaction:
+    sample_rate: 1.0
+    duration_threshold: 1000
+  error:
+    collect: true
+    ignore_exceptions:
+      - ActiveRecord::RecordNotFound
+      - ActionController::RoutingError
+      - ActiveRecord::RecordInvalid
+
+# Add custom tags for better context
+tag:
+  payment_method: ipay
+  integration_version: <%= Spree::Ipay::VERSION %>
+
+# Log transaction context
+transaction:
+  sample_rate: 1.0
+  duration_threshold: 1000
+  ignore_patterns:
+    - "^/assets/"
+    - "^/healthcheck"
+
+# Log error context
+error:
+  collect: true
+  ignore_exceptions:
+    - ActiveRecord::RecordNotFound
+    - ActionController::RoutingError
+    - ActiveRecord::RecordInvalid
+
+# Log performance metrics
+metrics:
+  collect: true
+  interval: 30
+
+# Log security events
+security:
+  collect: true
+  ignore_patterns:
+    - "^/healthcheck"
+    - "^/assets/"
