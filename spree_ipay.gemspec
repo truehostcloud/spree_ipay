@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |spec|
   spec.name          = 'spree_ipay'
-  spec.version       = '1.0.3'
+  spec.version       = '1.0.7'
   spec.authors       = ['Simon Njunge']
   spec.email         = ['simon.k@cloudoon.com']
   spec.summary       = 'iPay payment integration for Spree Commerce'
@@ -35,5 +35,8 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency 'pry', '~> 0.14.1'
   spec.add_development_dependency 'rspec-rails', '~> 6.0.0'
   spec.add_development_dependency 'sqlite3', '~> 1.4.0'
+  
+  # Monitoring and logging
+  spec.add_dependency 'elastic-apm', '~> 4.8.0'
 spec.metadata['rubygems_mfa_required'] = 'true'
 end

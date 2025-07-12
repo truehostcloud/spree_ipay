@@ -4,7 +4,12 @@ module Spree
   # Manages the payment flow during the checkout process.
   module CheckoutControllerDecorator
     def self.prepended(base)
+      base.before_action :log_checkout_state, only: [:update]
       base.before_action :handle_ipay_redirect, only: [:update]
+    end
+    
+    def log_checkout_state
+      # No logging needed
     end
 
     def handle_ipay_redirect

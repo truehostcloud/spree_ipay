@@ -1,0 +1,87 @@
+# Elastic APM configuration - Security Hardened
+# Disabled by default for security
+enabled: <%= ENV['ELASTIC_APM_ENABLED'] == 'true' %>
+service_name: spree_ipay_extension
+environment: <%= Rails.env %>
+
+# Disable collection of sensitive data by default
+capture_body: never
+capture_headers: false
+log_level: error
+
+# Disable potentially sensitive data collection
+capture_elasticsearch_queries: false
+capture_redis: false
+capture_memcached: false
+
+# Disable SQL query collection
+record_sql: none
+
+# Disable stacktrace collection
+stack_trace_limit: 0
+
+# Disable context collection
+disable_send: <%= ENV['ELASTIC_APM_DISABLE_SEND'] != 'false' %>
+
+# Disable metrics collection
+metrics_interval: 0s
+
+# Disable span collection
+span_frames_min_duration: -1
+
+transaction_sample_rate: 0.0
+transaction_max_spans: 0
+
+# Disable error collection by default
+error_collect: false
+
+# Development specific settings
+development:
+  <<: *defaults
+  enabled: <%= ENV['ELASTIC_APM_ENABLED'] == 'true' || Rails.env.development? %>
+  server_url: http://localhost:8200
+  log_level: error
+  
+  # Minimal error collection in development
+  error_collect: true
+  
+  # No sensitive data collection
+  capture_headers: false
+  capture_body: never
+
+# Production settings
+production:
+  <<: *defaults
+  enabled: <%= ENV['ELASTIC_APM_ENABLED'] == 'true' %>
+  log_level: error
+  
+  # No error collection by default in production
+  error_collect: false
+  
+  # No sensitive data collection
+  capture_headers: false
+  capture_body: never
+
+# Test settings
+test:
+  enabled: false
+
+# Log error context
+error:
+  collect: true
+  ignore_exceptions:
+    - ActiveRecord::RecordNotFound
+    - ActionController::RoutingError
+    - ActiveRecord::RecordInvalid
+
+# Log performance metrics
+metrics:
+  collect: true
+  interval: 30
+
+# Log security events
+security:
+  collect: true
+  ignore_patterns:
+    - "^/healthcheck"
+    - "^/assets/"

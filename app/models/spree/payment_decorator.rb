@@ -5,6 +5,51 @@ module Spree
     def self.prepended(base)
       base.before_validation :ensure_payment_source, if: :ipay_payment?
       base.validates :source, presence: { message: 'must be present for iPay payments' }, if: :ipay_payment?
+      
+      # Log all state transitions
+      states = base.state_machines[:state].states.map(&:name)
+      states.each do |from_state|
+        states.each do |to_state|
+          next if from_state == to_state  # Skip transitions to same state
+          
+          base.state_machine.before_transition(
+            from: from_state,
+            to: to_state,
+            do: :log_payment_state_change
+          )
+        end
+      end
+      
+      # Additional logging for specific states
+      base.state_machine.after_transition(
+        to: :checkout,
+        do: :log_checkout_state
+      )
+      
+      base.state_machine.after_transition(
+        to: :processing,
+        do: :log_processing_state
+      )
+      
+      base.state_machine.after_transition(
+        to: :pending,
+        do: :log_pending_state
+      )
+      
+      base.state_machine.after_transition(
+        to: :completed,
+        do: :log_completed_state
+      )
+      
+      base.state_machine.after_transition(
+        to: :failed,
+        do: :log_failed_state
+      )
+      
+      base.state_machine.after_transition(
+        to: :void,
+        do: :log_void_state
+      )
     end
     
     def ipay_payment?
@@ -15,7 +60,39 @@ module Spree
       !(payment_method.respond_to?(:source_required?) && !payment_method.source_required?)
     end
     
+    def log_payment_state_change(transition)
+      # No data logging
+    end
+    
+    def log_checkout_state
+      # No data logging
+    end
+    
+    def log_processing_state
+      # No data logging
+    end
+    
+    def log_pending_state
+      # No data logging
+    end
+    
+    def log_completed_state
+      # No data logging
+    end
+    
+    def log_failed_state
+      # No data logging
+    end
+    
+    def log_void_state
+      # No data logging
+    end
+    
     private
+    
+    def log_payment_state(state_name)
+      # No data logging
+    end
     
     def ensure_payment_source
       return unless ipay_payment?

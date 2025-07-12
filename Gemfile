@@ -19,6 +19,8 @@ group :development, :test do
   gem 'rubocop-rspec', '~> 2.25', require: false
 end
 
+gem 'elastic-apm', '~> 4.8.0'
+
 group :test do
   gem 'ffaker', '~> 2.23'
   gem 'pry-byebug', '~> 3.10', platform: :mri
