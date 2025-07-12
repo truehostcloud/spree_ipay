@@ -79,14 +79,9 @@ module Spree
       Spree::IpaySource
     end
 
-    def confirm(payment)
-      Rails.logger.debug "[IPAY_DEBUG] Confirming payment - Order: #{payment.order.number}, Payment: #{payment.id}, State: #{payment.state}"
-      
-      # This is called when the order is confirmed
-      # For iPay, we don't need to do anything here
-      # The actual payment processing happens in the callback
-      
-      Rails.logger.debug "[IPAY_DEBUG] Payment confirmed - State: #{payment.state}"
+    def source_required?
+      # We need to return true here to ensure a payment source is created
+      # This is required for Spree's payment processing flow
       true
     end
 
@@ -94,34 +89,12 @@ module Spree
       false
     end
 
-    def process!(payment)
-      if defined?(ElasticAPM)
-        ElasticAPM.set_label(:payment_processing, 'started')
-        ElasticAPM.set_custom_context(
-          payment_id: payment.id,
-          order_number: payment.order.number,
-          amount: payment.amount.to_f,
-          currency: payment.currency,
-          method: 'process!'
-        )
-      end
+    def can_void?(payment)
+      payment.pending? || payment.processing?
+    end
 
-      # This is called when the payment is first created
-      if payment.pending?
-        ElasticAPM.set_label(:payment_state, 'already_pending') if defined?(ElasticAPM)
-      else
-        ElasticAPM.report_message("Updating payment state to pending") if defined?(ElasticAPM)
-        payment.update_columns(state: 'pending')
-      end
-      
-      payment.reload
-      
-      if defined?(ElasticAPM)
-        ElasticAPM.set_label(:payment_state_after, payment.state)
-        ElasticAPM.set_label(:payment_processing, 'completed')
-      end
-      
-      true
+    def can_capture?(payment)
+      payment.pending? || payment.processing?
     end
 
     def supports?(source)
@@ -131,81 +104,27 @@ module Spree
     end
 
     def process_payment(payment)
-      # Set up APM context
-      if defined?(ElasticAPM)
-        ElasticAPM.set_label(:payment_flow, 'process_payment_started')
-        ElasticAPM.set_custom_context(
-          payment_id: payment.id,
-          order_number: payment.order.number,
-          amount: payment.amount.to_f,
-          currency: payment.currency,
-          method: 'process_payment'
-        )
-      end
-
       # Create a payment source if one doesn't exist
       if payment.source.nil?
-        ElasticAPM.report_message("Creating new payment source") if defined?(ElasticAPM)
         payment.source = Spree::IpaySource.create!(
           payment_method: self,
-          user_id: payment.order.user_id,
-          order_id: payment.order.id,
-          status: 'pending'
+          user: payment.order.user
         )
         payment.save!
-        
-        if defined?(ElasticAPM)
-          ElasticAPM.set_label(:payment_source_created, true)
-          ElasticAPM.set_custom_context(payment_source_id: payment.source.id)
-        end
-      else
-        ElasticAPM.set_label(:using_existing_source, true) if defined?(ElasticAPM)
       end
 
-      # Update payment source with amount
-      payment.source.update_columns(
-        amount: payment.amount.to_f,
-        currency: payment.currency,
-        status: 'pending'
+      # Mark payment as processing
+      payment.started_processing!
+      
+      # Return a success response
+      ActiveMerchant::Billing::Response.new(
+        true,
+        'Payment processing started',
+        {},
+        authorization: "ipay_#{payment.order.number}_#{Time.now.to_i}"
       )
-
-      begin
-        # Generate the payment URL
-        ElasticAPM.report_message("Generating payment URL") if defined?(ElasticAPM)
-        payment_url = generate_payment_url(payment)
-        
-        # Store the payment URL in the source
-        payment.source.update_columns(redirect_url: payment_url)
-
-        result = {
-          redirect_url: payment_url,
-          payment_id: payment.id,
-          order_number: payment.order.number
-        }
-        
-        if defined?(ElasticAPM)
-          ElasticAPM.set_label(:payment_flow, 'process_payment_completed')
-          ElasticAPM.set_custom_context(
-            has_redirect_url: payment_url.present?,
-            result_keys: result.keys
-          )
-        end
-        
-        result
-      rescue => e
-        if defined?(ElasticAPM)
-          ElasticAPM.set_label(:payment_error, true)
-          ElasticAPM.report_exception(e, 
-            context: { 
-              custom: { 
-                order_number: payment.order.number,
-                payment_id: payment.id 
-              } 
-            }
-          )
-        end
-        raise e
-      end
+    rescue StandardError => e
+      failure_response("Payment processing failed")
     end
 
     def authorize(amount, source, options = {})

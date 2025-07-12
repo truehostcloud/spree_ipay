@@ -61,58 +61,37 @@ module Spree
     end
     
     def log_payment_state_change(transition)
-      return unless defined?(ElasticAPM)
-      
-      ElasticAPM.set_label(:payment_state_change, true)
-      ElasticAPM.set_custom_context(
-        payment_id: id,
-        order_number: order&.number,
-        from_state: transition.from,
-        to_state: transition.to,
-        event: transition.event,
-        timestamp: Time.current.iso8601
-      )
-      ElasticAPM.report_message("Payment state changed: #{transition.from} → #{transition.to}")
+      # No data logging
     end
     
     def log_checkout_state
-      log_payment_state('checkout')
+      # No data logging
     end
     
     def log_processing_state
-      log_payment_state('processing')
+      # No data logging
     end
     
     def log_pending_state
-      log_payment_state('pending')
+      # No data logging
     end
     
     def log_completed_state
-      log_payment_state('completed')
+      # No data logging
     end
     
     def log_failed_state
-      log_payment_state('failed')
+      # No data logging
     end
     
     def log_void_state
-      log_payment_state('void')
+      # No data logging
     end
     
     private
     
     def log_payment_state(state_name)
-      return unless defined?(ElasticAPM)
-      
-      ElasticAPM.set_label(:payment_state, state_name)
-      ElasticAPM.set_custom_context(
-        payment_id: id,
-        order_number: order&.number,
-        amount: amount.to_f,
-        currency: currency,
-        payment_method: payment_method&.type
-      )
-      ElasticAPM.report_message("Payment entered #{state_name} state")
+      # No data logging
     end
     
     def ensure_payment_source
