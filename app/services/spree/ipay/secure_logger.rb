@@ -25,7 +25,7 @@ module Spree
             timestamp: Time.now.iso8601,
             payment_method: 'iPay',
             environment: Rails.env,
-            version: Spree::Ipay::VERSION
+            version: Spree::Ipay::VERSION,
             **safe_context
           )
         rescue => e

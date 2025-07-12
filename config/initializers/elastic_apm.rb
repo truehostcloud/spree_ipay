@@ -1,3 +1,6 @@
+# Require the secure logger first
+require_relative '../../../app/services/spree/ipay/secure_logger'
+
 # Configure Elastic APM with security in mind
 ElasticAPM.start(
   # Security settings
@@ -41,15 +44,12 @@ module Spree
     # @deprecated Use Spree::Ipay::SecureLogger instead
     class Logger
       def self.debug(message, order_id = nil, **context)
-        SecureLogger.debug(message, order_id, **context)
+        ::Spree::Ipay::SecureLogger.debug(message, order_id, **context)
       end
 
       def self.error(exception, order_id = nil, **context)
-        SecureLogger.error(exception, order_id, **context)
+        ::Spree::Ipay::SecureLogger.error(exception, order_id, **context)
       end
     end
-    
-    # Alias for backward compatibility
-    SecureLogger = ::Spree::Ipay::SecureLogger unless defined?(::Spree::Ipay::SecureLogger)
   end
 end
