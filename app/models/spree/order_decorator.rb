@@ -23,6 +23,7 @@ module Spree
       ipay_payment = payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
       result = ipay_payment ? false : super
       Spree::Ipay::Logger.debug("payment_required? called. iPay payment: #{ipay_payment}, returning: #{result}", number)
+      Spree::Ipay::Logger.debug("Test log: iPay logging is working!", number)
       result
     end
 
