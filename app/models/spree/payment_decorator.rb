@@ -131,9 +131,8 @@ module Spree
     def ensure_payment_source
       return unless ipay_payment?
       
-      if source.is_a?(Spree::IpaySource) && source.persisted?
-        return
-      end
+      # Skip if we already have a valid source
+      return if source.is_a?(Spree::IpaySource) && source.persisted?
       
       # Get phone from params or existing source
       phone = source_attributes.try(:[], :phone) || 
@@ -146,9 +145,6 @@ module Spree
         return
       end
 
-      # Mask phone number for logging
-      masked_phone = phone.gsub(/(?<=\A\d{3}).*(?=\d{3}\z)/, '*****')
-      
       begin
         # Create or find existing source
         new_source = Spree::IpaySource.find_or_initialize_by(
@@ -160,22 +156,23 @@ module Spree
           Spree::Ipay::Logger.error(
             "Failed to save payment source: #{new_source.errors.full_messages.to_sentence}",
             order&.number,
-            { masked_phone: masked_phone }
+            { phone: phone.gsub(/(?<=\A\d{3}).*(?=\d{3}\z)/, '*****') }
           )
           errors.add(:base, 'Could not process payment source. Please try again.')
           return
         end
+        
+        # Associate the source with the payment
+        self.source = new_source
+        
       rescue => e
         Spree::Ipay::Logger.error(
           "Error in ensure_payment_source: #{e.class.name}",
           order&.number,
-          { error: e.message, masked_phone: masked_phone }
+          { error: e.message }
         )
         errors.add(:base, 'An error occurred while processing your payment. Please try again.')
         return
-        # Associate the source with the payment
-        self.source = new_source
-        self.payment_method_id = payment_method_id
       end
     end
   end
