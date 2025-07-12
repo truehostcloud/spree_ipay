@@ -53,115 +53,73 @@ module Spree
     end
     
     def ipay_payment?
-      is_ipay = payment_method&.is_a?(Spree::PaymentMethod::Ipay)
-      Spree::Ipay::SecureLogger.debug("Checking if iPay payment", order&.number, is_ipay: is_ipay)
-      is_ipay
+      payment_method&.is_a?(Spree::PaymentMethod::Ipay)
     end
     
     def source_required?
-      required = !(payment_method.respond_to?(:source_required?) && !payment_method.source_required?)
-      Spree::Ipay::SecureLogger.debug("Source required check", order&.number, source_required: required)
-      required
+      !(payment_method.respond_to?(:source_required?) && !payment_method.source_required?)
     end
     
     def log_payment_state_change(transition)
-      Spree::Ipay::SecureLogger.debug(
-        "Payment state transition",
-        order&.number,
-        from_state: transition.from,
-        to_state: transition.to,
-        current_state: state,
-        order_state: order&.state
-      )
-      
-      if ipay_payment?
-        Spree::Ipay::SecureLogger.debug(
-          "iPay payment method details",
-          order&.number,
-          payment_method_type: payment_method&.class&.name,
-          payment_method_id: payment_method&.id
-        )
-      end
+      # No data logging
     end
     
     def log_checkout_state
-      log_payment_state('checkout')
+      # No data logging
     end
     
     def log_processing_state
-      log_payment_state('processing')
-      
-      if ipay_payment? && order.confirmation_required?
-        Spree::Ipay::Logger.debug("Order requires confirmation", order.number)
-      end
+      # No data logging
     end
     
     def log_pending_state
-      log_payment_state('pending')
+      # No data logging
     end
     
     def log_completed_state
-      log_payment_state('completed')
-      
-      if ipay_payment?
-        Spree::Ipay::SecureLogger.debug(
-          "iPay payment completed",
-          order.number,
-          response_code_available: response_code.present?,
-          avs_response_available: avs_response.present?
-        )
-      end
+      # No data logging
     end
     
     def log_failed_state
-      log_payment_state('failed')
-      
-      if ipay_payment? && response_code.present?
-        Spree::Ipay::SecureLogger.debug(
-          "iPay payment failed",
-          order.number,
-          response_code_available: true
-        )
-      end
+      # No data logging
     end
     
     def log_void_state
-      log_payment_state('void')
+      # No data logging
     end
     
     private
     
     def log_payment_state(state_name)
-      Spree::Ipay::SecureLogger.debug("Now in #{state_name} state", order&.number)
-      Spree::Ipay::SecureLogger.debug("Current amount: #{amount}, Captured amount: #{captured_amount}", order&.number)
-      Spree::Ipay::SecureLogger.debug("State: #{state}", order&.number)
+      # No data logging
     end
     
     def ensure_payment_source
       return unless ipay_payment?
-      return if source.present? && source.is_a?(Spree::IpaySource)
       
-      Spree::Ipay::SecureLogger.debug("Ensuring iPay payment source", order.number)
-      
-      # Create a new source if one doesn't exist
-      self.source ||= Spree::IpaySource.new
-      
-      # Set default values if needed
-      if source.new_record?
-        source.payment_method = payment_method
-        source.user = order.user if order.respond_to?(:user)
-        
-        # Try to get phone from order billing address if available
-        if order.bill_address.present? && order.bill_address.phone.present?
-          source.phone = order.bill_address.phone
-        end
-        
-        source.save!
-        Spree::Ipay::SecureLogger.debug("Created new iPay source", order.number, source_id: source.id)
+      if source.is_a?(Spree::IpaySource) && source.persisted?
+        return
       end
-    rescue StandardError => e
-      Spree::Ipay::SecureLogger.error(e, order.number, error_class: e.class.name)
-      raise e
+      
+      # Get phone from params or existing source
+      phone = source_attributes.try(:[], :phone) || 
+              source_attributes.try(:[], 'phone') ||
+              (order.billing_address&.phone if order.billing_address.present?)
+
+      if phone.blank?
+        errors.add(:base, 'Phone number is required for iPay payments')
+        return
+      end
+
+      # Create or find existing source
+      new_source = Spree::IpaySource.find_or_initialize_by(
+        payment_method_id: payment_method_id,
+        phone: phone
+      )
+
+      if new_source.new_record? && !new_source.save
+        errors.add(:base, "Could not save payment source: #{new_source.errors.full_messages.to_sentence}")
+        return
       end
 
       # Associate the source with the payment

@@ -155,12 +155,8 @@ module Spree
                           .to_a
       
       # Return the most recent payment if found
-      return ipay_payments.first if ipay_payments.any?
-      
-      # No iPay payments found
-      nil
+      ipay_payments.first if ipay_payments.any?
     rescue => e
-      Spree::Ipay::Logger.error(StandardError.new("Error finding payment for order #{order.id}: #{e.message}"), order.number)
       nil
     end
     
@@ -182,8 +178,7 @@ module Spree
         payment.update_columns(updates)
       end
     rescue => e
-      Spree::Ipay::Logger.error(StandardError.new("Error updating payment details: #{e.message}"), order.number)
-      # Don't fail the entire callback if we can't update payment details
+      # Silently handle errors without logging
     end
     
     def process_payment_status(payment, order, transaction_data)
@@ -221,7 +216,6 @@ module Spree
           }
           return
         rescue => e
-          Spree::Ipay::Logger.error(StandardError.new("Error completing payment: #{e.message}"), order.number)
           render json: { 
             status: 0, 
             id: transaction_data[:transaction_id], 

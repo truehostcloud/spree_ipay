@@ -9,15 +9,7 @@ module Spree
     end
     
     def log_checkout_state
-      return unless @order
-      
-      Spree::Ipay::Logger.debug("Checkout update - State: #{@order.state}, Step: #{params[:state]}", @order.number)
-      Spree::Ipay::Logger.debug("Payment state: #{@order.payment_state}", @order.number)
-      
-      if @order.payments.any?
-        payment_info = @order.payments.map { |p| "#{p.id}:#{p.state}:#{p.payment_method&.type}" }.join(', ')
-        Spree::Ipay::Logger.debug("Payments: #{payment_info}", @order.number)
-      end
+      # No logging needed
     end
 
     def handle_ipay_redirect
