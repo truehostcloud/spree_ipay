@@ -126,8 +126,8 @@ module Spree
       )
     rescue StandardError => e
       Spree::Ipay::Logger.error(e, order&.number)
-      # Log sanitized error message without backtrace in Rails logger
-      Rails.logger.error "iPay Payment Error: #{e.message}"
+      # Log sanitized error message without backtrace in our custom logger
+      Spree::Ipay::Logger.error(StandardError.new("iPay Payment Error: #{e.message}"), payment.order.number)
       failure_response(e.message)
     end
 

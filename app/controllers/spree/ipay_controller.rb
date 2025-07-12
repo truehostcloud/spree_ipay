@@ -160,7 +160,7 @@ module Spree
       # No iPay payments found
       nil
     rescue => e
-      Rails.logger.error("Error finding payment for order #{order.id}: #{e.message}")
+      Spree::Ipay::Logger.error(StandardError.new("Error finding payment for order #{order.id}: #{e.message}"), order.number)
       nil
     end
     
@@ -182,7 +182,7 @@ module Spree
         payment.update_columns(updates)
       end
     rescue => e
-      Rails.logger.error("Error updating payment details: #{e.message}")
+      Spree::Ipay::Logger.error(StandardError.new("Error updating payment details: #{e.message}"), order.number)
       # Don't fail the entire callback if we can't update payment details
     end
     
@@ -221,7 +221,7 @@ module Spree
           }
           return
         rescue => e
-          Rails.logger.error("Error completing payment: #{e.message}")
+          Spree::Ipay::Logger.error(StandardError.new("Error completing payment: #{e.message}"), order.number)
           render json: { 
             status: 0, 
             id: transaction_data[:transaction_id], 

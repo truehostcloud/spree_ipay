@@ -22,14 +22,14 @@ module Spree
     def payment_required?
       ipay_payment = payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
       result = ipay_payment ? false : super
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] payment_required? called. iPay payment: #{ipay_payment}, returning: #{result}")
+      Spree::Ipay::Logger.debug("payment_required? called. iPay payment: #{ipay_payment}, returning: #{result}", number)
       result
     end
 
     def confirmation_required?
       ipay_payment = payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
       result = ipay_payment || super
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] confirmation_required? called. iPay payment: #{ipay_payment}, returning: #{result}")
+      Spree::Ipay::Logger.debug("confirmation_required? called. iPay payment: #{ipay_payment}, returning: #{result}", number)
       result
     end
     
@@ -37,35 +37,34 @@ module Spree
       current_index = checkout_steps.index(state)
       next_step = current_index ? checkout_steps[current_index + 1] : 'unknown'
       
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Before confirm transition - State: #{state}")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Checkout steps: #{checkout_steps.inspect}")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Current step index: #{current_index}")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Next step: #{next_step}")
+      Spree::Ipay::Logger.debug("Before confirm transition - State: #{state}", number)
+      Spree::Ipay::Logger.debug("Checkout steps: #{checkout_steps.inspect}", number)
+      Spree::Ipay::Logger.debug("Current step index: #{current_index}", number)
+      Spree::Ipay::Logger.debug("Next step: #{next_step}", number)
     end
     
     def log_after_confirm
       current_index = checkout_steps.index(state)
       next_step = current_index ? checkout_steps[current_index + 1] : 'unknown'
       
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] After confirm transition - State: #{state}")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Next step: #{next_step}")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Payment state: #{payment_state}")
+      Spree::Ipay::Logger.debug("After confirm transition - State: #{state}", number)
+      Spree::Ipay::Logger.debug("Payment state: #{payment_state}", number)
       payments.each do |payment|
-        Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Payment #{payment.id} - State: #{payment.state}, Method: #{payment.payment_method&.type}")
+        Spree::Ipay::Logger.debug("Payment #{payment.id} - State: #{payment.state}, Method: #{payment.payment_method&.type}", number)
       end
     end
     
     def log_complete_transition
       current_index = checkout_steps.index(state)
       
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Order completed!")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Final state: #{state}, Payment state: #{payment_state}")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Final checkout steps: #{checkout_steps.inspect}")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Current step index: #{current_index}")
+      Spree::Ipay::Logger.debug("Order completed!", number)
+      Spree::Ipay::Logger.debug("Final state: #{state}, Payment state: #{payment_state}", number)
+      Spree::Ipay::Logger.debug("Final checkout steps: #{checkout_steps.inspect}", number)
+      Spree::Ipay::Logger.debug("Current step index: #{current_index}", number)
       
       payments.each do |payment|
-        Rails.logger.info("[IPAY_DEBUG][Order-#{number}] Final payment #{payment.id} - State: #{payment.state}, " \
-                         "Method: #{payment.payment_method&.type}, Amount: #{payment.amount}")
+        Spree::Ipay::Logger.debug("[IPAY_DEBUG][Order-#{number}] Final payment #{payment.id} - State: #{payment.state}, " \
+                         "Method: #{payment.payment_method&.type}, Amount: #{payment.amount}", number)
       end
     end
   end

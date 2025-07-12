@@ -11,12 +11,12 @@ module Spree
     def log_checkout_state
       return unless @order
       
-      Rails.logger.info("[IPAY_DEBUG][Order-#{@order.number}] Checkout update - State: #{@order.state}, Step: #{params[:state]}")
-      Rails.logger.info("[IPAY_DEBUG][Order-#{@order.number}] Payment state: #{@order.payment_state}")
+      Spree::Ipay::Logger.debug("Checkout update - State: #{@order.state}, Step: #{params[:state]}", @order.number)
+      Spree::Ipay::Logger.debug("Payment state: #{@order.payment_state}", @order.number)
       
       if @order.payments.any?
         payment_info = @order.payments.map { |p| "#{p.id}:#{p.state}:#{p.payment_method&.type}" }.join(', ')
-        Rails.logger.info("[IPAY_DEBUG][Order-#{@order.number}] Payments: #{payment_info}")
+        Spree::Ipay::Logger.debug("Payments: #{payment_info}", @order.number)
       end
     end
 

@@ -22,7 +22,7 @@ module Spree
         
         transaction.set_custom_context(context)
       rescue => e
-        Rails.logger.error("Error in Ipay::Logger.debug: #{e.message}")
+# Fallback logging removed since we're handling errors differently
       end
 
       def self.error(exception, order_id = nil)
@@ -44,7 +44,7 @@ module Spree
         # Report the error
         ElasticAPM.report(exception, handled: false)
       rescue => e
-        Rails.logger.error("Error in Ipay::Logger.error: #{e.message}")
+# Fallback logging removed since we're handling errors differently
       end
     end
   end
