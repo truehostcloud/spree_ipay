@@ -4,7 +4,7 @@ require 'httparty'
 
 module Spree
   module Ipay
-    VERSION = '1.0.7'
+    VERSION = '1.0.8'
   end
 
   # iPay payment method integration for Spree Commerce.
