@@ -116,10 +116,9 @@ module Spree
     private
     
     def log_payment_state(state_name)
-      masked_number = order&.number&.gsub(/(?<=\A.{3})(.*)(?=.{3}\z)/, '****')
-      Spree::Ipay::Logger.debug("Payment state changed to: #{state_name}", order&.number)
-      Spree::Ipay::Logger.debug("Payment amounts - Current: [FILTERED], Captured: [FILTERED]", order&.number)
-      Spree::Ipay::Logger.debug("Payment status - Code: [FILTERED], State: #{state}", order&.number)
+      Spree::Ipay::Logger.debug("Now in #{state_name} state", order&.number)
+      Spree::Ipay::Logger.debug("Current amount: #{amount}, Captured amount: #{captured_amount}", order&.number)
+      Spree::Ipay::Logger.debug("Response code: #{response_code}, State: #{state}", order&.number)
     end
     
     def ensure_payment_source
@@ -135,42 +134,24 @@ module Spree
               (order.billing_address&.phone if order.billing_address.present?)
 
       if phone.blank?
-        Spree::Ipay::Logger.error("Missing phone number for iPay payment", order&.number)
         errors.add(:base, 'Phone number is required for iPay payments')
         return
       end
 
-      # Mask phone number for logging
-      masked_phone = phone.gsub(/(?<=\A\d{3}).*(?=\d{3}\z)/, '*****')
-      
-      begin
-        # Create or find existing source
-        new_source = Spree::IpaySource.find_or_initialize_by(
-          payment_method_id: payment_method_id,
-          phone: phone
-        )
+      # Create or find existing source
+      new_source = Spree::IpaySource.find_or_initialize_by(
+        payment_method_id: payment_method_id,
+        phone: phone
+      )
 
-        if new_source.new_record? && !new_source.save
-          Spree::Ipay::Logger.error(
-            "Failed to save payment source: #{new_source.errors.full_messages.to_sentence}",
-            order&.number,
-            { masked_phone: masked_phone }
-          )
-          errors.add(:base, 'Could not process payment source. Please try again.')
-          return
-        end
-      rescue => e
-        Spree::Ipay::Logger.error(
-          "Error in ensure_payment_source: #{e.class.name}",
-          order&.number,
-          { error: e.message, masked_phone: masked_phone }
-        )
-        errors.add(:base, 'An error occurred while processing your payment. Please try again.')
+      if new_source.new_record? && !new_source.save
+        errors.add(:base, "Could not save payment source: #{new_source.errors.full_messages.to_sentence}")
         return
-        # Associate the source with the payment
-        self.source = new_source
-        self.payment_method_id = payment_method_id
       end
+
+      # Associate the source with the payment
+      self.source = new_source
+      self.payment_method_id = payment_method_id
     end
   end
 end
