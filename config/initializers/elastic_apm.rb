@@ -1,7 +1,11 @@
-# Require the secure logger first
-require_relative '../../../app/services/spree/ipay/secure_logger'
-
 # Configure Elastic APM with security in mind
+Rails.logger.debug 'Loading ElasticAPM initializer...'
+
+# The SecureLogger is loaded in a separate initializer to ensure proper loading order
+unless defined?(Spree::Ipay::SecureLogger)
+  raise 'Spree::Ipay::SecureLogger is not defined. Please check the secure_logger.rb initializer.'
+end
+
 ElasticAPM.start(
   # Security settings
   filter_parameters: [
