@@ -69,7 +69,7 @@ module Spree
       
       if ipay_payment?
         Spree::Ipay::Logger.debug(
-          "iPay payment method: #{payment_method.inspect} - Source attributes: #{source&.attributes.inspect}",
+          "iPay payment method: #{payment_method&.class&.name} (id: #{payment_method&.id})",
           order&.number
         )
       end
@@ -95,7 +95,7 @@ module Spree
       log_payment_state('completed')
       
       if ipay_payment?
-        Spree::Ipay::Logger.debug("iPay payment completed - Response code: #{response_code} - AVS response: #{avs_response}", order.number)
+        Spree::Ipay::Logger.debug("iPay payment completed - Response code: [REDACTED] - AVS response: [REDACTED]", order.number)
       end
     end
     

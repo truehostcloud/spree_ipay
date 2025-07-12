@@ -223,7 +223,7 @@ module Spree
       # Process iPay payment
 
       # Log payment processing start
-      Spree::Ipay::Logger.debug("Starting iPay payment processing for order #{payment.order.number}", payment.order.number)
+      Spree::Ipay::Logger.debug("Starting iPay payment processing for order #{payment.order&.number}", payment.order&.number)
 
       # Validate required parameters
       unless phone.present? && payment.present? && payment.order.present? && amount.present?
@@ -268,7 +268,7 @@ module Spree
         return failure_response("Payment configuration error")
       end
 
-      # Log successful credential validation
+      # Log successful credential validation (redacting sensitive info)
       Spree::Ipay::Logger.debug("iPay credentials validated successfully", payment.order.number)
 
       # Update payment amount if needed
@@ -284,8 +284,8 @@ module Spree
       # Transition payment to processing state
       payment.started_processing! if payment.respond_to?(:started_processing!)
 
-      # Log successful payment processing start
-      Spree::Ipay::Logger.debug("Payment processing started successfully", payment.order.number)
+      # Log successful payment processing start (redacting sensitive info)
+      Spree::Ipay::Logger.debug("Payment processing started for order #{payment.order.number}", payment.order.number)
       success_response('Payment processing started')
     rescue StandardError => e
       # Log error using Spree::Ipay::Logger instead of payment log entries
@@ -472,12 +472,25 @@ module Spree
       end
 
       begin
-        Spree::Ipay::Logger.debug("Initiating payment with phone: #{phone}", payment.order.number)
+        # Log redacted phone number (last 4 digits only)
+        phone_display = phone.to_s.gsub(/\d(?=\d{4})/, 'X')
+        Spree::Ipay::Logger.debug("Initiating payment with phone: #{phone_display}", payment.order.number)
+        
         response = initiate_payment(payment, phone: phone)
-        Spree::Ipay::Logger.debug("Initiate response: #{response.inspect}", payment.order.number)
+        
+        # Redact sensitive info from response before logging
+        if response.is_a?(Hash)
+          redacted_response = response.dup
+          %w[transaction_id checkout_url].each do |key|
+            redacted_response['data'][key] = '[REDACTED]' if redacted_response.dig('data', key).present?
+          end
+          Spree::Ipay::Logger.debug("Initiate response: #{redacted_response.inspect}", payment.order.number)
+        else
+          Spree::Ipay::Logger.debug("Received non-hash response from initiate_payment", payment.order.number)
+        end
 
         if response['status'] == 'success'
-          Spree::Ipay::Logger.debug("Payment initiated successfully - Transaction: #{response['data']['transaction_id']}", payment.order.number)
+          Spree::Ipay::Logger.debug("Payment initiated successfully - Transaction ID: [REDACTED]", payment.order.number)
           
           payment.update!(
             response_code: response['data']['transaction_id'],
