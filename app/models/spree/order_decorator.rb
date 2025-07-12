@@ -21,24 +21,72 @@ module Spree
 
     def payment_required?
       ipay_payment = payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
-      ipay_payment ? false : super
+      result = ipay_payment ? false : super
+      
+      if defined?(ElasticAPM)
+        ElasticAPM.set_label(:ipay_payment_required, result)
+        ElasticAPM.set_custom_context(
+          order_number: number,
+          has_ipay_payment: ipay_payment,
+          method: 'payment_required?'
+        )
+      end
+      
+      result
     end
 
     def confirmation_required?
       ipay_payment = payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
-      ipay_payment || super
+      result = ipay_payment || super
+      
+      if defined?(ElasticAPM)
+        ElasticAPM.set_label(:ipay_confirmation_required, result)
+        ElasticAPM.set_custom_context(
+          order_number: number,
+          has_ipay_payment: ipay_payment,
+          method: 'confirmation_required?'
+        )
+      end
+      
+      result
     end
     
     def log_before_confirm
-      # No logging needed
+      if defined?(ElasticAPM)
+        ElasticAPM.set_label(:checkout_step, 'before_confirm')
+        ElasticAPM.set_custom_context(
+          order_number: number,
+          state: state,
+          payment_state: payment_state,
+          payment_count: payments.count
+        )
+        ElasticAPM.report_message("Before confirm - Order: #{number}")
+      end
     end
     
     def log_after_confirm
-      # No logging needed
+      if defined?(ElasticAPM)
+        ElasticAPM.set_label(:checkout_step, 'after_confirm')
+        ElasticAPM.set_custom_context(
+          order_number: number,
+          state: state,
+          payment_state: payment_state
+        )
+        ElasticAPM.report_message("After confirm - Order: #{number}")
+      end
     end
     
     def log_complete_transition
-      # No logging needed
+      if defined?(ElasticAPM)
+        ElasticAPM.set_label(:checkout_step, 'complete')
+        ElasticAPM.set_custom_context(
+          order_number: number,
+          state: state,
+          payment_state: payment_state,
+          payment_states: payments.map(&:state).join(',')
+        )
+        ElasticAPM.report_message("Order completed - Order: #{number}")
+      end
     end
   end
 end
