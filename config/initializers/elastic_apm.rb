@@ -1,50 +1,35 @@
 # Initialize Elastic APM with configuration from YAML
-ElasticAPM.start
+ElasticAPM.start if defined?(ElasticAPM)
 
-# Configure logging for iPay integration
+# Configure minimal logging for iPay integration
 module Spree
   module Ipay
     class Logger
-      def self.debug(message, order_id = nil)
-        return unless (transaction = ElasticAPM.current_transaction)
-        
-        # Add labels
-        transaction.set_label(:order_id, order_id) if order_id
-        
-        # Add custom context
-        context = {
-          message: message,
-          timestamp: Time.now.iso8601,
-          payment_method: 'iPay',
-          environment: Rails.env,
-          version: Spree::Ipay::VERSION
-        }
-        
-        transaction.set_custom_context(context)
-      rescue => e
-# Fallback logging removed since we're handling errors differently
+      def self.debug(_message, _order_id = nil)
+        # No-op to prevent any data from being logged
       end
 
-      def self.error(exception, order_id = nil)
-        # Add context to current transaction if it exists
-        if (transaction = ElasticAPM.current_transaction)
-          transaction.set_label(:order_id, order_id) if order_id
-          
-          context = {
-            error_class: exception.class.name,
-            backtrace: exception.backtrace.take(5),
-            payment_method: 'iPay',
-            environment: Rails.env,
-            version: Spree::Ipay::VERSION
-          }
-          
-          transaction.set_custom_context(context)
-        end
+      def self.error(exception, _order_id = nil)
+        # Only report the error class and a generic message without sensitive data
+        return unless defined?(ElasticAPM)
         
-        # Report the error
-        ElasticAPM.report(exception, handled: false)
+        # Create a sanitized exception with minimal information
+        safe_exception = StandardError.new("Payment processing error")
+        safe_exception.set_backtrace([])
+        
+        # Report the sanitized error
+        ElasticAPM.report(safe_exception, handled: true) do |report|
+          # Set a generic error type without exposing actual error details
+          report.override_context(
+            custom: {
+              error_type: exception.class.name,
+              environment: Rails.env,
+              timestamp: Time.now.iso8601
+            }
+          )
+        end
       rescue => e
-# Fallback logging removed since we're handling errors differently
+        # No fallback logging to prevent data leakage
       end
     end
   end
