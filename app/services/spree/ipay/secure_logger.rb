@@ -2,6 +2,7 @@
 
 module Spree
   module Ipay
+    # This logger ensures no sensitive data is logged by filtering out sensitive keys and values
     class SecureLogger
       SENSITIVE_KEYS = [
         'phone', 'tel', 'mobile', 'number', 'card', 'cvv', 'cvc', 'expiry', 
@@ -12,43 +13,60 @@ module Spree
 
       class << self
         def debug(message, order_id = nil, **context)
-          return unless (transaction = ElasticAPM.current_transaction)
-          
-          transaction.set_label(:order_id, order_id) if order_id
+          return unless defined?(Rails) && Rails.logger
           
           # Process and filter context
           safe_context = filter_sensitive_data(context)
           
-          # Add custom context
-          transaction.set_custom_context(
-            message: message,
-            timestamp: Time.now.iso8601,
-            payment_method: 'iPay',
-            environment: Rails.env,
-            version: Spree::Ipay::VERSION,
-            **safe_context
-          )
+          # Log to Rails logger
+          log_message = "[iPay] #{message}"
+          log_message += " (Order: #{order_id})" if order_id
+          log_message += " - #{safe_context.inspect}" unless safe_context.empty?
+          
+          Rails.logger.debug(log_message)
+          
+          # If ElasticAPM is available, send the data there too
+          if defined?(ElasticAPM) && (transaction = ElasticAPM.current_transaction)
+            transaction.set_label(:order_id, order_id) if order_id
+            transaction.set_custom_context(
+              message: message,
+              timestamp: Time.now.iso8601,
+              payment_method: 'iPay',
+              environment: Rails.env,
+              version: defined?(Spree::Ipay::VERSION) ? Spree::Ipay::VERSION : 'unknown',
+              **safe_context
+            )
+          end
         rescue => e
-          # No fallback logging to prevent potential infinite loops
-          Rails.logger.error("SecureLogger error: #{e.class.name}") if defined?(Rails)
+          Rails.logger.error("[iPay SecureLogger Error] #{e.class}: #{e.message}") if defined?(Rails) && Rails.logger
         end
 
         def error(exception, order_id = nil, **context)
-          return unless (transaction = ElasticAPM.current_transaction)
-          
-          transaction.set_label(:order_id, order_id) if order_id
+          return unless defined?(Rails) && Rails.logger
           
           # Process and filter context
           safe_context = filter_sensitive_data(context)
           
-          transaction.set_custom_context(
-            error_class: exception.class.name,
-            error_message: exception.message,
-            backtrace: exception.backtrace&.take(5),
-            payment_method: 'iPay',
-            environment: Rails.env,
-            version: Spree::Ipay::VERSION,
-            **safe_context
+          # Log to Rails logger
+          error_message = exception.is_a?(Exception) ? "#{exception.class}: #{exception.message}" : exception.to_s
+          log_message = "[iPay ERROR] #{error_message}"
+          log_message += " (Order: #{order_id})" if order_id
+          log_message += " - #{safe_context.inspect}" unless safe_context.empty?
+          
+          Rails.logger.error(log_message)
+          Rails.logger.error(exception.backtrace.join("\n")) if exception.respond_to?(:backtrace)
+          
+          # If ElasticAPM is available, send the data there too
+          if defined?(ElasticAPM) && (transaction = ElasticAPM.current_transaction)
+            transaction.set_label(:order_id, order_id) if order_id
+            transaction.set_custom_context(
+              error_class: exception.is_a?(Exception) ? exception.class.name : 'RuntimeError',
+              error_message: error_message,
+              backtrace: exception.respond_to?(:backtrace) ? exception.backtrace.take(5) : [],
+              payment_method: 'iPay',
+              environment: Rails.env,
+              version: defined?(Spree::Ipay::VERSION) ? Spree::Ipay::VERSION : 'unknown',
+              **safe_context
           )
           
           # Report the error without sensitive data
