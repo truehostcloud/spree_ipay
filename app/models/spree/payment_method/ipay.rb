@@ -45,6 +45,38 @@ module Spree
       ]
     end
     
+    # Add caching for payment configuration
+    def payment_config
+      Rails.cache.fetch("ipay_config_#{id}", expires_in: 1.hour) do
+        {
+          vendor_id: preferred_vendor_id,
+          hash_key: preferred_hash_key,
+          test_mode: preferred_test_mode,
+          currency: preferred_currency,
+          callback_url: preferred_callback_url,
+          return_url: preferred_return_url,
+          channels: {
+            mpesa: preferred_mpesa,
+            airtel: preferred_airtel,
+            equity: preferred_equity,
+            mobilebanking: preferred_mobilebanking,
+            creditcard: preferred_creditcard,
+            unionpay: preferred_unionpay,
+            mvisa: preferred_mvisa,
+            vooma: preferred_vooma,
+            pesalink: preferred_pesalink,
+            autopay: preferred_autopay
+          }
+        }
+      end
+    end
+
+    # Clear cache when preferences change
+    def preferences=(prefs)
+      super
+      Rails.cache.delete("ipay_config_#{id}")
+    end
+
     # Override preferences getter to maintain order
     def self.preferences
       @preferences ||= super.slice(*preference_order)

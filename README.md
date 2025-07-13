@@ -11,6 +11,10 @@ This gem integrates the iPay payment gateway with your Spree Commerce store, ena
 - Handles iPay callback and payment state transitions
 - Minimal database footprint: only creates payment method and source tables
 - Easy installation and migration
+- Comprehensive JSON API support
+- Mobile money and card payment support
+- Enhanced error handling and logging
+- Payment status polling for real-time updates
 
 ---
 
@@ -46,6 +50,49 @@ This gem integrates the iPay payment gateway with your Spree Commerce store, ena
    ```
 
 ---
+
+## API Endpoints
+
+### Check Payment Status
+```
+GET /api/v1/ipay/status?order_id=:order_number
+```
+
+Response:
+```json
+{
+  "status": "success",
+  "payment": {
+    "id": 1,
+    "state": "completed",
+    "amount": "100.0",
+    "payment_method_id": 1
+  },
+  "order": {
+    "number": "R123456789",
+    "state": "complete",
+    "total": "100.0"
+  }
+}
+```
+
+### Payment Callback
+```
+POST /api/v1/ipay/callback
+```
+
+Expected Parameters:
+```json
+{
+  "id": "12345",
+  "ivm": "INV123",
+  "qwh": "query_with_hash",
+  "afd": "amount_from_database",
+  "poi": "payment_options_used",
+  "uyt": "unique_your_transaction",
+  "ifd": "invoice_from_database"
+}
+```
 
 ## Configuration
 
