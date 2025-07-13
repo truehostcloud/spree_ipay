@@ -88,7 +88,7 @@ Spree.ready(($) => {
     }
 
     e.preventDefault();
-    
+
     // Update button state and show loading
     $submitButton
       .prop("disabled", true)
@@ -205,7 +205,7 @@ Spree.ready(($) => {
         $loadingIndicator.remove();
         $loading.remove();
       });
-    
+
     return false; // Prevent default form submission
   });
 
