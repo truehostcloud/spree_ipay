@@ -88,8 +88,7 @@ Spree.ready(($) => {
     }
 
     e.preventDefault();
-    return false; // Explicitly return false for the iPay case
-
+    
     // Update button state and show loading
     $submitButton
       .prop("disabled", true)
@@ -206,6 +205,8 @@ Spree.ready(($) => {
         $loadingIndicator.remove();
         $loading.remove();
       });
+    
+    return false; // Prevent default form submission
   });
 
   // Initialize payment method visibility
