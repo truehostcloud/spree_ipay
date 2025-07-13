@@ -19,37 +19,52 @@ module Spree
     end
 
     def handle_ipay_redirect
-      # Get phone number and store in session during payment state
-      if params[:state] == "payment"
-        phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
-        session[:ipay_phone_number] = phone if phone.present?
-      end
-
-      # Generate form and redirect during confirm state
-      if params[:state] == "confirm" && @order.payments.last&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
-        payment = @order.payments.last
-        ipay_method = payment.payment_method
-        phone = session[:ipay_phone_number] || @order.bill_address.phone
-
-        respond_to do |format|
-          format.html do
-            # Generate and render the iPay form immediately
-            render html: generate_ipay_form_html(payment, phone, ipay_method).html_safe, layout: 'spree/layouts/checkout'
-          end
-          format.json do
-            render json: {
-              status: 'success',
-              next_step: 'confirm',
-              form_html: generate_ipay_form_html(payment, phone, ipay_method)
-            }
-          end
-        end
-        return false # Prevent further processing
-      end
-    rescue StandardError => e
+      # Skip if not in the confirm state or not an iPay payment
+      return unless params[:state] == "confirm" && @order.payments.last&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
+      
+      payment = @order.payments.last
+      ipay_method = payment.payment_method
+      phone = session[:ipay_phone_number] || @order.bill_address&.phone || '0700000000'
+      
+      # Skip if we've already redirected to iPay
+      return if request.referer&.include?('payments.ipayafrica.com')
+      
       respond_to do |format|
         format.html do
-          redirect_to checkout_state_path(:payment), error: "Payment processing failed: #{e.message}"
+          # If this is a POST request, it means we're coming from the payment step
+          if request.post?
+            # Store the order in the session in case we need to redirect back
+            session[:order_id] = @order.id
+            
+            # Render the iPay form with auto-submit
+            render html: generate_ipay_form_html(payment, phone, ipay_method).html_safe, 
+                   layout: 'spree/layouts/checkout',
+                   status: :ok
+          else
+            # If it's a GET request, redirect to the payment step first
+            redirect_to checkout_state_path(:payment) and return
+          end
+        end
+        format.json do
+          render json: {
+            status: 'success',
+            next_step: 'confirm',
+            form_html: generate_ipay_form_html(payment, phone, ipay_method)
+          }, status: :ok
+        end
+      end
+      
+      # Prevent further processing
+      throw :abort
+      
+    rescue StandardError => e
+      Rails.logger.error "iPay redirect error: #{e.message}\n#{e.backtrace.join("\n")}"
+      
+      respond_to do |format|
+        format.html do
+          redirect_to checkout_state_path(:payment), 
+                    error: "Payment processing failed: #{e.message}",
+                    status: :see_other
         end
         format.json do
           render json: {
@@ -160,13 +175,29 @@ module Spree
     rescue StandardError => e
       raise "Error generating payment form: #{e.message}"
     end
-    # Override update action to handle JSON responses
+    # Override update action to handle JSON responses and iPay payment flow
     def update
+      # Handle iPay payment method selection
+      if params[:state] == 'payment' && params[:order] && params[:order][:payments_attributes]
+        payment_method = Spree::PaymentMethod.find(params[:order][:payments_attributes].first[:payment_method_id])
+        if payment_method.is_a?(Spree::PaymentMethod::Ipay)
+          # Store phone number in session for iPay
+          phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
+          session[:ipay_phone_number] = phone if phone.present?
+        end
+      end
+
       if @order.update_from_params(params, permitted_checkout_attributes, request.headers.env)
         respond_to do |format|
           format.html do
             if @order.next
-              redirect_to checkout_state_path(@order.state)
+              # If next state is confirm and payment method is iPay, handle specially
+              if @order.state == 'confirm' && @order.payments.last&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
+                # Let the before_action handle the iPay redirect
+                redirect_to checkout_state_path(@order.state) and return
+              else
+                redirect_to checkout_state_path(@order.state)
+              end
             else
               redirect_to checkout_state_path(@order.state)
             end
@@ -174,7 +205,6 @@ module Spree
           
           format.json do
             if @order.next
-              # Get the next state after the transition
               next_state = @order.state
               
               # Prepare response data
@@ -205,6 +235,12 @@ module Spree
                   payment_method_id: payment.payment_method_id,
                   payment_method_type: payment.payment_method&.type
                 }
+                
+                # If it's iPay, add the form HTML to the response
+                if payment.payment_method.is_a?(Spree::PaymentMethod::Ipay)
+                  phone = session[:ipay_phone_number] || @order.bill_address&.phone
+                  response_data[:form_html] = generate_ipay_form_html(payment, phone, payment.payment_method)
+                end
               end
               
               render json: response_data
