@@ -163,19 +163,48 @@ module Spree
         respond_to do |format|
           format.html do
             if @order.next
-              # Let Spree handle the state transition callbacks
               redirect_to checkout_state_path(@order.state)
             else
               redirect_to checkout_state_path(@order.state)
             end
           end
+          
           format.json do
             if @order.next
-              render json: {
+              # Get the next state after the transition
+              next_state = @order.state
+              
+              # Prepare response data
+              response_data = {
                 status: 'success',
-                next_step: @order.state,
-                order_number: @order.number
+                next_step: next_state,
+                order: {
+                  number: @order.number,
+                  state: @order.state,
+                  total: @order.total.to_f,
+                  payment_state: @order.payment_state,
+                  shipment_state: @order.shipment_state
+                },
+                payment_required: @order.payment_required?,
+                checkout_steps: @order.checkout_steps,
+                current_step: next_state,
+                next_step_url: next_step_url_for(@order, next_state)
               }
+              
+              # Add payment info if in payment state
+              if next_state == 'payment' && @order.payments.any?
+                payment = @order.payments.last
+                response_data[:payment] = {
+                  id: payment.id,
+                  number: payment.number,
+                  state: payment.state,
+                  amount: payment.amount.to_f,
+                  payment_method_id: payment.payment_method_id,
+                  payment_method_type: payment.payment_method&.type
+                }
+              end
+              
+              render json: response_data
             else
               render json: {
                 status: 'error',
@@ -192,10 +221,30 @@ module Spree
             render json: {
               status: 'error',
               errors: @order.errors.messages,
-              message: @order.errors.full_messages.to_sentence
+              message: @order.errors.full_messages.to_sentence,
+              validation_errors: @order.errors.full_messages
             }, status: :unprocessable_entity
           end
         end
+      end
+    end
+    
+    private
+    
+    def next_step_url_for(order, next_step)
+      return unless next_step
+      
+      case next_step
+      when 'address'
+        checkout_state_path('address')
+      when 'delivery'
+        checkout_state_path('delivery')
+      when 'payment'
+        checkout_state_path('payment')
+      when 'confirm'
+        checkout_state_path('confirm')
+      when 'complete'
+        order_path(order, order_token: order.guest_token)
       end
     end
   end
