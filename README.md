@@ -54,11 +54,13 @@ This gem integrates the iPay payment gateway with your Spree Commerce store, ena
 ## API Endpoints
 
 ### Check Payment Status
+
 ```
 GET /api/v1/ipay/status?order_id=:order_number
 ```
 
 Response:
+
 ```json
 {
   "status": "success",
@@ -77,11 +79,13 @@ Response:
 ```
 
 ### Payment Callback
+
 ```
 POST /api/v1/ipay/callback
 ```
 
 Expected Parameters:
+
 ```json
 {
   "id": "12345",

@@ -16,67 +16,78 @@ Spree.ready(($) => {
 
   // Format currency
   const formatCurrency = (amount, currency) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency || 'KES',
-      minimumFractionDigits: 2
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency || "KES",
+      minimumFractionDigits: 2,
     }).format(amount);
   };
 
   // Function to check payment status
   function checkPaymentStatus(orderNumber, maxAttempts = 10, attempt = 1) {
     if (attempt > maxAttempts) {
-      showFlash('warning', 'Payment status check timed out. Please check your order status later.');
+      showFlash(
+        "warning",
+        "Payment status check timed out. Please check your order status later.",
+      );
       return;
     }
 
     $.ajax({
       url: Spree.routes.ipay_status,
-      method: 'GET',
+      method: "GET",
       data: { order_id: orderNumber },
-      dataType: 'json',
+      dataType: "json",
       headers: {
-        'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content'),
-        'Accept': 'application/json'
-      }
+        "X-CSRF-Token": $('meta[name="csrf-token"]').attr("content"),
+        Accept: "application/json",
+      },
     })
-    .done(function(response) {
-      if (response.payment && response.payment.state === 'completed') {
-        // Payment completed, redirect to order confirmation
-        window.location.href = Spree.pathFor(`orders/${orderNumber}`);
-      } else if (response.payment && ['failed', 'void', 'invalid'].includes(response.payment.state)) {
-        // Payment failed
-        showFlash('error', `Payment ${response.payment.state}. Please try again.`);
-        window.location.href = Spree.pathFor('checkout/payment');
-      } else {
-        // Check again after delay
+      .done(function (response) {
+        if (response.payment && response.payment.state === "completed") {
+          // Payment completed, redirect to order confirmation
+          window.location.href = Spree.pathFor(`orders/${orderNumber}`);
+        } else if (
+          response.payment &&
+          ["failed", "void", "invalid"].includes(response.payment.state)
+        ) {
+          // Payment failed
+          showFlash(
+            "error",
+            `Payment ${response.payment.state}. Please try again.`,
+          );
+          window.location.href = Spree.pathFor("checkout/payment");
+        } else {
+          // Check again after delay
+          setTimeout(() => {
+            checkPaymentStatus(orderNumber, maxAttempts, attempt + 1);
+          }, 2000);
+        }
+      })
+      .fail(function (xhr) {
+        console.error("Error checking payment status:", xhr);
+        // Continue checking on failure
         setTimeout(() => {
           checkPaymentStatus(orderNumber, maxAttempts, attempt + 1);
         }, 2000);
-      }
-    })
-    .fail(function(xhr) {
-      console.error('Error checking payment status:', xhr);
-      // Continue checking on failure
-      setTimeout(() => {
-        checkPaymentStatus(orderNumber, maxAttempts, attempt + 1);
-      }, 2000);
-    });
+      });
   }
 
   // Handle iPay payment form submission
-  $(".checkout_form_payment").on("submit", function(e) {
+  $(".checkout_form_payment").on("submit", function (e) {
     const $form = $(this);
-    const $submitButton = $form.find('input[type="submit"], button[type="submit"]');
+    const $submitButton = $form.find(
+      'input[type="submit"], button[type="submit"]',
+    );
     const $paymentMethod = $("#payment_method_spree_ipay");
-    
+
     // Only handle iPay payment method
     if (!$paymentMethod.is(":checked")) {
       return true; // Let the form submit normally
     }
-    
+
     e.preventDefault();
-    
+
     // Show loading state
     const originalText = $submitButton.val() || $submitButton.text();
     $submitButton
@@ -89,9 +100,11 @@ Spree.ready(($) => {
 
     // Get form data
     const formData = $form.serialize();
-    
+
     // Show loading indicator
-    const $loadingIndicator = $('<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Processing your payment...</p></div>');
+    const $loadingIndicator = $(
+      '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Processing your payment...</p></div>',
+    );
     $("#payment-method-fields").append($loadingIndicator);
 
     // Submit the form via AJAX with JSON support
@@ -102,94 +115,104 @@ Spree.ready(($) => {
       dataType: "json",
       headers: {
         "X-CSRF-Token": $('meta[name="csrf-token"]').attr("content"),
-        "Accept": "application/json"
-      }
+        Accept: "application/json",
+      },
     })
-    .done((response) => {
-      if (response.status === 'success') {
-        // Handle successful response
-        if (response.next_step === 'confirm') {
-          // If we're moving to confirm, submit the form again to trigger the iPay redirect
-          $form.off('submit').submit();
-        } else if (response.next_step === 'complete') {
-          // If order is complete, redirect to order confirmation
-          window.location.href = response.order.complete_url || Spree.pathFor(`orders/${response.order.number}`);
-        } else if (response.next_step) {
-          // For other steps, redirect to the next step
-          window.location.href = Spree.pathFor(`checkout/${response.next_step}`);
+      .done((response) => {
+        if (response.status === "success") {
+          // Handle successful response
+          if (response.next_step === "confirm") {
+            // If we're moving to confirm, submit the form again to trigger the iPay redirect
+            $form.off("submit").submit();
+          } else if (response.next_step === "complete") {
+            // If order is complete, redirect to order confirmation
+            window.location.href =
+              response.order.complete_url ||
+              Spree.pathFor(`orders/${response.order.number}`);
+          } else if (response.next_step) {
+            // For other steps, redirect to the next step
+            window.location.href = Spree.pathFor(
+              `checkout/${response.next_step}`,
+            );
+          } else {
+            // Fallback to page reload if no specific action
+            window.location.reload();
+          }
         } else {
-          // Fallback to page reload if no specific action
-          window.location.reload();
+          // Handle error response
+          let errorMessage = response.message || "Payment processing failed";
+
+          // Show form validation errors if any
+          if (response.errors) {
+            Object.entries(response.errors).forEach(([field, messages]) => {
+              const $field = $(`[name*="[${field}]"]`).first();
+              if ($field.length) {
+                const $errorDiv = $(
+                  `<div class="form-error text-danger small">${Array.isArray(messages) ? messages.join(", ") : messages}</div>`,
+                );
+                $field.after($errorDiv);
+                $field.closest(".form-group").addClass("has-error");
+              }
+            });
+          }
+
+          showFlash("error", errorMessage);
+          $submitButton.prop("disabled", false).val(originalText);
         }
-      } else {
-        // Handle error response
-        let errorMessage = response.message || 'Payment processing failed';
-        
-        // Show form validation errors if any
-        if (response.errors) {
-          Object.entries(response.errors).forEach(([field, messages]) => {
-            const $field = $(`[name*="[${field}]"]`).first();
-            if ($field.length) {
-              const $errorDiv = $(`<div class="form-error text-danger small">${Array.isArray(messages) ? messages.join(', ') : messages}</div>`);
-              $field.after($errorDiv);
-              $field.closest('.form-group').addClass('has-error');
-            }
-          });
+      })
+      .fail((xhr) => {
+        let errorMessage = "Payment processing failed. Please try again.";
+        let errors = [];
+
+        try {
+          const response = xhr.responseJSON || {};
+          if (response.message) {
+            errorMessage = response.message;
+          }
+          if (response.errors) {
+            errors = Object.values(response.errors).flat();
+          }
+        } catch (e) {
+          console.error("Error parsing error response:", e);
         }
-        
-        showFlash('error', errorMessage);
+
+        showFlash("error", [errorMessage, ...errors].filter(Boolean).join(" "));
         $submitButton.prop("disabled", false).val(originalText);
-      }
-    })
-    .fail((xhr) => {
-      let errorMessage = "Payment processing failed. Please try again.";
-      let errors = [];
-      
-      try {
-        const response = xhr.responseJSON || {};
-        if (response.message) {
-          errorMessage = response.message;
-        }
-        if (response.errors) {
-          errors = Object.values(response.errors).flat();
-        }
-      } catch (e) {
-        console.error("Error parsing error response:", e);
-      }
-      
-      showFlash('error', [errorMessage, ...errors].filter(Boolean).join(' '));
-      $submitButton.prop("disabled", false).val(originalText);
-    })
-    .always(() => {
-      $loadingIndicator.remove();
-    });
+      })
+      .always(() => {
+        $loadingIndicator.remove();
+      });
   });
 
   // Initialize payment method visibility
   const updatePaymentMethodVisibility = () => {
-    $('.payment-methods input[type="radio"]').each(function() {
+    $('.payment-methods input[type="radio"]').each(function () {
       const $method = $(this);
-      const $fieldset = $method.closest('.payment-method');
-      if ($method.is(':checked')) {
-        $fieldset.addClass('selected');
+      const $fieldset = $method.closest(".payment-method");
+      if ($method.is(":checked")) {
+        $fieldset.addClass("selected");
       } else {
-        $fieldset.removeClass('selected');
+        $fieldset.removeClass("selected");
       }
     });
   };
 
   // Handle payment method selection
-  $(document).on('change', '.payment-methods input[type="radio"]', updatePaymentMethodVisibility);
-  
+  $(document).on(
+    "change",
+    '.payment-methods input[type="radio"]',
+    updatePaymentMethodVisibility,
+  );
+
   // Initialize on page load
   updatePaymentMethodVisibility();
-  
+
   // Check for pending payments on page load
-  const $pendingPayment = $('.payment-pending');
+  const $pendingPayment = $(".payment-pending");
   if ($pendingPayment.length) {
-    const orderNumber = $pendingPayment.data('order-number');
+    const orderNumber = $pendingPayment.data("order-number");
     if (orderNumber) {
-      showFlash('info', 'Checking payment status...');
+      showFlash("info", "Checking payment status...");
       checkPaymentStatus(orderNumber);
     }
   }
