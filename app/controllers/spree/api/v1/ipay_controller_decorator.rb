@@ -31,7 +31,6 @@ module Spree
               currency: payment.currency,
               shipment_state: payment.order.shipment_state
             }
-          }
         rescue ActiveRecord::RecordNotFound
           render json: { status: 'error', message: 'Payment not found' }, status: :not_found
         end
