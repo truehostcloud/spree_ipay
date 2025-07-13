@@ -50,5 +50,4 @@ end
 # Include the helper in relevant classes
 ActiveSupport.on_load(:action_controller) do
   include IpayLoggerHelper
-  helper_method :log_payment_event, :log_error
 end
