@@ -6,10 +6,16 @@ module Spree
     def self.prepended(base)
       base.before_action :log_checkout_state, only: [:update]
       base.before_action :handle_ipay_redirect, only: [:update]
+      base.before_action :set_request_variant
     end
     
     def log_checkout_state
       # No logging needed
+    end
+
+    # Set request variant based on format
+    def set_request_variant
+      request.variant = :api if request.format.json?
     end
 
     def handle_ipay_redirect
@@ -27,11 +33,33 @@ module Spree
         # Generate iPay form HTML
         form_html = generate_ipay_form_html(payment, session[:ipay_phone_number], ipay_method)
 
-        # Render the form using content_type for security
-        render inline: form_html, content_type: 'text/html', layout: 'spree/layouts/checkout'
+        respond_to do |format|
+          format.html do
+            # Render the form using content_type for security
+            render inline: form_html, content_type: 'text/html', layout: 'spree/layouts/checkout'
+          end
+          format.json do
+            render json: {
+              status: 'success',
+              next_step: 'confirm',
+              form_html: form_html
+            }
+          end
+        end
       end
     rescue StandardError => e
-      redirect_to checkout_state_path(:payment), error: "Payment processing failed: #{e.message}"
+      respond_to do |format|
+        format.html do
+          redirect_to checkout_state_path(:payment), error: "Payment processing failed: #{e.message}"
+        end
+        format.json do
+          render json: {
+            status: 'error',
+            message: "Payment processing failed: #{e.message}",
+            errors: [e.message]
+          }, status: :unprocessable_entity
+        end
+      end
     end
 
     def generate_ipay_form_html(payment, phone, ipay_method)
@@ -128,6 +156,47 @@ module Spree
       HTML
     rescue StandardError => e
       raise "Error generating payment form: #{e.message}"
+    end
+    # Override update action to handle JSON responses
+    def update
+      if @order.update_from_params(params, permitted_checkout_attributes, request.headers.env)
+        respond_to do |format|
+          format.html do
+            if @order.next
+              state_callback(:after)
+              redirect_to checkout_state_path(@order.state)
+            else
+              redirect_to checkout_state_path(@order.state)
+            end
+          end
+          format.json do
+            if @order.next
+              render json: {
+                status: 'success',
+                next_step: @order.state,
+                order_number: @order.number
+              }
+            else
+              render json: {
+                status: 'error',
+                errors: @order.errors.messages,
+                message: @order.errors.full_messages.to_sentence
+              }, status: :unprocessable_entity
+            end
+          end
+        end
+      else
+        respond_to do |format|
+          format.html { render :edit }
+          format.json do
+            render json: {
+              status: 'error',
+              errors: @order.errors.messages,
+              message: @order.errors.full_messages.to_sentence
+            }, status: :unprocessable_entity
+          end
+        end
+      end
     end
   end
 end

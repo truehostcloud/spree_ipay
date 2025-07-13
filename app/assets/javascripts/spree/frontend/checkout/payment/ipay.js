@@ -10,25 +10,17 @@ Spree.ready(($) => {
     const flashDiv = $(`<div class="alert alert-${type}">${message}</div>`);
     $(".progress-steps").before(flashDiv);
     flashDiv.slideDown();
-
-    // Auto-hide after 5 seconds
-    setTimeout(() => {
-      flashDiv.slideUp(400, () => {
-        flashDiv.remove();
-      });
-    }, 5000);
+    setTimeout(() => flashDiv.slideUp(400, () => flashDiv.remove()), 5000);
   };
 
   // Handle iPay payment form submission
-  $(".checkout_form_payment").on("submit", (e) => {
+  $(".checkout_form_payment").on("submit", function(e) {
     const $form = $(this);
-    const $submitButton = $form.find(
-      'input[type="submit"], button[type="submit"]',
-    );
+    const $submitButton = $form.find('input[type="submit"], button[type="submit"]');
 
     if ($("#payment_method_spree_ipay").is(":checked")) {
       e.preventDefault();
-
+      
       // Show loading state
       const originalText = $submitButton.val() || $submitButton.text();
       $submitButton
@@ -42,7 +34,7 @@ Spree.ready(($) => {
       // Get form data
       const formData = $form.serialize();
 
-      // Submit the form via AJAX
+      // Submit the form via AJAX with JSON support
       $.ajax({
         url: Spree.pathFor("checkout/update/payment"),
         method: "POST",
@@ -50,57 +42,50 @@ Spree.ready(($) => {
         dataType: "json",
         headers: {
           "X-CSRF-Token": $('meta[name="csrf-token"]').attr("content"),
-        },
+          "Accept": "application/json"
+        }
       })
-        .done((response) => {
-          if (response.redirect) {
-            // Redirect to payment gateway or next step
-            window.location.href = response.redirect;
-          } else if (response.next_step_required) {
-            // Handle next step in checkout
-            window.location.reload();
+      .done((response) => {
+        if (response.redirect) {
+          // Handle redirects (existing functionality)
+          window.location.href = response.redirect;
+        } else if (response.status === 'success') {
+          // New: Handle JSON success response
+          if (response.next_step) {
+            window.location.href = Spree.pathFor(`checkout/${response.next_step}`);
           } else {
-            // Handle unexpected response
-            showFlash(
-              "error",
-              Spree.translables.payment_processing_failed ||
-                "Payment processing failed",
-            );
-            $submitButton.prop("disabled", false).val(originalText);
+            window.location.reload();
           }
-        })
-        .fail((xhr) => {
-          let errorMessage =
-            Spree.translables.payment_processing_failed ||
-            "Payment processing failed";
-
-          // Try to extract error message from response
-          try {
-            const response = JSON.parse(xhr.responseText);
-            errorMessage = response.error || response.message || errorMessage;
-
-            // Handle form validation errors
-            if (response.errors) {
-              $.each(response.errors, (field, messages) => {
-                const $field = $(`[name*="${field}"]`).first();
-                if ($field.length) {
-                  const $errorDiv = $(
-                    `<div class="form-error">${messages.join(", ")}</div>`,
-                  );
-                  $field
-                    .after($errorDiv)
-                    .closest(".form-group")
-                    .addClass("field_with_errors");
-                }
-              });
-            }
-          } catch (error) {
-            console.error("Error parsing error response:", error);
+        } else {
+          // Fallback to existing behavior
+          window.location.reload();
+        }
+      })
+      .fail((xhr) => {
+        let errorMessage = "Payment processing failed";
+        try {
+          const response = JSON.parse(xhr.responseText);
+          errorMessage = response.error || response.message || errorMessage;
+          
+          // Handle form validation errors
+          if (response.errors) {
+            $.each(response.errors, (field, messages) => {
+              const $field = $(`[name*="${field}"]`).first();
+              if ($field.length) {
+                const $errorDiv = $(`<div class="form-error">${Array.isArray(messages) ? messages.join(", ") : messages}</div>`);
+                $field
+                  .after($errorDiv)
+                  .closest(".form-group")
+                  .addClass("field_with_errors");
+              }
+            });
           }
-
-          showFlash("error", errorMessage);
-          $submitButton.prop("disabled", false).val(originalText);
-        });
+        } catch (e) {
+          console.error("Error parsing error response:", e);
+        }
+        showFlash('error', errorMessage);
+        $submitButton.prop("disabled", false).val(originalText);
+      });
     }
   });
 });
