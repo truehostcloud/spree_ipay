@@ -93,10 +93,10 @@ Spree.ready(($) => {
     $submitButton
       .prop("disabled", true)
       .val(Spree.translations.processing || "Processing...");
-      
+
     // Add loading indicator
     const $loading = $(
-      '<div class="ipay-loading text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Processing payment...</p></div>'
+      '<div class="ipay-loading text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Processing payment...</p></div>',
     );
     $form.find(".ipay-loading").remove();
     $form.prepend($loading);
@@ -123,8 +123,8 @@ Spree.ready(($) => {
       headers: {
         "X-CSRF-Token": $('meta[name="csrf-token"]').attr("content"),
         "X-Requested-With": "XMLHttpRequest",
-        Accept: "application/json"
-      }
+        Accept: "application/json",
+      },
     })
       .done((response) => {
         // Handle successful response
@@ -137,15 +137,17 @@ Spree.ready(($) => {
             window.location.href = Spree.pathFor("checkout/confirm");
           } else if (response.next_step === "complete") {
             // If order is complete, redirect to order confirmation
-            window.location.href = 
-              response.order?.complete_url || 
+            window.location.href =
+              response.order?.complete_url ||
               Spree.pathFor(`orders/${response.order?.number}`);
           } else if (response.next_step_url) {
             // For other successful steps with explicit URL
             window.location.href = response.next_step_url;
           } else if (response.next_step) {
             // For other steps, construct the URL
-            window.location.href = Spree.pathFor(`checkout/${response.next_step}`);
+            window.location.href = Spree.pathFor(
+              `checkout/${response.next_step}`,
+            );
           } else {
             // Fallback to page reload if no specific action
             window.location.reload();
@@ -154,22 +156,29 @@ Spree.ready(($) => {
           // Handle error response
           const errorMessage = response.message || "Payment processing failed";
           const errors = [];
-          
+
           // Show form validation errors if any
           if (response.errors) {
             Object.entries(response.errors).forEach(([field, messages]) => {
               const $field = $(`[name*="[${field}]"]`).first();
               if ($field.length) {
-                const errorText = Array.isArray(messages) ? messages.join(", ") : messages;
-                const $errorDiv = $(`<div class="form-error text-danger small">${errorText}</div>`);
+                const errorText = Array.isArray(messages)
+                  ? messages.join(", ")
+                  : messages;
+                const $errorDiv = $(
+                  `<div class="form-error text-danger small">${errorText}</div>`,
+                );
                 $field.after($errorDiv);
                 $field.closest(".form-group").addClass("has-error");
                 errors.push(errorText);
               }
             });
           }
-          
-          showFlash("error", [errorMessage, ...errors].filter(Boolean).join(" "));
+
+          showFlash(
+            "error",
+            [errorMessage, ...errors].filter(Boolean).join(" "),
+          );
           $submitButton.prop("disabled", false).val(originalText);
         }
       })
