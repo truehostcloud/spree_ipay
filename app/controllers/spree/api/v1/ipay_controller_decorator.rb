@@ -12,7 +12,7 @@ module Spree
 
         # GET /api/v1/ipay/status
         def status
-          @payment = Spree::Payment.find_by!(number: params[:order_id])
+          @payment = Spree::Payment.joins(:order).find_by!(spree_orders: { number: params[:order_id] })
           
           render json: {
             status: 'success',
