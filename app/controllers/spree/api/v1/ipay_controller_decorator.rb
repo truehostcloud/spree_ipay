@@ -12,7 +12,7 @@ module Spree
 
         # GET /api/v1/ipay/status
         def status
-          @payment = Spree::Payment.joins(:order).find_by!(spree_orders: { number: params[:order_id] })
+          @payment = Spree::Payment.find_by!(number: params[:order_id])
           
           render json: {
             status: 'success',
@@ -50,31 +50,3 @@ module Spree
 end
 
 Spree::Api::V1::IpayController.prepend(Spree::Api::V1::IpayControllerDecorator) if defined?(Spree::Api::V1::IpayController)
-
-Spree::Api::V1::IpayController.include(Spree::Ipay::ControllerHelpers)
-
-module Spree
-  module Api
-    module V1
-      IpayController.class_eval do
-        before_action :authenticate_user, only: [:status]
-        before_action :find_order, only: [:status]
-
-        private
-
-        def authenticate_user
-          unless spree_current_user
-            render json: { error: 'Unauthorized' }, status: :unauthorized
-          end
-        end
-
-        def find_order
-          @order = spree_current_user.orders.find_by(number: params[:order_number])
-          return if @order
-          
-          render json: { status: 'error', message: 'Order not found or access denied' }, status: :not_found
-        end
-      end
-    end
-  end
-end

@@ -36,10 +36,7 @@ module Spree
         respond_to do |format|
           format.html do
             # Render the form using content_type for security
-            # Use Rails' html_safe with proper sanitization
-render inline: sanitize(form_html, attributes: %w[action method id class style data-*])
-# Add Content Security Policy header for additional protection
-response.headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-inline' https://*.ipay.com;", content_type: 'text/html', layout: 'spree/layouts/checkout'
+            render inline: form_html, content_type: 'text/html', layout: 'spree/layouts/checkout'
           end
           format.json do
             render json: {
