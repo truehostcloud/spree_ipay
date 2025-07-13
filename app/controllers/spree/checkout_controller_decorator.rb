@@ -25,15 +25,20 @@ module Spree
         session[:ipay_phone_number] = phone if phone.present?
       end
 
-      # Generate form and redirect during confirm state
+      # Handle iPay payment form rendering during confirm state
       if params[:state] == "confirm" && @order.payments.last&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
         payment = @order.payments.last
         ipay_method = payment.payment_method
-        phone = session[:ipay_phone_number] || @order.bill_address.phone
+        phone = session[:ipay_phone_number] || @order.bill_address&.phone || ''
+
+        # Ensure the order is in the correct state
+        unless @order.confirm?
+          @order.next! if @order.can_go_to_state?(:confirm)
+          @order.reload
+        end
 
         respond_to do |format|
           format.html do
-            # Generate and render the iPay form immediately
             @payment = payment
             @phone = phone
             @ipay_method = ipay_method

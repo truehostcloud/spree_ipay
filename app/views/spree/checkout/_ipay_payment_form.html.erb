@@ -1,40 +1,88 @@
 <%# app/views/spree/checkout/_ipay_payment_form.html.erb %>
 <%# This partial renders the iPay payment form with proper HTML escaping to prevent XSS %>
 
-<%= form_tag(@ipay_method.preferred_url, method: :post, id: 'ipay-payment-form', class: 'ipay-form') do |f| %>
-  <%= hidden_field_tag 'live', @ipay_method.preferred_test_mode ? '0' : '1' %>
-  <%= hidden_field_tag 'oid', @payment.order.number %>
-  <%= hidden_field_tag 'inv', "#{@payment.order.number}#{Time.now.to_i}" %>
-  <%= hidden_field_tag 'ttl', (@payment.amount.to_f * 100).to_i %>
-  <%= hidden_field_tag 'tel', @phone.presence || @payment.order.bill_address&.phone || '0700000000' %>
-  <%= hidden_field_tag 'eml', @payment.order.email %>
-  <%= hidden_field_tag 'vid', @ipay_method.preferred_vendor_id %>
-  <%= hidden_field_tag 'curr', @ipay_method.preferred_currency.presence || 'KES' %>
-  <%= hidden_field_tag 'p1', '' %>
-  <%= hidden_field_tag 'p2', '' %>
-  <%= hidden_field_tag 'p3', '' %>
-  <%= hidden_field_tag 'p4', '' %>
-  <%= hidden_field_tag 'cbk', spree.ipay_callback_url(host: @request.host_with_port) %>
-  <%= hidden_field_tag 'cst', '1' %>
-  <%= hidden_field_tag 'crl', '2' %>
-  <%= hidden_field_tag 'hsh', @ipay_method.generate_hash(
-    @payment.order.number,
-    (@payment.amount.to_f * 100).to_i,
-    @payment.order.email,
-    @phone.presence || @payment.order.bill_address&.phone || '0700000000',
-    @ipay_method.preferred_vendor_id,
-    @ipay_method.preferred_security_key
-  ) %>
-
-  <div class="form-buttons" data-hook="buttons">
-    <%= submit_tag Spree.t(:place_order), class: 'btn btn-lg btn-primary' %>
+<div class="ipay-payment-form">
+  <div class="alert alert-info">
+    <%= Spree.t(:redirecting_to_ipay) %>
   </div>
-<% end %>
 
-<%= javascript_tag nonce: true do %>
-  document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(function() {
-      document.getElementById('ipay-payment-form').submit();
-    }, 1000);
-  });
-<% end %>
+  <%= form_tag(@ipay_method.preferred_url, method: :post, id: 'ipay-payment-form', class: 'ipay-form') do |f| %>
+    <%= hidden_field_tag 'live', @ipay_method.preferred_test_mode ? '0' : '1' %>
+    <%= hidden_field_tag 'oid', @payment.order.number %>
+    <%= hidden_field_tag 'inv', "#{@payment.order.number}#{Time.now.to_i}" %>
+    <%= hidden_field_tag 'ttl', (@payment.amount.to_f * 100).to_i %>
+    <%= hidden_field_tag 'tel', @phone.presence || @payment.order.bill_address&.phone || '0700000000' %>
+    <%= hidden_field_tag 'eml', @payment.order.email %>
+    <%= hidden_field_tag 'vid', @ipay_method.preferred_vendor_id %>
+    <%= hidden_field_tag 'curr', @ipay_method.preferred_currency.presence || 'KES' %>
+    <%= hidden_field_tag 'p1', '' %>
+    <%= hidden_field_tag 'p2', '' %>
+    <%= hidden_field_tag 'p3', '' %>
+    <%= hidden_field_tag 'p4', '' %>
+    <%= hidden_field_tag 'cbk', spree.ipay_callback_url(host: @request.host_with_port) %>
+    <%= hidden_field_tag 'cst', '1' %>
+    <%= hidden_field_tag 'crl', '2' %>
+    <% 
+      phone = @phone.presence || @payment.order.bill_address&.phone || '0700000000'
+      hash = @ipay_method.generate_hash(
+        @payment.order.number,
+        (@payment.amount.to_f * 100).to_i,
+        @payment.order.email,
+        phone,
+        @ipay_method.preferred_vendor_id,
+        @ipay_method.preferred_security_key
+      )
+    %>
+    <%= hidden_field_tag 'hsh', hash %>
+
+    <div class="form-buttons" data-hook="buttons">
+      <%= submit_tag Spree.t(:proceed_to_payment), 
+                    class: 'btn btn-lg btn-primary',
+                    id: 'submit-ipay-form' %>
+    </div>
+  <% end %>
+
+  <div class="loading-spinner" style="display: none;">
+    <div class="spinner"></div>
+    <p><%= Spree.t(:processing_payment) %></p>
+  </div>
+
+  <style>
+    .loading-spinner {
+      text-align: center;
+      padding: 20px;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 2s linear infinite;
+      margin: 0 auto 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+
+  <%= javascript_tag nonce: true do %>
+    document.addEventListener('DOMContentLoaded', function() {
+      var form = document.getElementById('ipay-payment-form');
+      var submitBtn = document.getElementById('submit-ipay-form');
+      var loadingSpinner = document.querySelector('.loading-spinner');
+      
+      // Show loading spinner when form is submitted
+      form.addEventListener('submit', function() {
+        if (submitBtn) submitBtn.style.display = 'none';
+        if (loadingSpinner) loadingSpinner.style.display = 'block';
+      });
+      
+      // Auto-submit after a short delay
+      setTimeout(function() {
+        form.submit();
+      }, 1000);
+    });
+  <% end %>
+</div>
