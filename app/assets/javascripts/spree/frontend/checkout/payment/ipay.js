@@ -79,77 +79,85 @@ Spree.ready(($) => {
     const $submitButton = $form.find(
       'input[type="submit"], button[type="submit"]',
     );
-    const $selectedMethod = $form.find(
-      'input[name="order[payments_attributes][][payment_method_id]"]:checked',
-    );
-    const isIpayMethod = $selectedMethod.data("is-ipay-method");
+    const $paymentMethod = $("#payment_method_spree_ipay");
     const originalText = $submitButton.val() || $submitButton.text();
 
-    if (!isIpayMethod) {
-      // Not iPay method, continue with normal form submission
-      return true;
+    // Only handle iPay payment method
+    if (!$paymentMethod.is(":checked")) {
+      return true; // Let the form submit normally
     }
 
     e.preventDefault();
-    $submitButton.prop("disabled", true).addClass("disabled");
 
-    // Show loading state
+    // Update button state and show loading
+    $submitButton
+      .prop("disabled", true)
+      .val(Spree.translations.processing || "Processing...");
+      
+    // Add loading indicator
     const $loading = $(
-      '<div class="ipay-loading text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Processing payment...</p></div>',
+      '<div class="ipay-loading text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Processing payment...</p></div>'
     );
     $form.find(".ipay-loading").remove();
     $form.prepend($loading);
 
-    // Submit the form via AJAX
+    // Clear previous errors and messages
+    $(".form-error, .alert").remove();
+    $(".field_with_errors").removeClass("field_with_errors");
+
+    // Get form data
+    const formData = $form.serialize();
+
+    // Show loading indicator
+    const $loadingIndicator = $(
+      '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Processing your payment...</p></div>',
+    );
+    $("#payment-method-fields").append($loadingIndicator);
+
+    // Submit the form via AJAX with JSON support
     $.ajax({
-      url: $form.attr("action"),
+      url: Spree.routes.checkout_update,
       method: "POST",
-      data: $form.serialize(),
+      data: formData,
       dataType: "json",
       headers: {
         "X-CSRF-Token": $('meta[name="csrf-token"]').attr("content"),
+<<<<<<< HEAD
         "X-Requested-With": "XMLHttpRequest",
         Accept: "application/json",
       },
     })
-      .done(function (response) {
+      .done((response) => {
+        // Handle successful response
         if (response.redirect_url) {
           // If we get a redirect URL, navigate to it
           window.location.href = response.redirect_url;
-        } else if (
-          response.status === "success" &&
-          response.next_step === "confirm"
-        ) {
-          // If we're moving to confirm, reload the page to show the iPay form
-          window.location.href = Spree.pathFor("checkout/confirm");
-        } else if (response.status === "success" && response.next_step_url) {
-          // For other successful steps, redirect to the next step
-          window.location.href = response.next_step_url;
-        } else {
-          // Handle other success cases
-          showFlash(
-            "success",
-            response.message || "Payment processed successfully.",
-          );
-          if (response.redirect_url) {
-            window.location.href = response.redirect_url;
-          } else if (response.order && response.order.complete_url) {
+        } else if (response.status === "success") {
+          if (response.next_step === "confirm") {
+            // If we're moving to confirm, reload the page to show the iPay form
+            window.location.href = Spree.pathFor("checkout/confirm");
+          } else if (response.next_step === "complete") {
             // If order is complete, redirect to order confirmation
-            window.location.href = response.order.complete_url;
+            window.location.href = 
+              response.order?.complete_url || 
+              Spree.pathFor(`orders/${response.order?.number}`);
+          } else if (response.next_step_url) {
+            // For other successful steps with explicit URL
+            window.location.href = response.next_step_url;
+          } else if (response.next_step) {
+            // For other steps, construct the URL
+            window.location.href = Spree.pathFor(`checkout/${response.next_step}`);
+          } else {
+            // Fallback to page reload if no specific action
+            window.location.reload();
           }
-        }
-      })
-      .fail(function (xhr) {
-        let errorMessage = "Payment processing failed. Please try again.";
-        let errors = [];
+        } else {
+          // Handle error response
+          let errorMessage = response.message || "Payment processing failed";
 
-        try {
-          const response = xhr.responseJSON || {};
-          if (response.message) {
-            errorMessage = response.message;
-          }
+          // Show form validation errors if any
           if (response.errors) {
-            // Handle form validation errors
+>>>>>>> b3aa49d (Add performance optimizations and API enhancements)
             Object.entries(response.errors).forEach(([field, messages]) => {
               const $field = $(`[name*="[${field}]"]`).first();
               if ($field.length) {
@@ -160,6 +168,7 @@ Spree.ready(($) => {
                 $field.closest(".form-group").addClass("has-error");
               }
             });
+<<<<<<< HEAD
             errors = Object.values(response.errors).flat();
           }
         } catch (e) {
@@ -171,6 +180,35 @@ Spree.ready(($) => {
       })
       .always(function () {
         $loading.remove();
+=======
+          }
+
+          showFlash("error", errorMessage);
+          $submitButton.prop("disabled", false).val(originalText);
+        }
+      })
+      .fail((xhr) => {
+        let errorMessage = "Payment processing failed. Please try again.";
+        let errors = [];
+
+        try {
+          const response = xhr.responseJSON || {};
+          if (response.message) {
+            errorMessage = response.message;
+          }
+          if (response.errors) {
+            errors = Object.values(response.errors).flat();
+          }
+        } catch (e) {
+          console.error("Error parsing error response:", e);
+        }
+
+        showFlash("error", [errorMessage, ...errors].filter(Boolean).join(" "));
+        $submitButton.prop("disabled", false).val(originalText);
+      })
+      .always(() => {
+        $loadingIndicator.remove();
+>>>>>>> b3aa49d (Add performance optimizations and API enhancements)
       });
   });
 

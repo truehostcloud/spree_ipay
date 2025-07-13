@@ -16,11 +16,8 @@ module Spree
           begin
             order = Spree::Order.find_by!(number: params[:order_id])
             
-            # Authorization check - only allow order owner or admin
-            if !current_api_user || (order.user_id != current_api_user.id && !current_api_user.has_spree_role?('admin'))
-              render json: { error: 'Unauthorized' }, status: :unauthorized
-              return
-            end
+            # Authorization using Spree's built-in authorization
+            authorize! :read, order
             
             payment = order.payments.valid.where(payment_method_id: @payment_method.id).last
             
@@ -28,18 +25,18 @@ module Spree
               render json: {
                 status: payment.state,
                 payment_id: payment.number,
-                order_number: order.number,
-                amount: payment.amount.to_f,
-                currency: payment.currency,
-                shipment_state: payment.order.shipment_state
+                order_number: order.number
               }
             else
-              render json: { status: 'error', message: 'No payment found for this order' }, status: :not_found
+              render json: { status: 'error', message: 'No payment found' }, status: :not_found
             end
-          rescue ActiveRecord::RecordNotFound => e
+          rescue CanCan::AccessDenied
+            render json: { status: 'error', message: 'Access denied' }, status: :forbidden
+          rescue ActiveRecord::RecordNotFound
             render json: { status: 'error', message: 'Order not found' }, status: :not_found
-          rescue StandardError => e
-            render json: { status: 'error', message: e.message }, status: :internal_server_error
+          rescue => e
+            Rails.logger.error("iPay API Error: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
+            render json: { status: 'error', message: 'An error occurred' }, status: :internal_server_error
           end
         end
 
