@@ -12,25 +12,24 @@ module Spree
 
         # GET /api/v1/ipay/status
         def status
-          @payment = Spree::Payment.find_by!(number: params[:order_id])
+          order = Spree::Order.find_by!(number: params[:order_id])
           
-          render json: {
-            status: 'success',
-            payment: {
-              id: @payment.id,
-              number: @payment.number,
-              state: @payment.state,
-              amount: @payment.amount.to_f,
-              created_at: @payment.created_at,
-              updated_at: @payment.updated_at
-            },
-            order: {
-              id: @payment.order.id,
-              number: @payment.order.number,
-              state: @payment.order.state,
-              total: @payment.order.total.to_f,
-              payment_state: @payment.order.payment_state,
-              shipment_state: @payment.order.shipment_state
+          # Authorization check - only allow order owner or admin
+          if !current_api_user || (order.user_id != current_api_user.id && !current_api_user.has_spree_role?('admin'))
+            render json: { error: 'Unauthorized' }, status: :unauthorized
+            return
+          end
+          
+          payment = order.payments.valid.where(payment_method_id: @payment_method.id).last
+          
+          if payment
+            render json: {
+              status: payment.state,
+              payment_id: payment.number,
+              order_number: order.number,
+              amount: payment.amount.to_f,
+              currency: payment.currency,
+              shipment_state: payment.order.shipment_state
             }
           }
         rescue ActiveRecord::RecordNotFound

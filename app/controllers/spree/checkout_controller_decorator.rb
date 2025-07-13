@@ -30,18 +30,15 @@ module Spree
         payment = @order.payments.last
         ipay_method = payment.payment_method
 
-        # Generate iPay form HTML
-        form_html = generate_ipay_form_html(payment, session[:ipay_phone_number], ipay_method)
-
         respond_to do |format|
           format.html do
-            # Render the form using content_type for security
-            render inline: form_html, content_type: 'text/html', layout: 'spree/layouts/checkout'
+            generate_ipay_form
           end
           format.json do
             render json: {
               status: 'success',
               next_step: 'confirm',
+              form_html: render_to_string('spree/checkout/ipay_payment_form', layout: false)
               form_html: form_html
             }
           end
