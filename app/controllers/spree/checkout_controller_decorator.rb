@@ -29,19 +29,22 @@ module Spree
       if params[:state] == "confirm" && @order.payments.last&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
         payment = @order.payments.last
         ipay_method = payment.payment_method
+        phone = session[:ipay_phone_number] || @order.bill_address.phone
 
         respond_to do |format|
           format.html do
-            generate_ipay_form
+            # Generate and render the iPay form immediately
+            render html: generate_ipay_form_html(payment, phone, ipay_method).html_safe, layout: 'spree/layouts/checkout'
           end
           format.json do
             render json: {
               status: 'success',
               next_step: 'confirm',
-              form_html: render_to_string('spree/checkout/ipay_payment_form', layout: false)
+              form_html: generate_ipay_form_html(payment, phone, ipay_method)
             }
           end
         end
+        return false # Prevent further processing
       end
     rescue StandardError => e
       respond_to do |format|
