@@ -163,7 +163,7 @@ module Spree
         respond_to do |format|
           format.html do
             if @order.next
-              state_callback(:after)
+              # Let Spree handle the state transition callbacks
               redirect_to checkout_state_path(@order.state)
             else
               redirect_to checkout_state_path(@order.state)
