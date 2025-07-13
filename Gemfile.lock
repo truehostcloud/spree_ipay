@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    spree_ipay (1.0.8)
+    spree_ipay (1.0.9)
       deface (~> 1.9.0)
       elastic-apm (~> 4.8.0)
       httparty (~> 0.16.0)
