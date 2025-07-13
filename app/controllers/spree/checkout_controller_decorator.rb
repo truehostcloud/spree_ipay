@@ -39,7 +39,6 @@ module Spree
               status: 'success',
               next_step: 'confirm',
               form_html: render_to_string('spree/checkout/ipay_payment_form', layout: false)
-              form_html: form_html
             }
           end
         end
