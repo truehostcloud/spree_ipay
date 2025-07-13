@@ -122,10 +122,9 @@ Spree.ready(($) => {
       dataType: "json",
       headers: {
         "X-CSRF-Token": $('meta[name="csrf-token"]').attr("content"),
-<<<<<<< HEAD
         "X-Requested-With": "XMLHttpRequest",
-        Accept: "application/json",
-      },
+        Accept: "application/json"
+      }
     })
       .done((response) => {
         // Handle successful response
@@ -153,37 +152,24 @@ Spree.ready(($) => {
           }
         } else {
           // Handle error response
-          let errorMessage = response.message || "Payment processing failed";
-
+          const errorMessage = response.message || "Payment processing failed";
+          const errors = [];
+          
           // Show form validation errors if any
           if (response.errors) {
->>>>>>> b3aa49d (Add performance optimizations and API enhancements)
             Object.entries(response.errors).forEach(([field, messages]) => {
               const $field = $(`[name*="[${field}]"]`).first();
               if ($field.length) {
-                const $errorDiv = $(
-                  `<div class="form-error text-danger small">${Array.isArray(messages) ? messages.join(", ") : messages}</div>`,
-                );
+                const errorText = Array.isArray(messages) ? messages.join(", ") : messages;
+                const $errorDiv = $(`<div class="form-error text-danger small">${errorText}</div>`);
                 $field.after($errorDiv);
                 $field.closest(".form-group").addClass("has-error");
+                errors.push(errorText);
               }
             });
-<<<<<<< HEAD
-            errors = Object.values(response.errors).flat();
           }
-        } catch (e) {
-          console.error("Error parsing error response:", e);
-        }
-
-        showFlash("error", [errorMessage, ...errors].filter(Boolean).join(" "));
-        $submitButton.prop("disabled", false).val(originalText);
-      })
-      .always(function () {
-        $loading.remove();
-=======
-          }
-
-          showFlash("error", errorMessage);
+          
+          showFlash("error", [errorMessage, ...errors].filter(Boolean).join(" "));
           $submitButton.prop("disabled", false).val(originalText);
         }
       })
@@ -208,7 +194,7 @@ Spree.ready(($) => {
       })
       .always(() => {
         $loadingIndicator.remove();
->>>>>>> b3aa49d (Add performance optimizations and API enhancements)
+        $loading.remove();
       });
   });
 
