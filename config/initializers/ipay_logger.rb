@@ -1,22 +1,31 @@
 # frozen_string_literal: true
 
 # Configure the iPay logger
-module Spree::Ipay::Logger
-  SENSITIVE_KEYS = %i[number verification_value cvv card_number account_number iban].freeze
-  
-  def self.log_payment_event(message, data = {})
-    logger.info "[iPay] #{message}"
-    logger.debug { "[iPay] Details: #{filter_sensitive_data(data).inspect}" } if data.present?
-  end
+module Spree::Ipay
+  module Logger
+    SENSITIVE_KEYS = %i[number verification_value cvv card_number account_number iban].freeze
+    
+    def self.log_payment_event(message, data = {})
+      # Log to standard Rails logger
+      Rails.logger.info "[iPay] #{message}"
+      Rails.logger.debug { "[iPay] Details: #{filter_sensitive_data(data).inspect}" } if data.present?
+      
+      # Also log to APM if available
+      ApmLogger.log_payment_event(message, data) if defined?(ApmLogger)
+    end
 
-  def self.log_error(message, exception = nil)
-    logger.error "[iPay] ERROR: #{message}"
-    if exception
-      logger.error "[iPay] #{exception.class}: #{exception.message}"
-      # Only log full backtrace in development/test
-      if Rails.env.development? || Rails.env.test?
-        logger.error "[iPay] Backtrace: #{exception.backtrace.join("\n")}"
+    def self.log_error(message, exception = nil)
+      # Log to standard Rails logger
+      Rails.logger.error "[iPay] ERROR: #{message}"
+      if exception
+        Rails.logger.error "[iPay] #{exception.class}: #{exception.message}"
+        if Rails.env.development? || Rails.env.test?
+          Rails.logger.error "[iPay] Backtrace: #{exception.backtrace.join("\n")}"
+        end
       end
+      
+      # Also log to APM if available
+      ApmLogger.log_error(message, exception) if defined?(ApmLogger)
     end
   end
 
@@ -35,17 +44,11 @@ module Spree::Ipay::Logger
   end
   
   def self.filter_sensitive_data(data)
-    return data unless data.is_a?(Hash)
+    return {} unless data.is_a?(Hash)
     
-    data.deep_dup.tap do |hash|
-      hash.each do |key, value|
-        if SENSITIVE_KEYS.include?(key.to_s.downcase.to_sym)
-          hash[key] = '[FILTERED]'
-        elsif value.is_a?(Hash)
-          hash[key] = filter_sensitive_data(value)
-        elsif value.is_a?(String) && key.to_s.downcase.include?('token')
-          hash[key] = '[TOKEN]'
-        end
+    data.deep_dup.tap do |filtered|
+      SENSITIVE_KEYS.each do |key|
+        filtered[key] = '[FILTERED]' if filtered.key?(key)
       end
     end
   end
@@ -54,30 +57,27 @@ end
 # Add a method to log payment events
 module IpayLoggerHelper
   def log_payment_event(payment, event, details = {})
-    log_data = {
-      event: event,
+    details = {
       payment_id: payment.id,
       order_number: payment.order&.number,
-      amount: payment.amount.to_f,
+      amount: payment.amount,
       currency: payment.currency,
-      state: payment.state,
-      details: details
-    }
-    
-    IpayLogger.info(log_data.to_json)
+      payment_method: payment.payment_method&.name,
+      event: event
+    }.merge(details)
+
+    Spree::Ipay::Logger.log_payment_event("Payment #{event}", details)
   end
-  
+
   def log_error(payment, error, context = {})
-    log_data = {
-      error: error.class.name,
-      message: error.message,
-      backtrace: Rails.env.development? ? error.backtrace.take(5) : nil,
+    details = {
       payment_id: payment&.id,
       order_number: payment&.order&.number,
-      context: context
-    }
-    
-    IpayLogger.error(log_data.to_json)
+      error: error.message,
+      error_class: error.class.name
+    }.merge(context)
+
+    Spree::Ipay::Logger.log_error("Payment error: #{error.message}", error)
   end
 end
 
