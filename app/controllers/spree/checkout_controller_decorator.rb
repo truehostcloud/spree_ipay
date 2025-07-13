@@ -34,13 +34,25 @@ module Spree
         respond_to do |format|
           format.html do
             # Generate and render the iPay form immediately
-            render html: generate_ipay_form_html(payment, phone, ipay_method).html_safe, layout: 'spree/layouts/checkout'
+            @payment = payment
+            @phone = phone
+            @ipay_method = ipay_method
+            render 'spree/checkout/ipay_payment_form', layout: 'spree/layouts/checkout'
           end
           format.json do
             render json: {
               status: 'success',
               next_step: 'confirm',
-              form_html: generate_ipay_form_html(payment, phone, ipay_method)
+              form_html: render_to_string(
+                partial: 'spree/checkout/ipay_payment_form',
+                formats: [:html],
+                layout: false,
+                locals: {
+                  payment: payment,
+                  phone: phone,
+                  ipay_method: ipay_method
+                }
+              )
             }
           end
         end

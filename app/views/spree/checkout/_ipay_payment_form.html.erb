@@ -1,0 +1,40 @@
+<%# app/views/spree/checkout/_ipay_payment_form.html.erb %>
+<%# This partial renders the iPay payment form with proper HTML escaping to prevent XSS %>
+
+<%= form_tag(@ipay_method.preferred_url, method: :post, id: 'ipay-payment-form', class: 'ipay-form') do |f| %>
+  <%= hidden_field_tag 'live', @ipay_method.preferred_test_mode ? '0' : '1' %>
+  <%= hidden_field_tag 'oid', @payment.order.number %>
+  <%= hidden_field_tag 'inv', "#{@payment.order.number}#{Time.now.to_i}" %>
+  <%= hidden_field_tag 'ttl', (@payment.amount.to_f * 100).to_i %>
+  <%= hidden_field_tag 'tel', @phone.presence || @payment.order.bill_address&.phone || '0700000000' %>
+  <%= hidden_field_tag 'eml', @payment.order.email %>
+  <%= hidden_field_tag 'vid', @ipay_method.preferred_vendor_id %>
+  <%= hidden_field_tag 'curr', @ipay_method.preferred_currency.presence || 'KES' %>
+  <%= hidden_field_tag 'p1', '' %>
+  <%= hidden_field_tag 'p2', '' %>
+  <%= hidden_field_tag 'p3', '' %>
+  <%= hidden_field_tag 'p4', '' %>
+  <%= hidden_field_tag 'cbk', spree.ipay_callback_url(host: @request.host_with_port) %>
+  <%= hidden_field_tag 'cst', '1' %>
+  <%= hidden_field_tag 'crl', '2' %>
+  <%= hidden_field_tag 'hsh', @ipay_method.generate_hash(
+    @payment.order.number,
+    (@payment.amount.to_f * 100).to_i,
+    @payment.order.email,
+    @phone.presence || @payment.order.bill_address&.phone || '0700000000',
+    @ipay_method.preferred_vendor_id,
+    @ipay_method.preferred_security_key
+  ) %>
+
+  <div class="form-buttons" data-hook="buttons">
+    <%= submit_tag Spree.t(:place_order), class: 'btn btn-lg btn-primary' %>
+  </div>
+<% end %>
+
+<%= javascript_tag nonce: true do %>
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      document.getElementById('ipay-payment-form').submit();
+    }, 1000);
+  });
+<% end %>

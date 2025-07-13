@@ -29,42 +29,20 @@ end
 
 # Add a method to log payment events safely
 module IpayLoggerHelper
-  def log_payment_event(payment, event, details = {})
-    # Only log non-sensitive data
+  def log_payment_event(payment, event, _details = {})
+    # Minimal logging - only event type and payment ID
     log_data = {
       event: event,
-      payment_id: payment.id,
-      order_number: payment.order&.number,
-      state: payment.state
+      payment_id: payment.id
     }
-    
-    # Only include non-sensitive details
-    if details.present?
-      log_data[:details] = details.except(
-        :card_number, :cvv, :amount, :currency,
-        :account_number, :routing_number, :bank_account_number
-      )
-    end
     
     IpayLogger.info(log_data.to_json)
   end
   
-  def log_error(payment, error, context = {})
-    log_data = {
-      error: error.class.name,
-      message: error.message,
-      backtrace: Rails.env.development? ? error.backtrace.take(5) : nil,
-      payment_id: payment&.id,
-      order_number: payment&.order&.number,
-      context: context
-    }
-    
-    IpayLogger.error(log_data.to_json)
-  end
 end
 
 # Include the helper in relevant classes
 ActiveSupport.on_load(:action_controller) do
   include IpayLoggerHelper
-  helper_method :log_payment_event, :log_error
+  helper_method :log_payment_event
 end
