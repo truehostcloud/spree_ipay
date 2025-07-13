@@ -43,7 +43,7 @@ Spree.ready(($) => {
         Accept: "application/json",
       },
     })
-      .done(function (response) {
+      .done((response) => {
         if (response.payment && response.payment.state === "completed") {
           // Payment completed, redirect to order confirmation
           window.location.href = Spree.pathFor(`orders/${orderNumber}`);
@@ -64,7 +64,7 @@ Spree.ready(($) => {
           }, 2000);
         }
       })
-      .fail(function (xhr) {
+      .fail((xhr) => {
         console.error("Error checking payment status:", xhr);
         // Continue checking on failure
         setTimeout(() => {
@@ -88,6 +88,7 @@ Spree.ready(($) => {
     }
 
     e.preventDefault();
+    return false; // Explicitly return false for the iPay case
 
     // Update button state and show loading
     $submitButton
@@ -194,8 +195,8 @@ Spree.ready(($) => {
           if (response.errors) {
             errors = Object.values(response.errors).flat();
           }
-        } catch (e) {
-          console.error("Error parsing error response:", e);
+        } catch (error) {
+          console.error("Error parsing error response:", error);
         }
 
         showFlash("error", [errorMessage, ...errors].filter(Boolean).join(" "));
