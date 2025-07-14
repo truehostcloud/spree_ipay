@@ -43,10 +43,17 @@ module Spree
         private
 
         def set_payment_method
-          @payment_method = Spree::PaymentMethod.find_by(type: 'Spree::PaymentMethod::Ipay')
+          # Use the actual class constant instead of string to prevent type confusion
+          ipay_class = Spree::PaymentMethod::Ipay
+          
+          # Find the first active iPay payment method
+          @payment_method = Spree::PaymentMethod.available.detect do |pm|
+            pm.is_a?(ipay_class) && pm.active?
+          end
+          
           return if @payment_method
           
-          render json: { status: 'error', message: 'iPay payment method not configured' }, status: :unprocessable_entity
+          render json: { status: 'error', message: 'iPay payment method not found or not active' }, status: :unprocessable_entity
         end
 
         def set_headers
