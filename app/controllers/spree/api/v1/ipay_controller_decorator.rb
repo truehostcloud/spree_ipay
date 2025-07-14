@@ -84,7 +84,8 @@ module Spree
         
         private
         
-        # Constant-time comparison that's safe against timing attacks
+        # Secure comparison that's safe against timing attacks
+        # Uses Rails' secure_compare for constant-time string comparison
         # @param actual_value [String] The actual value to check against
         # @param input_value [String] The user-provided input to validate
         # @return [Boolean] true if values match (case-insensitive, trimmed), false otherwise
@@ -96,28 +97,11 @@ module Spree
           actual = actual_value.to_s.strip.downcase
           input = input_value.to_s.strip.downcase
           
-          # Get the bytes of both strings
-          actual_bytes = actual.bytes
-          input_bytes = input.bytes
-          
-          # If lengths differ, we need to compare all bytes up to the minimum length
-          # and then check the length difference in constant time
-          min_length = [actual_bytes.length, input_bytes.length].min
-          
-          # Compare each byte using XOR (^) to get a bitmask of differences
-          # Start with 0 (no differences) and accumulate with |=
-          result = 0
-          
-          min_length.times do |i|
-            result |= actual_bytes[i] ^ input_bytes[i]
-          end
-          
-          # Add the difference in lengths to the result
-          # This ensures that different lengths will always produce a non-zero result
-          result |= actual_bytes.length ^ input_bytes.length
-          
-          # Return true only if all bytes match and lengths are equal (result == 0)
-          result.zero?
+          # Use Rails' secure_compare for constant-time comparison
+          ActiveSupport::SecurityUtils.secure_compare(actual, input)
+        rescue ArgumentError
+          # secure_compare raises ArgumentError if string encodings are incompatible
+          false
         end
         
         def guest_authentication_required?
