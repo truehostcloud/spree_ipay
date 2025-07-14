@@ -59,17 +59,27 @@ module Spree
         end
 
         def authenticate_for_status
-          # Ensure user is authenticated
-          unless spree_current_user
-            render json: { status: 'error', message: 'Authentication required' }, status: :unauthorized
+          # Ensure the order exists
+          @order = Spree::Order.find_by(number: params[:order_id])
+          unless @order
+            render json: { status: 'error', message: 'Order not found' }, status: :not_found
             return
           end
           
-          # Ensure the order exists and belongs to the current user or has a valid token
-          @order = Spree::Order.find_by(number: params[:order_id])
-          unless @order && (spree_current_user.id == @order.user_id || params[:token] == @order.guest_token)
-            render json: { status: 'error', message: 'Access denied' }, status: :forbidden
+          # For authenticated users, verify they have permission
+          if spree_current_user
+            # Use Spree's built-in authorization
+            authorize! :read, @order
+            return
           end
+          
+          # For guest users, require a valid guest token
+          if params[:token].blank? || params[:token] != @order.guest_token
+            render json: { status: 'error', message: 'Authentication required' }, status: :unauthorized
+          end
+          
+        rescue CanCan::AccessDenied
+          render json: { status: 'error', message: 'Access denied' }, status: :forbidden
         end
         
         def set_headers
