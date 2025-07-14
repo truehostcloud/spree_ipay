@@ -6,20 +6,22 @@ module Spree
       module IpayControllerDecorator
         def self.prepended(base)
           base.respond_to :json
-          base.skip_before_action :authenticate_user, only: [:callback, :return, :status]
+          # Only skip authentication for callbacks and return URLs which need to be publicly accessible
+          base.skip_before_action :authenticate_user, only: [:callback, :return]
           base.before_action :set_headers
           base.before_action :set_payment_method, only: [:status]
+          base.before_action :authenticate_for_status, only: [:status]
         end
 
         # GET /api/v1/ipay/status
+        # @order is set in authenticate_for_status
         def status
           begin
-            order = Spree::Order.find_by!(number: params[:order_id])
-            
-            # Authorization using Spree's built-in authorization
-            authorize! :read, order
-            
-            payment = order.payments.valid.where(payment_method_id: @payment_method.id).last
+            # Find the most recent valid payment for this order and payment method
+            payment = @order.payments.valid
+                          .where(payment_method_id: @payment_method.id)
+                          .order(created_at: :desc)
+                          .first
             
             if payment
               render json: {
@@ -56,6 +58,20 @@ module Spree
           render json: { status: 'error', message: 'iPay payment method not found or not active' }, status: :unprocessable_entity
         end
 
+        def authenticate_for_status
+          # Ensure user is authenticated
+          unless spree_current_user
+            render json: { status: 'error', message: 'Authentication required' }, status: :unauthorized
+            return
+          end
+          
+          # Ensure the order exists and belongs to the current user or has a valid token
+          @order = Spree::Order.find_by(number: params[:order_id])
+          unless @order && (spree_current_user.id == @order.user_id || params[:token] == @order.guest_token)
+            render json: { status: 'error', message: 'Access denied' }, status: :forbidden
+          end
+        end
+        
         def set_headers
           response.headers['Cache-Control'] = 'no-cache, no-store, max-age=0, must-revalidate'
           response.headers['Pragma'] = 'no-cache'
