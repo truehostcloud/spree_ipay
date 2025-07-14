@@ -88,14 +88,14 @@ module Spree
         # Uses Rails' secure_compare for constant-time string comparison
         # @param actual_value [String] The actual value to check against
         # @param input_value [String] The user-provided input to validate
-        # @return [Boolean] true if values match (case-insensitive, trimmed), false otherwise
+        # @return [Boolean] true if values match exactly (case-sensitive, trimmed), false otherwise
         def constant_time_compare(actual_value, input_value)
           # Handle nil/blank cases first
           return false if actual_value.blank? || input_value.blank?
           
-          # Normalize both values to strings, strip whitespace, and downcase
-          actual = actual_value.to_s.strip.downcase
-          input = input_value.to_s.strip.downcase
+          # Convert to strings and strip whitespace only (case-sensitive comparison)
+          actual = actual_value.to_s.strip
+          input = input_value.to_s.strip
           
           # Use Rails' secure_compare for constant-time comparison
           ActiveSupport::SecurityUtils.secure_compare(actual, input)
