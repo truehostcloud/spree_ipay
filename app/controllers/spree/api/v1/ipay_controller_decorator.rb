@@ -68,18 +68,37 @@ module Spree
           
           # For authenticated users, verify they have permission
           if spree_current_user
-            # Use Spree's built-in authorization
             authorize! :read, @order
             return
           end
           
-          # For guest users, require a valid guest token
-          if params[:token].blank? || params[:token] != @order.guest_token
+          # For guest users, require both email and token
+          if guest_authentication_required?
             render json: { status: 'error', message: 'Authentication required' }, status: :unauthorized
+            return
           end
           
         rescue CanCan::AccessDenied
           render json: { status: 'error', message: 'Access denied' }, status: :forbidden
+        end
+        
+        private
+        
+        def guest_authentication_required?
+          # Require both email and token for guest authentication
+          token_valid = params[:token].present? && ActiveSupport::SecurityUtils.secure_compare(
+            params[:token].to_s, 
+            @order.guest_token.to_s
+          )
+          
+          email_valid = params[:email].present? && 
+                       @order.email.present? && 
+                       ActiveSupport::SecurityUtils.secure_compare(
+                         params[:email].downcase.strip,
+                         @order.email.downcase.strip
+                       )
+          
+          !(token_valid && email_valid)
         end
         
         def set_headers
