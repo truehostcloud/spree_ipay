@@ -84,35 +84,33 @@ module Spree
         
         private
         
-        # Safely compares two email addresses in constant time
-        # @param email1 [String, nil] First email to compare
-        # @param email2 [String, nil] Second email to compare
-        # @return [Boolean] true if emails match (case-insensitive, trimmed), false otherwise
-        def secure_email_compare(email1, email2)
-          return false if email1.blank? || email2.blank?
+        # Constant-time comparison that doesn't short-circuit
+        # @param actual_value [String] The actual value to check against
+        # @param input_value [String] The user-provided input to validate
+        # @return [Boolean] true if values match (case-insensitive, trimmed), false otherwise
+        def constant_time_compare(actual_value, input_value)
+          return false if actual_value.blank? || input_value.blank?
           
-          # Normalize both emails
-          normalized1 = email1.to_s.strip.downcase
-          normalized2 = email2.to_s.strip.downcase
+          # Normalize both values
+          actual = actual_value.to_s.strip.downcase
+          input = input_value.to_s.strip.downcase
           
-          # Compare lengths first to prevent timing attacks
-          return false unless normalized1.bytesize == normalized2.bytesize
-          
-          # Use secure_compare for constant-time comparison
-          ActiveSupport::SecurityUtils.secure_compare(normalized1, normalized2)
+          # Use a constant-time comparison that always compares all bytes
+          # This prevents timing attacks by ensuring the comparison always takes the same amount of time
+          ActiveSupport::SecurityUtils.secure_compare(actual, input)
+        rescue ArgumentError
+          # If byte lengths don't match, secure_compare raises an ArgumentError
+          # We catch and return false to maintain constant-time behavior
+          false
         end
         
         def guest_authentication_required?
-          # Require both email and token for guest authentication
-          token_valid = params[:token].present? && 
-                       @order.guest_token.present? &&
-                       secure_email_compare(params[:token], @order.guest_token)
-          
-          # Verify email matches the one on the order
-          email_valid = secure_email_compare(params[:email], @order.email)
+          # Always perform both checks to prevent timing attacks
+          token_ok = constant_time_compare(@order.guest_token, params[:token])
+          email_ok = constant_time_compare(@order.email, params[:email])
           
           # Return true if authentication is required (either check failed)
-          !(token_valid && email_valid)
+          !(token_ok && email_ok)
         end
         
         def set_headers
