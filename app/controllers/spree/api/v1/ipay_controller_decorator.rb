@@ -37,8 +37,19 @@ module Spree
           rescue ActiveRecord::RecordNotFound
             render json: { status: 'error', message: 'Order not found' }, status: :not_found
           rescue => e
-            Rails.logger.error("iPay API Error: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
-            render json: { status: 'error', message: 'An error occurred' }, status: :internal_server_error
+            if Rails.env.development?
+              Rails.logger.error("iPay API Error: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}")
+              error_message = e.message
+            else
+              Rails.logger.error("iPay API Error: #{e.class}: #{e.message}")
+              error_message = 'An error occurred while processing your request'
+            end
+            
+            render json: { 
+              status: 'error', 
+              message: error_message,
+              backtrace: Rails.env.development? ? e.backtrace : nil
+            }, status: :internal_server_error
           end
         end
 

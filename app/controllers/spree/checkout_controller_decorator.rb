@@ -50,10 +50,17 @@ module Spree
           return false # Prevent further processing
         end
       rescue => e
-        Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}\n#{e.backtrace.take(5).join("\n")}")
+        if Rails.env.development?
+          Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}\n#{e.backtrace.take(5).join("\n")}")
+        else
+          Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}")
+        end
+        
+        error_message = Rails.env.development? ? e.message : 'Unable to process payment. Please try again.'
+        
         respond_to do |format|
-          format.html { redirect_to checkout_state_path(@order.state), error: 'Unable to process payment. Please try again.' }
-          format.json { render json: { status: 'error', message: 'Payment processing failed' }, status: :unprocessable_entity }
+          format.html { redirect_to checkout_state_path(@order.state), error: error_message }
+          format.json { render json: { status: 'error', message: error_message }, status: :unprocessable_entity }
         end
       end
     rescue StandardError => e
