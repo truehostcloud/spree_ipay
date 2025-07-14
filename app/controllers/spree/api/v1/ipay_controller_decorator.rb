@@ -90,15 +90,19 @@ module Spree
         # @return [Boolean] true if values match (case-insensitive, trimmed), false otherwise
         def constant_time_compare(actual_value, input_value)
           return false if actual_value.blank? || input_value.blank?
-  
-          # Convert to strings but avoid normalization that could introduce timing variations
+
+          # Convert to strings and normalize lengths to prevent timing attacks
           actual = actual_value.to_s
           input = input_value.to_s
   
+          # Pad shorter string with null bytes to match lengths
+          max_length = [actual.length, input.length].max
+          actual = actual.ljust(max_length, "\0")
+          input = input.ljust(max_length, "\0")
+
           # Use a constant-time comparison that always compares all bytes
           ActiveSupport::SecurityUtils.secure_compare(actual, input)
         rescue ArgumentError
-          # If byte lengths don't match, secure_compare raises an ArgumentError
           false
         end
         
