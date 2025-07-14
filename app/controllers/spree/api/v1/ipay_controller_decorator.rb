@@ -27,7 +27,7 @@ module Spree
               render json: {
                 status: payment.state,
                 payment_id: payment.number,
-                order_number: order.number
+                order_number: @order.number
               }
             else
               render json: { status: 'error', message: 'No payment found' }, status: :not_found
