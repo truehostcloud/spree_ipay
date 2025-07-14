@@ -84,20 +84,34 @@ module Spree
         
         private
         
+        # Safely compares two email addresses in constant time
+        # @param email1 [String, nil] First email to compare
+        # @param email2 [String, nil] Second email to compare
+        # @return [Boolean] true if emails match (case-insensitive, trimmed), false otherwise
+        def secure_email_compare(email1, email2)
+          return false if email1.blank? || email2.blank?
+          
+          # Normalize both emails
+          normalized1 = email1.to_s.strip.downcase
+          normalized2 = email2.to_s.strip.downcase
+          
+          # Compare lengths first to prevent timing attacks
+          return false unless normalized1.bytesize == normalized2.bytesize
+          
+          # Use secure_compare for constant-time comparison
+          ActiveSupport::SecurityUtils.secure_compare(normalized1, normalized2)
+        end
+        
         def guest_authentication_required?
           # Require both email and token for guest authentication
-          token_valid = params[:token].present? && ActiveSupport::SecurityUtils.secure_compare(
-            params[:token].to_s, 
-            @order.guest_token.to_s
-          )
+          token_valid = params[:token].present? && 
+                       @order.guest_token.present? &&
+                       secure_email_compare(params[:token], @order.guest_token)
           
-          email_valid = params[:email].present? && 
-                       @order.email.present? && 
-                       ActiveSupport::SecurityUtils.secure_compare(
-                         params[:email].downcase.strip,
-                         @order.email.downcase.strip
-                       )
+          # Verify email matches the one on the order
+          email_valid = secure_email_compare(params[:email], @order.email)
           
+          # Return true if authentication is required (either check failed)
           !(token_valid && email_valid)
         end
         
