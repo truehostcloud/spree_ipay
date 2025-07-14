@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |spec|
   spec.name          = 'spree_ipay'
-  spec.version       = '1.0.7'
+  spec.version       = '1.0.9'
   spec.authors       = ['Simon Njunge']
   spec.email         = ['simon.k@cloudoon.com']
   spec.summary       = 'iPay payment integration for Spree Commerce'
@@ -27,6 +27,9 @@ Gem::Specification.new do |spec|
   
   # HTTP client for API calls
   spec.add_dependency 'httparty', '~> 0.16.0'
+  
+  # Security and rate limiting
+  spec.add_dependency 'rack-attack', '~> 6.7'
 
   # Development and test dependencies
   spec.add_development_dependency 'capybara', '~> 3.38'

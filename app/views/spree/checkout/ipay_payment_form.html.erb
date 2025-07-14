@@ -1,0 +1,13 @@
+<%= form_tag @payment_url, method: :post, id: 'ipay-payment-form' do %>
+  <% @form_fields.each do |name, value| %>
+    <%= hidden_field_tag name, value, id: "ipay_#{name}" %>
+  <% end %>
+  <%= submit_tag 'Submit Payment', class: 'btn btn-primary' %>
+<% end %>
+
+<script>
+  // Auto-submit the form when the page loads
+  document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('ipay-payment-form').submit();
+  });
+</script>

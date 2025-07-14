@@ -1,10 +1,11 @@
 PATH
   remote: .
   specs:
-    spree_ipay (1.0.7)
+    spree_ipay (1.0.9)
       deface (~> 1.9.0)
       elastic-apm (~> 4.8.0)
       httparty (~> 0.16.0)
+      rack-attack (~> 6.7)
       rails (~> 7.1.4)
       spree (>= 4.5.0, < 5.0.0)
       spree_backend (>= 4.5.0, < 5.0.0)
@@ -339,6 +340,8 @@ GEM
     public_suffix (6.0.2)
     racc (1.8.1)
     rack (3.1.16)
+    rack-attack (6.7.0)
+      rack (>= 1.0, < 4)
     rack-session (2.1.1)
       base64 (>= 0.1.0)
       rack (>= 3.0.0)
@@ -547,7 +550,7 @@ GEM
       activesupport (>= 6.1)
       sprockets (>= 3.0.0)
     sqlite3 (1.4.4)
-    state_machines (0.31.0)
+    state_machines (0.50.0)
     state_machines-activemodel (0.31.0)
       activemodel (>= 7.1)
       state_machines (>= 0.31.0)
