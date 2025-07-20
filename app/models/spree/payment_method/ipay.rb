@@ -136,27 +136,73 @@ module Spree
     end
 
     def process_payment(payment)
-      # Create a payment source if one doesn't exist
-      if payment.source.nil?
+      # Ensure we have a valid payment and order
+      return failure_response("Invalid payment") unless payment.is_a?(Spree::Payment)
+      return failure_response("Order not found") unless payment.order.present?
+      
+      # Get phone number from params or session
+      phone = nil
+      
+      # Try to get phone from source attributes if available
+      if payment.source.is_a?(Spree::IpaySource) && payment.source.phone.present?
+        phone = payment.source.phone
+      end
+      
+      # If no phone in source, try to get from order parameters
+      if phone.blank? && payment.order.checkout_steps.include?('payment')
+        params = payment.order.checkout_steps_params || {}
+        payment_attrs = params.dig(:order, :payments_attributes, 0) || {}
+        phone = payment_attrs.dig(:source_attributes, :phone)
+      end
+      
+      # Validate phone number
+      phone_digits = phone.to_s.gsub(/\D/, '')
+      if phone_digits.blank? || (phone_digits.length != 10 && phone_digits.length != 12)
+        return failure_response("A valid 10-digit phone number is required")
+      end
+      
+      # Convert to 254 format if needed
+      phone_digits = "254#{phone_digits[1..-1]}" if phone_digits.length == 10 && phone_digits.start_with?('0')
+      
+      # Create or update payment source
+      if payment.source.nil? || !payment.source.is_a?(Spree::IpaySource)
         payment.source = Spree::IpaySource.create!(
           payment_method: self,
-          user: payment.order.user
+          user: payment.order.user,
+          phone: phone_digits,
+          status: 'pending'
         )
-        payment.save!
+      else
+        payment.source.phone = phone_digits
+        payment.source.status = 'pending' unless payment.source.status.present?
+        payment.source.save!(validate: false)
       end
-
+      
+      # Save the payment to ensure source is associated
+      payment.save!
+      
       # Mark payment as processing
       payment.started_processing!
+      
+      # Log the payment processing
+      Rails.logger.info("iPay payment processing started for order #{payment.order.number}")
       
       # Return a success response
       ActiveMerchant::Billing::Response.new(
         true,
         'Payment processing started',
-        {},
+        {
+          payment_id: payment.id,
+          order_number: payment.order.number,
+          amount: payment.amount.to_f,
+          currency: payment.currency,
+          phone: phone_digits
+        },
         authorization: "ipay_#{payment.order.number}_#{Time.now.to_i}"
       )
     rescue StandardError => e
-      failure_response("Payment processing failed")
+      Rails.logger.error("iPay payment processing failed: #{e.message}\n#{e.backtrace.join("\n")}")
+      failure_response("Payment processing failed: #{e.message}")
     end
 
     def authorize(amount, source, options = {})
