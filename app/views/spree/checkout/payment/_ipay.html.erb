@@ -33,61 +33,32 @@
 </fieldset>
 
 <script type="text/javascript">
-  document.addEventListener('DOMContentLoaded', function() {
-    const phoneInput = document.getElementById('ipay_phone_number');
-    const checkoutForm = document.getElementById('checkout_form_payment');
-    const paymentMethodRadio = document.getElementById('payment_method_<%= payment_method.id %>');
-    const phoneError = document.getElementById('ipay-phone-error');
-    
-    if (phoneInput && checkoutForm) {
-      // Sync iPay phone with billing address phone
-      phoneInput.addEventListener('change', function() {
-        const billPhone = document.getElementById('order_bill_address_attributes_phone');
-        if (billPhone) {
-          billPhone.value = this.value;
-        }
-      });
+  $(document).ready(function() {
+    // Sync iPay phone with billing address phone
+    $('#ipay_phone_number').on('change', function() {
+      var phone = $(this).val();
+      if ($('#order_bill_address_attributes_phone').length) {
+        $('#order_bill_address_attributes_phone').val(phone);
+      }
+    });
 
-      // Handle form submission
-      checkoutForm.addEventListener('submit', function(e) {
-        if (paymentMethodRadio && paymentMethodRadio.checked) {
-          const phone = phoneInput.value.trim();
-          
-          // Validate phone number (10 digits for Kenya)
-          if (!/^\d{10}$/.test(phone)) {
-            e.preventDefault();
-            phoneError.textContent = 'Please enter a valid 10-digit mobile number (e.g., 0700123456)';
-            phoneError.style.display = 'block';
-            phoneInput.focus();
-            return false;
-          }
-          
-          // Update UI for processing
-          const submitButton = this.querySelector('input[type="submit"]');
-          if (submitButton) {
-            submitButton.disabled = true;
-            submitButton.value = 'Redirecting to iPay...';
-          }
-          
-          // Ensure form submits normally (no AJAX)
-          this.setAttribute('data-turbo', 'false');
-          this.removeAttribute('data-remote');
-          
-          // Allow form to submit normally
-          return true;
-        }
-      });
-      
-      // Show validation errors on blur
-      phoneInput.addEventListener('blur', function() {
-        const phone = this.value.trim();
-        if (phone && !/^\d{10}$/.test(phone)) {
-          phoneError.textContent = 'Please enter a valid 10-digit mobile number';
-          phoneError.style.display = 'block';
+    // Disable Turbo/UJS for iPay form submission
+    $('#checkout_form_payment').on('submit', function(e) {
+      if ($('#payment_method_<%= payment_method.id %>').is(':checked')) {
+        var phone = $('#ipay_phone_number').val();
+        var phoneError = $('#ipay-phone-error');
+        if (!/^\d{10}$/.test(phone)) {
+          phoneError.text('Please enter a valid 10-digit mobile number.').show();
+          $('#ipay_phone_number').focus();
+          e.preventDefault();
+          return false;
         } else {
-          phoneError.style.display = 'none';
+          phoneError.hide();
         }
-      });
-    }
+        $(this).find('input[type="submit"]').prop('disabled', true).val('Redirecting to iPay...');
+        $(this).attr('data-turbo', 'false');
+        $(this).removeAttr('data-remote');
+      }
+    });
   });
 </script>

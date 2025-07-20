@@ -7,7 +7,7 @@ module Spree
       base.before_action :log_checkout_state, only: [:update]
       base.before_action :handle_ipay_redirect, only: [:update]
       base.before_action :set_request_variant
-      base.before_action :ensure_proper_order_state, only: [:edit, :update]
+      base.before_action :reset_incomplete_payment_if_any, only: [:update]
     end
     
     def log_checkout_state
@@ -20,47 +20,61 @@ module Spree
     end
 
     def handle_ipay_redirect
-      return unless params[:state] == "confirm"  # Only handle confirm state
-      
       begin
-        # Get the payment
-        payment = @order.payments.last
-        return unless payment&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
-        
-        # Get phone number from session or order
-        phone = session[:ipay_phone_number] || @order.bill_address&.phone
-        raise 'Phone number is required' if phone.blank?
-        
-        # Generate and render the iPay form
-        respond_to do |format|
-          format.html do
-            render html: generate_ipay_form_html(payment, phone, payment.payment_method).html_safe, 
-                   layout: 'spree/layouts/checkout'
+        # Get phone number and store in session during payment state
+        if params[:state] == "payment"
+          phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
+          session[:ipay_phone_number] = phone if phone.present?
+        end
+
+        # Generate form and redirect during confirm state
+        if params[:state] == "confirm" && @order.payments.last&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
+          payment = @order.payments.last
+          ipay_method = payment.payment_method
+          phone = session[:ipay_phone_number] || @order.bill_address&.phone
+
+          raise 'Phone number is required' if phone.blank?
+
+          respond_to do |format|
+            format.html do
+              # Generate and render the iPay form immediately
+              render html: generate_ipay_form_html(payment, phone, ipay_method).html_safe, layout: 'spree/layouts/checkout'
+            end
+            format.json do
+              render json: {
+                status: 'success',
+                next_step: 'confirm',
+                form_html: generate_ipay_form_html(payment, phone, ipay_method)
+              }
+            end
           end
-          format.json do
-            render json: {
-              status: 'success',
-              next_step: 'confirm',
-              form_html: generate_ipay_form_html(payment, phone, payment.payment_method)
-            }
-          end
+          return false # Prevent further processing
+        end
+      rescue => e
+        if Rails.env.development?
+          Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}\n#{e.backtrace.take(5).join("\n")}")
+        else
+          Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}")
         end
         
-        # Prevent further processing only for confirm state
-        return false
-        
-      rescue => e
-        Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}")
         error_message = Rails.env.development? ? e.message : 'Unable to process payment. Please try again.'
         
         respond_to do |format|
-          format.html { redirect_to checkout_state_path(:payment), error: error_message }
-          format.json { 
-            render json: { 
-              status: 'error', 
-              message: error_message 
-            }, status: :unprocessable_entity 
-          }
+          format.html { redirect_to checkout_state_path(@order.state), error: error_message }
+          format.json { render json: { status: 'error', message: error_message }, status: :unprocessable_entity }
+        end
+      end
+    rescue StandardError => e
+      respond_to do |format|
+        format.html do
+          redirect_to checkout_state_path(:payment), error: "Payment processing failed: #{e.message}"
+        end
+        format.json do
+          render json: {
+            status: 'error',
+            message: "Payment processing failed: #{e.message}",
+            errors: [e.message]
+          }, status: :unprocessable_entity
         end
       end
     end
@@ -174,12 +188,6 @@ module Spree
     end
     # Override update action to handle JSON responses
     def update
-      # Store phone number from payment attributes if present
-      if params[:state] == 'payment' && params.dig(:order, :payments_attributes)
-        phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
-        session[:ipay_phone_number] = phone if phone.present?
-      end
-      
       if @order.update_from_params(params, permitted_checkout_attributes, request.headers.env)
         respond_to do |format|
           format.html do
@@ -213,7 +221,7 @@ module Spree
               }
               
               # Add payment info if in payment state
-              if next_state == 'confirm' && @order.payments.any?
+              if next_state == 'payment' && @order.payments.any?
                 payment = @order.payments.last
                 response_data[:payment] = {
                   id: payment.id,
@@ -250,22 +258,6 @@ module Spree
       end
     end
     
-    # Ensures the order is in the correct state when items are modified after incomplete payment
-    def ensure_proper_order_state
-      return unless @order
-
-      # If order is in payment or confirm state but has incomplete payments
-      if %w[payment confirm].include?(@order.state) && 
-         @order.payments.any? { |p| p.pending? || p.processing? }
-        
-        # Reset to payment state to ensure proper validation
-        @order.update_columns(state: 'payment', updated_at: Time.current)
-        @order.payments.each do |payment|
-          payment.update_columns(state: 'checkout') if payment.pending? || payment.processing?
-        end
-      end
-    end
-    
     private
     
     def next_step_url_for(order, next_step)
@@ -282,6 +274,24 @@ module Spree
         checkout_state_path('confirm')
       when 'complete'
         order_path(order, order_token: order.guest_token)
+      end
+    end
+    
+    private
+    
+    def reset_incomplete_payment_if_any
+      return unless @order.payment_required?
+
+      last_payment = @order.payments.last
+      return unless last_payment
+      return if last_payment.completed?
+
+      # Only invalidate if payment is processing/pending and older than 10 minutes
+      if (last_payment.processing? || last_payment.pending?) && 
+         last_payment.updated_at < 10.minutes.ago
+        last_payment.invalidate!
+        @order.update(payment_state: 'balance_due')
+        @order.next! if @order.payment?
       end
     end
   end

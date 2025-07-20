@@ -136,271 +136,35 @@ module Spree
     end
 
     def process_payment(payment)
-      # Log the start of payment processing
-      Rails.logger.info("iPay#process_payment: Starting payment processing for payment ID: #{payment&.id}")
-      
-      # Ensure we have a valid payment and order
-      unless payment.is_a?(Spree::Payment)
-        Rails.logger.error("iPay#process_payment: Invalid payment object provided")
-        return failure_response("Invalid payment")
-      end
-      
-      order = payment.order
-      
-      # If payment is in a terminal state, create a new one
-      if payment.failed? || payment.void? || payment.invalid? || payment.completed?
-        Rails.logger.info("iPay#process_payment: Creating new payment due to terminal state: #{payment.state}")
-        
-        # Create a new payment in checkout state
-        new_payment = order.payments.create!(
-          payment_method: payment.payment_method,
-          amount: payment.amount,
-          source: payment.source,
-          state: 'checkout'
-        )
-        
-        # Void the old payment if it's not already voided
-        unless payment.void?
-          begin
-            payment.void_transaction!
-          rescue => e
-            Rails.logger.error("iPay#process_payment: Error voiding old payment: #{e.message}")
-          end
-        end
-        
-        payment = new_payment
-        Rails.logger.info("iPay#process_payment: Created new payment ID: #{payment.id}")
-      end
-      
-      unless order.present?
-        Rails.logger.error("iPay#process_payment: No order found for payment ID: #{payment.id}")
-        return failure_response("Order not found")
-      end
-      
-      Rails.logger.info("iPay#process_payment: Processing payment for order ##{order.number}")
-      
-      # Ensure payment is in a processable state
-      unless payment.checkout? || payment.pending?
-        error_msg = "Payment is not in a processable state (current state: #{payment.state})"
-        Rails.logger.error("iPay#process_payment: #{error_msg}")
-        return failure_response(error_msg)
-      end
-      
-      # Get phone number from params or session
-      phone = nil
-      
-      # Try to get phone from source attributes if available
-      if payment.source.is_a?(Spree::IpaySource) && payment.source.phone.present?
-        phone = payment.source.phone
-        Rails.logger.info("iPay#process_payment: Found phone in source: #{phone}")
-      end
-      
-      # If no phone in source, try to get from order parameters
-      if phone.blank? && payment.order.checkout_steps.include?('payment')
-        Rails.logger.info("iPay#process_payment: Looking for phone in order params")
-        params = payment.order.checkout_steps_params || {}
-        Rails.logger.info("iPay#process_payment: Order params: #{params.inspect}")
-        
-        payment_attrs = params.dig(:order, :payments_attributes, 0) || {}
-        Rails.logger.info("iPay#process_payment: Payment attributes: #{payment_attrs.inspect}")
-        
-        phone = payment_attrs.dig(:source_attributes, :phone)
-        Rails.logger.info("iPay#process_payment: Found phone in params: #{phone}")
-      end
-      
-      # Validate phone number
-      phone_digits = phone.to_s.gsub(/\D/, '')
-      Rails.logger.info("iPay#process_payment: Processed phone digits: #{phone_digits}")
-      
-      if phone_digits.blank? || (phone_digits.length != 10 && phone_digits.length != 12)
-        error_msg = "A valid 10-digit phone number is required. Got: #{phone_digits}"
-        Rails.logger.error("iPay#process_payment: #{error_msg}")
-        return failure_response(error_msg)
-      end
-      
-      # Convert to 254 format if needed
-      if phone_digits.length == 10 && phone_digits.start_with?('0')
-        original_phone = phone_digits.dup
-        phone_digits = "254#{phone_digits[1..-1]}" 
-        Rails.logger.info("iPay#process_payment: Converted phone number from #{original_phone} to #{phone_digits}")
-      end
-      
-      # Create or update payment source
-      if payment.source.nil? || !payment.source.is_a?(Spree::IpaySource)
-        Rails.logger.info("iPay#process_payment: Creating new payment source")
+      # Create a payment source if one doesn't exist
+      if payment.source.nil?
         payment.source = Spree::IpaySource.create!(
           payment_method: self,
-          user: payment.order.user,
-          phone: phone_digits,
-          status: 'pending'
+          user: payment.order.user
         )
-        Rails.logger.info("iPay#process_payment: Created payment source ID: #{payment.source.id}")
-      else
-        Rails.logger.info("iPay#process_payment: Updating existing payment source ID: #{payment.source.id}")
-        payment.source.phone = phone_digits
-        payment.source.status = 'pending' unless payment.source.status.present?
-        payment.source.save!(validate: false)
-        Rails.logger.info("iPay#process_payment: Updated payment source")
+        payment.save!
       end
-      
-      # Save the payment to ensure source is associated
-      Rails.logger.info("iPay#process_payment: Saving payment")
-      payment.save!
-      Rails.logger.info("iPay#process_payment: Payment saved successfully")
-      
+
       # Mark payment as processing
-      begin
-        Rails.logger.info("iPay#process_payment: Attempting to mark payment as processing")
-        payment.started_processing!
-        Rails.logger.info("iPay#process_payment: Payment marked as processing successfully. New state: #{payment.state}")
-      rescue StandardError => e
-        Rails.logger.error("iPay#process_payment: Failed to mark payment as processing: #{e.message}\n#{e.backtrace.join("\n")}")
-        raise "Failed to process payment: #{e.message}"
-      end
-      
-      # Log the payment processing
-      Rails.logger.info("iPay#process_payment: Payment processing started for order #{payment.order.number}")
+      payment.started_processing!
       
       # Return a success response
       ActiveMerchant::Billing::Response.new(
         true,
         'Payment processing started',
-        {
-          payment_id: payment.id,
-          order_number: payment.order.number,
-          amount: payment.amount.to_f,
-          currency: payment.currency,
-          phone: phone_digits
-        },
+        {},
         authorization: "ipay_#{payment.order.number}_#{Time.now.to_i}"
       )
     rescue StandardError => e
-      Rails.logger.error("iPay payment processing failed: #{e.message}\n#{e.backtrace.join("\n")}")
-      failure_response("Payment processing failed: #{e.message}")
+      failure_response("Payment processing failed")
     end
 
     def authorize(amount, source, options = {})
-      Rails.logger.info("iPay#authorize: Starting authorization for amount: #{amount}")
-      
-      # Get the payment from options if available, otherwise use source
-      payment = options[:payment] || (source.respond_to?(:payment) ? source.payment : nil)
-      Rails.logger.debug("iPay#authorize: Payment from options/source: #{payment&.id}")
-      
-      # If we have an order number in options, try to find the payment that way
-      if payment.nil? && options[:order_id].present?
-        order_number = options[:order_id].to_s.split('-').first # Handle formats like 'R940832146-PLGSZU94'
-        Rails.logger.debug("iPay#authorize: Looking up order by number: #{order_number}")
-        order = Spree::Order.find_by(number: order_number)
-        if order
-          Rails.logger.debug("iPay#authorize: Found order #{order.number}, looking for payments with method_id: #{id}")
-          payment = order.payments.where(payment_method_id: id).order(created_at: :desc).first
-          Rails.logger.debug("iPay#authorize: Found payment from order: #{payment&.id}")
-        end
-      end
-      
-      # Try to get payment from source attributes
-      if payment.nil? && source.respond_to?(:payment_id) && source.payment_id.present?
-        Rails.logger.debug("iPay#authorize: Looking up payment by source.payment_id: #{source.payment_id}")
-        payment = Spree::Payment.find_by(id: source.payment_id)
-        Rails.logger.debug("iPay#authorize: Found payment by source.payment_id: #{payment&.id}")
-      end
-      
-      # Try to get payment from order_id in source
-      if payment.nil? && source.respond_to?(:order_id) && source.order_id.present?
-        Rails.logger.debug("iPay#authorize: Looking up order by source.order_id: #{source.order_id}")
-        order = Spree::Order.find_by(id: source.order_id)
-        if order
-          Rails.logger.debug("iPay#authorize: Found order #{order.number}, looking for payments with method_id: #{id}")
-          payment = order.payments.where(payment_method_id: id).order(created_at: :desc).first
-          Rails.logger.debug("iPay#authorize: Found payment from order: #{payment&.id}")
-        end
-      end
-      
-      # Try to get payment from originator
-      if payment.nil? && options[:originator].is_a?(Spree::Payment)
-        Rails.logger.debug("iPay#authorize: Using payment from originator: #{options[:originator].id}")
-        payment = options[:originator]
-      end
-      
-      # If we still don't have a payment, try to find it by the most recent payment for this source
-      if payment.nil? && source.id.present?
-        Rails.logger.debug("iPay#authorize: Looking for most recent payment with source_id: #{source.id}")
-        payment = Spree::Payment.where(source_id: source.id, payment_method_id: id).order(created_at: :desc).first
-        Rails.logger.debug("iPay#authorize: Found payment by source_id: #{payment&.id}")
-      end
-      
-      # If we still don't have a payment, log all available information and fail
-      if payment.nil?
-        error_details = {
-          source_type: source.class.name,
-          source_attributes: source.attributes,
-          options: options.except(:password, :card, :key, :login, :billing_address, :shipping_address),
-          backtrace: caller(0, 5)  # Get the first 5 lines of the backtrace
-        }
-        
-        Rails.logger.error("iPay#authorize: Could not determine payment for authorization. Details: #{error_details.to_json}")
-        
-        return failure_response(
-          "Payment processing failed: Could not find payment record",
-          code: 'payment_not_found',
-          source_type: source.class.name,
-          source_id: source.id,
-          order_id: source.respond_to?(:order_id) ? source.order_id : nil,
-          payment_method_id: id
-        )
-      end
-      
-      # Get the order and log its current state
+      options[:originator]
       order = payment.order
-      Rails.logger.info("iPay#authorize: Order #{order.number} is in state: #{order.state}")
-      
-      # Check if we can proceed with payment based on order state
-      if order.completed?
-        Rails.logger.info("iPay#authorize: Order is already completed")
-      elsif order.confirm? || order.payment?
-        Rails.logger.info("iPay#authorize: Order is in a valid state for payment")
-      else
-        # Try to advance the order state if possible
-        begin
-          Rails.logger.info("iPay#authorize: Attempting to advance order state from #{order.state}")
-          
-          # Get the current state index
-          current_state_index = order.checkout_steps.index(order.state) || -1
-          confirm_state_index = order.checkout_steps.index('confirm') || -1
-          payment_state_index = order.checkout_steps.index('payment') || -1
-          
-          # If we're before the confirm or payment step, advance the order
-          if current_state_index < [confirm_state_index, payment_state_index].max
-            while order.next && order.state != 'confirm' && order.state != 'payment' && order.state != 'complete'
-              Rails.logger.info("iPay#authorize: Advanced order to state: #{order.state}")
-            end
-          end
-          
-          # Reload the order to get the latest state
-          order.reload
-          Rails.logger.info("iPay#authorize: Order state after advancement: #{order.state}")
-          
-          # If we're still not in a valid state, return an error
-          unless ['confirm', 'payment', 'complete'].include?(order.state)
-            return failure_response(
-              "Cannot process payment. Order is in state: #{order.state}",
-              code: 'invalid_order_state',
-              order_state: order.state,
-              order_number: order.number,
-              payment_id: payment.id,
-              checkout_steps: order.checkout_steps
-            )
-          end
-        rescue StandardError => e
-          Rails.logger.error("iPay#authorize: Error advancing order state: #{e.message}")
-          return failure_response(
-            "Error preparing order for payment: #{e.message}",
-            code: 'order_state_error',
-            order_state: order.state,
-            error: e.message
-          )
-        end
-      end
+
+      # Ensure the order is in the correct state
+      return failure_response("Order is not in a confirmable state") unless order.checkout_steps.include?('confirm')
 
       # Ensure we have a valid source
       return failure_response("Invalid payment source") if source.blank? || !source.is_a?(Spree::IpaySource)
@@ -410,21 +174,11 @@ module Spree
         return failure_response("Failed to update payment source")
       end
 
-      # Get phone from source or options
-      phone = source.phone || options[:phone]
-      
-      if phone.blank? && options[:controller]&.respond_to?(:session)
-        phone = options[:controller].session[:ipay_phone_number]
-      end
-      
-      return failure_response("Phone number is required") if phone.blank?
+      # Get phone from source
+      phone = source.phone
 
-      # Update source with phone if needed
-      # Update source phone if needed
-      if source.phone.blank? && phone.present?
-        source.phone = phone
-        source.save(validate: false)
-      end
+      # Store phone number in session if we have a controller context
+      options[:controller].session[:ipay_phone_number] = phone if options[:controller]&.respond_to?(:session)
 
       # Ensure payment has the source assigned
       if payment.source.nil? || !payment.source.is_a?(Spree::IpaySource)
@@ -435,56 +189,13 @@ module Spree
         unless payment.save
           return failure_response("Failed to save payment: #{payment.errors.full_messages.to_sentence}")
         end
-      elsif payment.source.respond_to?(:phone) && payment.source.phone.blank? && phone.present?
+      else
         payment.source.phone = phone
-        payment.source.save(validate: false)
+        return failure_response("Failed to update payment source") if payment.source.changed? && !payment.source.save
       end
 
-      order = payment.order
-      phone = source.phone
-      
-      Rails.logger.info("iPay#authorize: Found payment #{payment.number} for order #{order.number}")
-      Rails.logger.debug("iPay#authorize: Payment state: #{payment.state}, Amount: #{payment.amount}, Phone: #{phone}")
-      
-      begin
-        # Process the payment
-        Rails.logger.info("iPay#authorize: Processing payment with amount: #{amount}")
-        
-        # Mark payment as processing
-        payment.started_processing!
-        
-        result = process_payment(payment)
-        
-        if result.success?
-          Rails.logger.info("iPay#authorize: Payment processed successfully. Response: #{result.params}")
-          
-          # Only update the payment with response code, but keep it in processing state
-          # The callback from iPay will handle the final state transition
-          if result.authorization.present?
-            payment.update_columns(
-              response_code: result.authorization,
-              updated_at: Time.current
-            )
-          end
-          
-          # Return a success response but don't complete the order yet
-          success_response("Payment processing started", {
-            payment_id: payment.id,
-            order_number: order.number,
-            amount: payment.amount,
-            currency: order.currency,
-            phone: phone
-          })
-        else
-          payment.failure!
-          Rails.logger.error("iPay#authorize: Payment processing failed: #{result.message}")
-          result
-        end
-      rescue StandardError => e
-        error_msg = "Unexpected error during payment processing: #{e.message}"
-        Rails.logger.error("iPay#authorize: #{error_msg}\n#{e.backtrace.join("\n")}")
-        failure_response("Payment processing failed: #{e.message}", code: 'processing_error')
-      end
+      # Process the payment
+      process!(phone: phone, payment: payment, amount: amount, options: options)
     rescue StandardError => e
       failure_response("Authorization failed: #{e.message}")
     end
@@ -532,212 +243,47 @@ module Spree
       else
         failure_response(response['message'] || 'Payment void failed')
       end
-      
-      # Ensure we have all required parameters
-      if phone.blank?
-        error_msg = "Phone number is required"
-        Rails.logger.error("iPay#process!: #{error_msg}")
-        return failure_response(error_msg)
-      end
-      
-      if amount.nil?
-        error_msg = "Amount is required"
-        Rails.logger.error("iPay#process!: #{error_msg}")
-        return failure_response(error_msg)
-      end
-      
-      # Log payment state and source
-      Rails.logger.info("iPay#process!: Payment state: #{payment.state}, Source: #{payment.source&.class&.name}")
-      Rails.logger.debug("iPay#process!: Payment details - ID: #{payment.id}, Number: #{payment.number}, Amount: #{payment.amount}")
+    rescue StandardError => e
+      failure_response("Payment void failed: #{e.message}")
+    end
 
-      # Ensure payment is in a processable state
-      unless payment.pending? || payment.checkout?
-        error_msg = "Payment is not in a processable state (current state: #{payment.state})"
-        Rails.logger.error("iPay#process!: #{error_msg}")
-        return failure_response(error_msg)
+    def process!(phone: nil, payment: nil, amount: nil, options: {})
+      # Validate required parameters
+      unless phone.present? && payment.present? && payment.order.present? && amount.present?
+        return failure_response("Missing required parameters")
       end
-      
-      # Ensure phone is present and properly formatted
-      phone = phone.to_s.strip
-      phone_digits = phone.gsub(/\D/, '')
-      
-      Rails.logger.info("iPay#process!: Processing phone number: #{phone} (digits: #{phone_digits})")
-      
-      # Validate phone number format (10 or 12 digits)
-      unless phone_digits.length == 10 || phone_digits.length == 12
-        error_msg = "Phone number must be 10 digits (e.g., 0700123456) or 12 digits (e.g., 254700123456). Got: #{phone_digits}"
-        Rails.logger.error("iPay#process!: #{error_msg}")
-        return failure_response(error_msg)
+
+      # Validate phone number format
+      phone_digits = phone.to_s.gsub(/\D/, '')
+      unless phone_digits.match?(/^\d{10}$/)
+        return failure_response("Invalid phone number format")
       end
-      
-      # Convert to 254 format if needed
-      if phone_digits.length == 10 && phone_digits.start_with?('0')
-        original_phone = phone_digits.dup
-        phone_digits = "254#{phone_digits[1..-1]}"
-        Rails.logger.info("iPay#process!: Converted phone from #{original_phone} to #{phone_digits}")
-      else
-        Rails.logger.info("iPay#process!: Using phone as-is: #{phone_digits}")
-      end
-      
-      # Ensure amount is valid and log the amount being processed
-      amount = amount.to_f
-      if amount <= 0
-        Rails.logger.info("iPay#process!: Amount not provided or invalid, using payment amount")
-        amount = payment.amount.to_f
-        if amount <= 0
-          error_msg = "Invalid payment amount: #{amount}. Amount must be greater than 0"
-          Rails.logger.error("iPay#process!: #{error_msg}")
-          return failure_response(error_msg)
-        end
-      end
-      Rails.logger.info("iPay#process!: Processing payment amount: #{amount}")
-      
-      # Ensure payment method is properly configured
+
+      # Validate credentials are set
       if preferred_vendor_id.blank? || preferred_hash_key.blank?
-        error_msg = "iPay configuration error: Missing vendor_id or hash_key"
-        Rails.logger.error("iPay#process!: #{error_msg}")
-        return failure_response("Payment configuration error. Please contact support.")
+        return failure_response("Payment configuration error")
       end
-      Rails.logger.debug("iPay#process!: Using vendor_id: #{preferred_vendor_id}")
-      
-      # Update payment state with detailed logging
-      begin
-        Rails.logger.info("iPay#process!: Attempting to start payment processing")
-        if payment.can_start_processing?
-          Rails.logger.info("iPay#process!: Payment can start processing, updating state")
-          payment.started_processing!
-          Rails.logger.info("iPay#process!: Payment state updated to: #{payment.state}")
-        else
-          Rails.logger.warn("iPay#process!: Payment cannot start processing. Current state: #{payment.state}")
-        end
-      rescue StandardError => e
-        error_msg = "Failed to update payment state: #{e.message}"
-        Rails.logger.error("iPay#process!: #{error_msg}\n#{e.backtrace.join("\n")}")
-        return failure_response("Failed to initialize payment processing")
-      end
-      
-      # Ensure payment source is properly set up
-      if payment.source.nil? || !payment.source.is_a?(Spree::IpaySource)
-        error_msg = "Invalid or missing payment source"
-        Rails.logger.error("iPay#process!: #{error_msg}")
-        return failure_response("Payment processing error. Please try again.")
-      end
-      
-      # Update source with phone if needed
-      if payment.source.phone.blank? || payment.source.phone != phone_digits
-        Rails.logger.info("iPay#process!: Updating payment source phone from #{payment.source.phone} to #{phone_digits}")
-        payment.source.phone = phone_digits
-        payment.source.status = 'pending' unless payment.source.status.present?
-        
-        begin
-          unless payment.source.save(validate: false)
-            error_msg = "Failed to update payment source: #{payment.source.errors.full_messages.to_sentence}"
-            Rails.logger.error("iPay#process!: #{error_msg}")
-            return failure_response("Failed to update payment details")
-          end
-          Rails.logger.info("iPay#process!: Successfully updated payment source")
-        rescue StandardError => e
-          error_msg = "Error saving payment source: #{e.message}"
-          Rails.logger.error("iPay#process!: #{error_msg}\n#{e.backtrace.join("\n")}")
-          return failure_response("Payment processing error. Please try again.")
-        end
-      else
-        Rails.logger.info("iPay#process!: Using existing payment source with phone: #{phone_digits}")
+
+      # Validate payment amount
+      unless amount.to_f > 0
+        return failure_response('Invalid payment amount')
       end
 
       # Update payment amount if needed
-      amount_diff = (payment.amount.to_f - amount).abs
-      if amount_diff > Float::EPSILON
-        Rails.logger.info("iPay#process!: Updating payment amount from #{payment.amount} to #{amount}")
+      if (payment.amount.to_f - amount.to_f).abs > Float::EPSILON
         payment.amount = amount
-        begin
-          payment.save!
-          Rails.logger.info("iPay#process!: Successfully updated payment amount to #{payment.amount}")
-        rescue StandardError => e
-          error_msg = "Failed to update payment amount: #{e.message}"
-          Rails.logger.error("iPay#process!: #{error_msg}\n#{e.backtrace.join("\n")}")
-          return failure_response("Failed to update payment amount")
-        end
-      else
-        Rails.logger.debug("iPay#process!: No amount update needed (difference: #{amount_diff})")
+        payment.save!
       end
 
       # Store phone number in session if we have a controller context
-      if options[:controller]&.respond_to?(:session)
-        Rails.logger.debug("iPay#process!: Storing phone number in session")
-        options[:controller].session[:ipay_phone_number] = phone_digits
-      else
-        Rails.logger.debug("iPay#process!: No controller context available for session storage")
-      end
+      options[:controller].session[:ipay_phone_number] = phone if options[:controller]&.respond_to?(:session)
 
-      # Final validation before completing processing
-      begin
-        Rails.logger.info("iPay#process!: Final payment validation")
-        
-        # Ensure payment is in the correct state
-        unless payment.respond_to?(:started_processing!)
-          error_msg = "Payment does not support started_processing! method"
-          Rails.logger.error("iPay#process!: #{error_msg}")
-          return failure_response("Payment processing error")
-        end
-        
-        # Transition payment to processing state
-        Rails.logger.info("iPay#process!: Transitioning payment to processing state")
-        payment.started_processing!
-        
-        # Verify the state transition was successful
-        if payment.state != 'processing' && payment.state != 'pending'
-          error_msg = "Failed to transition payment to processing state. Current state: #{payment.state}"
-          Rails.logger.error("iPay#process!: #{error_msg}")
-          return failure_response("Payment processing error")
-        end
-        
-        Rails.logger.info("iPay#process!: Payment processing started successfully. Current state: #{payment.state}")
-        
-        # Prepare success response with detailed payment information
-        success_response('Payment processing started', {
-          payment: {
-            id: payment.id,
-            number: payment.number,
-            state: payment.state,
-            amount: payment.amount.to_f,
-            currency: payment.currency,
-            payment_method_id: payment.payment_method_id,
-            source_type: payment.source_type,
-            source_id: payment.source_id,
-            created_at: payment.created_at,
-            updated_at: payment.updated_at
-          },
-          order: {
-            id: payment.order.id,
-            number: payment.order.number,
-            state: payment.order.state,
-            total: payment.order.total.to_f,
-            currency: payment.order.currency,
-            email: payment.order.email,
-            user_id: payment.order.user_id
-          },
-          next_steps: {
-            redirect_url: nil,  # Will be set by the controller
-            poll_url: "/api/v1/ipay/status/#{payment.number}",
-            callback_url: callback_url(payment)
-          },
-          metadata: {
-            timestamp: Time.current.iso8601,
-            request_id: options[:request_id],
-            **((session_id = options.dig(:controller, :session, :session_id) if options[:controller]&.respond_to?(:session)) ? { session_id: session_id } : {})
-          }.compact
-        })
-        
-      rescue StandardError => e
-        error_msg = "Error during final payment processing: #{e.message}"
-        Rails.logger.error("iPay#process!: #{error_msg}\n#{e.backtrace.join("\n")}")
-        failure_response("Payment processing failed: #{e.message}")
-      end
+      # Transition payment to processing state
+      payment.started_processing! if payment.respond_to?(:started_processing!)
+
+      success_response('Payment processing started')
     rescue StandardError => e
-      error_msg = "Unexpected error in payment processing: #{e.message}"
-      Rails.logger.error("iPay#process!: #{error_msg}\n#{e.backtrace.join("\n")}")
-      failure_response("Payment processing failed. Please try again.")
+      failure_response("Payment processing failed")
     end
 
     # Generate HMAC SHA1 hash for iPay
@@ -1149,54 +695,20 @@ module Spree
       preferred_test_mode ? 'https://sandbox.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'
     end
 
-    def success_response(message = 'Success', data = {})
-      Rails.logger.debug("iPay#success_response: #{message}")
-      
-      # Prepare response data with defaults
-      response_data = {
-        success: true,
-        message: message,
-        test_mode: test_mode?,
-        timestamp: Time.current.iso8601
-      }.merge(data)
-      
-      # Log the response data (without sensitive information)
-      log_data = response_data.dup
-      log_data.delete(:hash_key) if log_data.key?(:hash_key)
-      Rails.logger.debug("iPay#success_response data: #{log_data.inspect}")
-      
-      # Return the response object
+    def success_response(message = 'Success')
       ActiveMerchant::Billing::Response.new(
         true,
         message,
-        response_data,
+        {},
         test: test_mode?
       )
     end
 
-    def failure_response(message = 'Failed', error_details = {})
-      Rails.logger.error("iPay#failure_response: #{message}")
-      
-      # Prepare error data with defaults
-      error_data = {
-        success: false,
-        message: message,
-        test_mode: test_mode?,
-        timestamp: Time.current.iso8601,
-        error_code: error_details[:code] || 'payment_error',
-        error_details: error_details.except(:code)
-      }
-      
-      # Log the error details (without sensitive information)
-      log_data = error_data.dup
-      log_data.delete(:hash_key) if log_data.key?(:hash_key)
-      Rails.logger.error("iPay#failure_response details: #{log_data.inspect}")
-      
-      # Return the error response object
+    def failure_response(message = 'Failed')
       ActiveMerchant::Billing::Response.new(
         false,
         message,
-        error_data,
+        {},
         test: test_mode?
       )
     end
