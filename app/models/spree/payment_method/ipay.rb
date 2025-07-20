@@ -137,12 +137,35 @@ module Spree
 
     def process_payment(payment)
       # Log the start of payment processing
-      Rails.logger.info("iPay#process_payment: Starting payment processing for payment ID: #{payment.id}")
+      Rails.logger.info("iPay#process_payment: Starting payment processing for payment ID: #{payment&.id}")
       
       # Ensure we have a valid payment and order
       unless payment.is_a?(Spree::Payment)
         Rails.logger.error("iPay#process_payment: Invalid payment object provided")
         return failure_response("Invalid payment")
+      end
+      
+      # If payment is in a terminal state, create a new one
+      if payment.failed? || payment.void? || payment.invalid?
+        Rails.logger.info("iPay#process_payment: Creating new payment due to terminal state: #{payment.state}")
+        order = payment.order
+        
+        # Void the old payment
+        begin
+          payment.void_transaction! unless payment.void?
+        rescue => e
+          Rails.logger.error("iPay#process_payment: Error voiding old payment: #{e.message}")
+        end
+        
+        # Create a new payment
+        payment = order.payments.create!(
+          payment_method: payment.payment_method,
+          amount: payment.amount,
+          source: payment.source,
+          state: 'checkout'
+        )
+        
+        Rails.logger.info("iPay#process_payment: Created new payment ID: #{payment.id}")
       end
       
       unless payment.order.present?
@@ -151,6 +174,13 @@ module Spree
       end
       
       Rails.logger.info("iPay#process_payment: Processing payment for order ##{payment.order.number}")
+      
+      # Ensure payment is in a processable state
+      unless payment.checkout? || payment.pending?
+        error_msg = "Payment is not in a processable state (current state: #{payment.state})"
+        Rails.logger.error("iPay#process_payment: #{error_msg}")
+        return failure_response(error_msg)
+      end
       
       # Get phone number from params or session
       phone = nil
@@ -484,24 +514,10 @@ module Spree
       else
         failure_response(response['message'] || 'Payment void failed')
       end
-    rescue StandardError => e
-      failure_response("Payment void failed: #{e.message}")
-    end
-
-    def process!(phone: nil, payment: nil, amount: nil, options: {})
-      # Log the start of payment processing
-      Rails.logger.info("iPay#process!: Starting payment processing for payment ID: #{payment&.id}")
-      Rails.logger.debug("iPay#process!: Phone: #{phone}, Amount: #{amount}, Options: #{options.inspect}")
       
       # Ensure we have all required parameters
       if phone.blank?
         error_msg = "Phone number is required"
-        Rails.logger.error("iPay#process!: #{error_msg}")
-        return failure_response(error_msg)
-      end
-      
-      if payment.nil?
-        error_msg = "Payment is required"
         Rails.logger.error("iPay#process!: #{error_msg}")
         return failure_response(error_msg)
       end
