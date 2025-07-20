@@ -281,17 +281,29 @@ module Spree
     
     def reset_incomplete_payment_if_any
       return unless @order.payment_required?
+      return unless @order.payment?
 
-      last_payment = @order.payments.last
+      # Get the most recent payment that's not completed
+      last_payment = @order.payments.where.not(state: 'completed').last
       return unless last_payment
-      return if last_payment.completed?
 
-      # Only invalidate if payment is processing/pending and older than 10 minutes
-      if (last_payment.processing? || last_payment.pending?) && 
-         last_payment.updated_at < 10.minutes.ago
-        last_payment.invalidate!
+      # If we have an incomplete payment, invalidate it and create a new one
+      if last_payment.processing? || last_payment.pending?
+        Rails.logger.info("Invalidating incomplete payment: #{last_payment.number}")
+        last_payment.void_transaction! if last_payment.can_void?
+        last_payment.invalidate! if last_payment.can_invalidate?
+        
+        # Create a new payment with the same method
+        new_payment = @order.payments.create!(
+          payment_method_id: last_payment.payment_method_id,
+          amount: last_payment.amount,
+          state: 'checkout'
+        )
+        
+        # Update order's payment state
         @order.update(payment_state: 'balance_due')
-        @order.next! if @order.payment?
+        
+        Rails.logger.info("Created new payment: #{new_payment.number} for order #{@order.number}")
       end
     end
   end
