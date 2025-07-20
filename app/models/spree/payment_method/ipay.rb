@@ -252,6 +252,18 @@ module Spree
       payment = options[:payment] || (source.respond_to?(:payment) ? source.payment : nil)
       Rails.logger.debug("iPay#authorize: Payment from options/source: #{payment&.id}")
       
+      # If we have an order number in options, try to find the payment that way
+      if payment.nil? && options[:order_id].present?
+        order_number = options[:order_id].to_s.split('-').first # Handle formats like 'R940832146-PLGSZU94'
+        Rails.logger.debug("iPay#authorize: Looking up order by number: #{order_number}")
+        order = Spree::Order.find_by(number: order_number)
+        if order
+          Rails.logger.debug("iPay#authorize: Found order #{order.number}, looking for payments with method_id: #{id}")
+          payment = order.payments.where(payment_method_id: id).order(created_at: :desc).first
+          Rails.logger.debug("iPay#authorize: Found payment from order: #{payment&.id}")
+        end
+      end
+      
       # Try to get payment from source attributes
       if payment.nil? && source.respond_to?(:payment_id) && source.payment_id.present?
         Rails.logger.debug("iPay#authorize: Looking up payment by source.payment_id: #{source.payment_id}")
@@ -259,13 +271,13 @@ module Spree
         Rails.logger.debug("iPay#authorize: Found payment by source.payment_id: #{payment&.id}")
       end
       
-      # Try to get payment from order
+      # Try to get payment from order_id in source
       if payment.nil? && source.respond_to?(:order_id) && source.order_id.present?
         Rails.logger.debug("iPay#authorize: Looking up order by source.order_id: #{source.order_id}")
         order = Spree::Order.find_by(id: source.order_id)
         if order
           Rails.logger.debug("iPay#authorize: Found order #{order.number}, looking for payments with method_id: #{id}")
-          payment = order.payments.where(payment_method_id: id).last
+          payment = order.payments.where(payment_method_id: id).order(created_at: :desc).first
           Rails.logger.debug("iPay#authorize: Found payment from order: #{payment&.id}")
         end
       end
@@ -276,11 +288,11 @@ module Spree
         payment = options[:originator]
       end
       
-      # If we still don't have a payment, try to find it by response code
-      if payment.nil? && options[:response_code].present?
-        Rails.logger.debug("iPay#authorize: Looking for payment with response_code: #{options[:response_code]}")
-        payment = Spree::Payment.find_by(response_code: options[:response_code])
-        Rails.logger.debug("iPay#authorize: Found payment by response_code: #{payment&.id}")
+      # If we still don't have a payment, try to find it by the most recent payment for this source
+      if payment.nil? && source.id.present?
+        Rails.logger.debug("iPay#authorize: Looking for most recent payment with source_id: #{source.id}")
+        payment = Spree::Payment.where(source_id: source.id, payment_method_id: id).order(created_at: :desc).first
+        Rails.logger.debug("iPay#authorize: Found payment by source_id: #{payment&.id}")
       end
       
       # If we still don't have a payment, log all available information and fail
