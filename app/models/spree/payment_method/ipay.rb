@@ -445,7 +445,7 @@ module Spree
       begin
         # Process the payment
         Rails.logger.info("iPay#authorize: Processing payment with amount: #{amount}")
-        result = process!(phone: phone, payment: payment, amount: amount, options: options)
+        result = process_payment(payment)
         
         if result.success?
           Rails.logger.info("iPay#authorize: Payment processed successfully. Response: #{result.params}")
