@@ -246,28 +246,62 @@ module Spree
     end
 
     def authorize(amount, source, options = {})
+      Rails.logger.info("iPay#authorize: Starting authorization for amount: #{amount}")
+      
       # Get the payment from options if available, otherwise use source
       payment = options[:payment] || (source.respond_to?(:payment) ? source.payment : nil)
+      Rails.logger.debug("iPay#authorize: Payment from options/source: #{payment&.id}")
       
-      # If we still don't have a payment, try to get it from the source attributes
+      # Try to get payment from source attributes
       if payment.nil? && source.respond_to?(:payment_id) && source.payment_id.present?
+        Rails.logger.debug("iPay#authorize: Looking up payment by source.payment_id: #{source.payment_id}")
         payment = Spree::Payment.find_by(id: source.payment_id)
+        Rails.logger.debug("iPay#authorize: Found payment by source.payment_id: #{payment&.id}")
       end
       
-      # If we still don't have a payment, try to get it from the order
+      # Try to get payment from order
       if payment.nil? && source.respond_to?(:order_id) && source.order_id.present?
+        Rails.logger.debug("iPay#authorize: Looking up order by source.order_id: #{source.order_id}")
         order = Spree::Order.find_by(id: source.order_id)
-        payment = order.payments.where(payment_method_id: id).last if order
+        if order
+          Rails.logger.debug("iPay#authorize: Found order #{order.number}, looking for payments with method_id: #{id}")
+          payment = order.payments.where(payment_method_id: id).last
+          Rails.logger.debug("iPay#authorize: Found payment from order: #{payment&.id}")
+        end
       end
       
-      # If we still don't have a payment, create a new one
+      # Try to get payment from originator
       if payment.nil? && options[:originator].is_a?(Spree::Payment)
+        Rails.logger.debug("iPay#authorize: Using payment from originator: #{options[:originator].id}")
         payment = options[:originator]
       end
       
-      # If we still don't have a payment, fail
+      # If we still don't have a payment, try to find it by response code
+      if payment.nil? && options[:response_code].present?
+        Rails.logger.debug("iPay#authorize: Looking for payment with response_code: #{options[:response_code]}")
+        payment = Spree::Payment.find_by(response_code: options[:response_code])
+        Rails.logger.debug("iPay#authorize: Found payment by response_code: #{payment&.id}")
+      end
+      
+      # If we still don't have a payment, log all available information and fail
       if payment.nil?
-        return failure_response("Could not determine payment for authorization")
+        error_details = {
+          source_type: source.class.name,
+          source_attributes: source.attributes,
+          options: options.except(:password, :card, :key, :login, :billing_address, :shipping_address),
+          backtrace: caller(0, 5)  # Get the first 5 lines of the backtrace
+        }
+        
+        Rails.logger.error("iPay#authorize: Could not determine payment for authorization. Details: #{error_details.to_json}")
+        
+        return failure_response(
+          "Payment processing failed: Could not find payment record",
+          code: 'payment_not_found',
+          source_type: source.class.name,
+          source_id: source.id,
+          order_id: source.respond_to?(:order_id) ? source.order_id : nil,
+          payment_method_id: id
+        )
       end
       
       order = payment.order
@@ -293,6 +327,7 @@ module Spree
       return failure_response("Phone number is required") if phone.blank?
 
       # Update source with phone if needed
+      # Update source phone if needed
       if source.phone.blank? && phone.present?
         source.phone = phone
         source.save(validate: false)
@@ -312,8 +347,37 @@ module Spree
         payment.source.save(validate: false)
       end
 
-      # Process the payment
-      process!(phone: phone, payment: payment, amount: amount, options: options)
+      order = payment.order
+      phone = source.phone
+      
+      Rails.logger.info("iPay#authorize: Found payment #{payment.number} for order #{order.number}")
+      Rails.logger.debug("iPay#authorize: Payment state: #{payment.state}, Amount: #{payment.amount}, Phone: #{phone}")
+      
+      begin
+        # Process the payment
+        Rails.logger.info("iPay#authorize: Processing payment with amount: #{amount}")
+        result = process!(phone: phone, payment: payment, amount: amount, options: options)
+        
+        if result.success?
+          Rails.logger.info("iPay#authorize: Payment processed successfully. Response: #{result.params}")
+          # Update payment with response code if available
+          if result.authorization.present?
+            payment.update_columns(
+              response_code: result.authorization,
+              state: 'pending',
+              updated_at: Time.current
+            )
+          end
+        else
+          Rails.logger.error("iPay#authorize: Payment processing failed: #{result.message}")
+        end
+        
+        result
+      rescue StandardError => e
+        error_msg = "Unexpected error during payment processing: #{e.message}"
+        Rails.logger.error("iPay#authorize: #{error_msg}\n#{e.backtrace.join("\n")}")
+        failure_response("Payment processing failed: #{e.message}", code: 'processing_error')
+      end
     rescue StandardError => e
       failure_response("Authorization failed: #{e.message}")
     end
