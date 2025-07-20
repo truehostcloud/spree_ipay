@@ -160,7 +160,30 @@ module Spree
     end
 
     def authorize(amount, source, options = {})
-      options[:originator]
+      # Get the payment from options if available, otherwise use source
+      payment = options[:payment] || (source.respond_to?(:payment) ? source.payment : nil)
+      
+      # If we still don't have a payment, try to get it from the source attributes
+      if payment.nil? && source.respond_to?(:payment_id) && source.payment_id.present?
+        payment = Spree::Payment.find_by(id: source.payment_id)
+      end
+      
+      # If we still don't have a payment, try to get it from the order
+      if payment.nil? && source.respond_to?(:order_id) && source.order_id.present?
+        order = Spree::Order.find_by(id: source.order_id)
+        payment = order.payments.where(payment_method_id: id).last if order
+      end
+      
+      # If we still don't have a payment, create a new one
+      if payment.nil? && options[:originator].is_a?(Spree::Payment)
+        payment = options[:originator]
+      end
+      
+      # If we still don't have a payment, fail
+      if payment.nil?
+        return failure_response("Could not determine payment for authorization")
+      end
+      
       order = payment.order
 
       # Ensure the order is in the correct state
@@ -174,11 +197,20 @@ module Spree
         return failure_response("Failed to update payment source")
       end
 
-      # Get phone from source
-      phone = source.phone
+      # Get phone from source or options
+      phone = source.phone || options[:phone]
+      
+      if phone.blank? && options[:controller]&.respond_to?(:session)
+        phone = options[:controller].session[:ipay_phone_number]
+      end
+      
+      return failure_response("Phone number is required") if phone.blank?
 
-      # Store phone number in session if we have a controller context
-      options[:controller].session[:ipay_phone_number] = phone if options[:controller]&.respond_to?(:session)
+      # Update source with phone if needed
+      if source.phone.blank? && phone.present?
+        source.phone = phone
+        source.save(validate: false)
+      end
 
       # Ensure payment has the source assigned
       if payment.source.nil? || !payment.source.is_a?(Spree::IpaySource)
@@ -189,9 +221,9 @@ module Spree
         unless payment.save
           return failure_response("Failed to save payment: #{payment.errors.full_messages.to_sentence}")
         end
-      else
+      elsif payment.source.respond_to?(:phone) && payment.source.phone.blank? && phone.present?
         payment.source.phone = phone
-        return failure_response("Failed to update payment source") if payment.source.changed? && !payment.source.save
+        payment.source.save(validate: false)
       end
 
       # Process the payment
@@ -249,24 +281,55 @@ module Spree
 
     def process!(phone: nil, payment: nil, amount: nil, options: {})
       # Validate required parameters
-      unless phone.present? && payment.present? && payment.order.present? && amount.present?
-        return failure_response("Missing required parameters")
+      unless payment.present? && payment.order.present?
+        return failure_response("Missing payment or order information")
       end
-
-      # Validate phone number format
-      phone_digits = phone.to_s.gsub(/\D/, '')
-      unless phone_digits.match?(/^\d{10}$/)
-        return failure_response("Invalid phone number format")
+      
+      # Ensure phone is present and properly formatted
+      phone = phone.to_s.strip
+      phone_digits = phone.gsub(/\D/, '')
+      
+      # Validate phone number format (10 digits for Kenya)
+      if phone_digits.blank?
+        return failure_response("Phone number is required")
+      elsif phone_digits.length != 10 && phone_digits.length != 12
+        # Allow both 10-digit (07...) and 12-digit (2547...) formats
+        return failure_response("Invalid phone number format. Use 07XXXXXXXX or 2547XXXXXXXX")
       end
-
-      # Validate credentials are set
+      
+      # Convert to 254 format if needed
+      phone_digits = "254#{phone_digits[1..-1]}" if phone_digits.length == 10 && phone_digits.start_with?('0')
+      
+      # Ensure amount is valid
+      amount = amount.to_f
+      if amount <= 0
+        amount = payment.amount.to_f
+        if amount <= 0
+          return failure_response("Invalid payment amount")
+        end
+      end
+      
+      # Ensure payment method is properly configured
       if preferred_vendor_id.blank? || preferred_hash_key.blank?
-        return failure_response("Payment configuration error")
+        Rails.logger.error("iPay configuration error: Missing vendor_id or hash_key")
+        return failure_response("Payment configuration error. Please contact support.")
       end
-
-      # Validate payment amount
-      unless amount.to_f > 0
-        return failure_response('Invalid payment amount')
+      
+      # Update payment state
+      begin
+        payment.started_processing! if payment.can_start_processing?
+      rescue StandardError => e
+        Rails.logger.error("Failed to update payment state: #{e.message}")
+        return failure_response("Failed to initialize payment processing")
+      end
+      
+      # Update source with phone if needed
+      if payment.source.is_a?(Spree::IpaySource) && payment.source.phone.blank?
+        payment.source.phone = phone_digits
+        unless payment.source.save(validate: false)
+          Rails.logger.error("Failed to update payment source: #{payment.source.errors.full_messages.to_sentence}")
+          return failure_response("Failed to update payment details")
+        end
       end
 
       # Update payment amount if needed
