@@ -316,7 +316,43 @@ module Spree
         )
       end
       
+      # Ensure the order is in a confirmable state
       order = payment.order
+      unless order.confirmable?
+        error_msg = "Order #{order.number} is not in a confirmable state. Current state: #{order.state}"
+        Rails.logger.error("iPay#authorize: #{error_msg}")
+        
+        # Try to advance the order state if possible
+        begin
+          Rails.logger.info("iPay#authorize: Attempting to advance order state from #{order.state}")
+          while order.next && order.state != 'confirm' && order.state != 'complete'
+            Rails.logger.info("iPay#authorize: Advanced order to state: #{order.state}")
+          end
+          
+          # Reload the order to get the latest state
+          order.reload
+          Rails.logger.info("iPay#authorize: Order state after advancement: #{order.state}")
+          
+          # If still not confirmable, return error
+          unless order.confirmable?
+            return failure_response(
+              "Order is not in a confirmable state. Current state: #{order.state}",
+              code: 'order_not_confirmable',
+              order_state: order.state,
+              order_number: order.number,
+              payment_id: payment.id
+            )
+          end
+        rescue StandardError => e
+          Rails.logger.error("iPay#authorize: Error advancing order state: #{e.message}")
+          return failure_response(
+            "Error preparing order for payment: #{e.message}",
+            code: 'order_state_error',
+            order_state: order.state,
+            error: e.message
+          )
+        end
+      end
 
       # Ensure the order is in the correct state
       return failure_response("Order is not in a confirmable state") unless order.checkout_steps.include?('confirm')
