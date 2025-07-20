@@ -7,6 +7,7 @@ module Spree
       base.before_action :log_checkout_state, only: [:update]
       base.before_action :handle_ipay_redirect, only: [:update]
       base.before_action :set_request_variant
+      base.before_action :ensure_proper_order_state, only: [:edit, :update]
     end
     
     def log_checkout_state
@@ -253,6 +254,22 @@ module Spree
               validation_errors: @order.errors.full_messages
             }, status: :unprocessable_entity
           end
+        end
+      end
+    end
+    
+    # Ensures the order is in the correct state when items are modified after incomplete payment
+    def ensure_proper_order_state
+      return unless @order
+
+      # If order is in payment or confirm state but has incomplete payments
+      if %w[payment confirm].include?(@order.state) && 
+         @order.payments.any? { |p| p.pending? || p.processing? }
+        
+        # Reset to payment state to ensure proper validation
+        @order.update_columns(state: 'payment', updated_at: Time.current)
+        @order.payments.each do |payment|
+          payment.update_columns(state: 'checkout') if payment.pending? || payment.processing?
         end
       end
     end
