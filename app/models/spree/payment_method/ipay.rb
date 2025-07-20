@@ -145,35 +145,39 @@ module Spree
         return failure_response("Invalid payment")
       end
       
+      order = payment.order
+      
       # If payment is in a terminal state, create a new one
-      if payment.failed? || payment.void? || payment.invalid?
+      if payment.failed? || payment.void? || payment.invalid? || payment.completed?
         Rails.logger.info("iPay#process_payment: Creating new payment due to terminal state: #{payment.state}")
-        order = payment.order
         
-        # Void the old payment
-        begin
-          payment.void_transaction! unless payment.void?
-        rescue => e
-          Rails.logger.error("iPay#process_payment: Error voiding old payment: #{e.message}")
-        end
-        
-        # Create a new payment
-        payment = order.payments.create!(
+        # Create a new payment in checkout state
+        new_payment = order.payments.create!(
           payment_method: payment.payment_method,
           amount: payment.amount,
           source: payment.source,
           state: 'checkout'
         )
         
+        # Void the old payment if it's not already voided
+        unless payment.void?
+          begin
+            payment.void_transaction!
+          rescue => e
+            Rails.logger.error("iPay#process_payment: Error voiding old payment: #{e.message}")
+          end
+        end
+        
+        payment = new_payment
         Rails.logger.info("iPay#process_payment: Created new payment ID: #{payment.id}")
       end
       
-      unless payment.order.present?
+      unless order.present?
         Rails.logger.error("iPay#process_payment: No order found for payment ID: #{payment.id}")
         return failure_response("Order not found")
       end
       
-      Rails.logger.info("iPay#process_payment: Processing payment for order ##{payment.order.number}")
+      Rails.logger.info("iPay#process_payment: Processing payment for order ##{order.number}")
       
       # Ensure payment is in a processable state
       unless payment.checkout? || payment.pending?
@@ -445,23 +449,37 @@ module Spree
       begin
         # Process the payment
         Rails.logger.info("iPay#authorize: Processing payment with amount: #{amount}")
+        
+        # Mark payment as processing
+        payment.started_processing!
+        
         result = process_payment(payment)
         
         if result.success?
           Rails.logger.info("iPay#authorize: Payment processed successfully. Response: #{result.params}")
-          # Update payment with response code if available
+          
+          # Only update the payment with response code, but keep it in processing state
+          # The callback from iPay will handle the final state transition
           if result.authorization.present?
             payment.update_columns(
               response_code: result.authorization,
-              state: 'pending',
               updated_at: Time.current
             )
           end
+          
+          # Return a success response but don't complete the order yet
+          success_response("Payment processing started", {
+            payment_id: payment.id,
+            order_number: order.number,
+            amount: payment.amount,
+            currency: order.currency,
+            phone: phone
+          })
         else
+          payment.failure!
           Rails.logger.error("iPay#authorize: Payment processing failed: #{result.message}")
+          result
         end
-        
-        result
       rescue StandardError => e
         error_msg = "Unexpected error during payment processing: #{e.message}"
         Rails.logger.error("iPay#authorize: #{error_msg}\n#{e.backtrace.join("\n")}")
