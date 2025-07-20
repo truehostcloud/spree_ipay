@@ -79,52 +79,54 @@ module Spree
     end
 
     def generate_ipay_form_html(payment, phone, ipay_method)
-      # Get required values from payment method preferences
-      live = ipay_method.preferred_test_mode ? '0' : '1'
-      oid = payment.order.number
-      inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
-      eml = payment.order.email
-      vid = ipay_method.preferred_vendor_id.presence || ''
-      curr = ipay_method.preferred_currency.presence || 'KES'
-      p1 = ""
-      p2 = ""
-      p3 = ""
-      p4 = ""
-      cbk = ipay_method.preferred_callback_url.presence || "https://example.com/ipay/callback"
-      cst = "1"
-      crl = "2"
-
-      # Generate the hash with the phone number
+      # Generate the hash with the phone number first (this also validates and formats our values)
       hsh = ipay_method.ipay_signature_hash(payment, phone)
-
+      
+      # Get values from payment method preferences
+      live = ipay_method.preferred_test_mode ? '0' : '1'
+      oid = payment.order.number.to_s.gsub(/[^a-zA-Z0-9]/, '')[0...26] # Max 26 alphanumeric chars
+      inv = oid[0...15] # Max 15 chars, use order ID if not specified
+      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents, no decimals
+      tel = (phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000").gsub(/\D/, '')[0...15] # Max 15 digits
+      eml = payment.order.email.to_s[0...30] # Max 30 chars
+      vid = (ipay_method.preferred_vendor_id.presence || '').downcase[0...12] # Max 12 chars, lowercase
+      curr = (ipay_method.preferred_currency.presence || 'KES')[0...3] # Max 3 chars
+      
+      # Prepare callback URL - remove any invalid characters
+      cbk = (ipay_method.preferred_callback_url.presence || "https://#{ipay_method.base_url}/ipay/callback").gsub(/[;:~`!%^*\-><&_]/i, '')
+      
       # Prepare iPay parameters - must match the exact order and parameters used in hash generation
       ipay_params = {
         'live' => live,
         'oid' => oid,
         'inv' => inv,
         'ttl' => ttl,
-        'tel' => phone || '0700000000',
+        'tel' => tel,
         'eml' => eml,
         'vid' => vid,
         'curr' => curr,
-        'p1' => p1,
-        'p2' => p2,
-        'p3' => p3,
-        'p4' => p4,
+        'p1' => '',
+        'p2' => '',
+        'p3' => '',
+        'p4' => '',
         'cbk' => cbk,
-        'cst' => cst,
-        'crl' => crl,
+        'lbk' => cbk, # Use same as callback for simplicity
+        'cst' => '1', # 1 = send customer email notifications
+        'crl' => '0', # 0 = HTTP/HTTPS callback
         'hsh' => hsh
       }
 
       # Add channel parameters based on preferences
-      %i[
-        mpesa bonga airtel equity mobilebanking
-        creditcard unionpay mvisa vooma pesalink autopay
-      ].each do |channel|
-        ipay_params[channel.to_s] = ipay_method.preferences["#{channel}"] ? '1' : '0'
+      %w[mpesa bonga airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay].each do |channel|
+        # Default to 1 (enabled) for mpesa, 0 (disabled) for others if not set
+        default_value = (channel == 'mpesa') ? '1' : '0'
+        ipay_params[channel] = ipay_method.preferences.fetch(channel, default_value) ? '1' : '0'
       end
+
+      # Log the parameters being sent to iPay (remove in production)
+      Rails.logger.info("iPay Form Parameters: #{ipay_params.to_json}")
+      Rails.logger.info("iPay Test Mode: #{ipay_method.preferred_test_mode ? 'Yes' : 'No'}")
+      Rails.logger.info("iPay Form Action: #{ipay_method.preferred_test_mode ? 'https://sandbox.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'}")
 
       # Generate the form HTML with full-page flexible layout and improved button positioning
       <<~HTML
@@ -155,7 +157,7 @@ module Spree
             <h2 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center">Redirecting to iPay</h2>
             <p class="text-gray-600 text-lg sm:text-xl text-center">Please wait while we securely redirect you to the payment page.</p>
             <p class="text-sm sm:text-base text-gray-500 text-center">If you are not redirected automatically, please click the button below.</p>
-            <form id="ipay-payment-form" action="#{ipay_method.preferred_test_mode ? 'https://payments.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'}" method="post" class="flex justify-center">
+            <form id="ipay-payment-form" action="#{ipay_method.preferred_test_mode ? 'https://sandbox.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'}" method="post" class="flex justify-center">
               #{ipay_params.map { |k, v| "<input type='hidden' name='#{k}' value='#{ERB::Util.html_escape(v)}'>" }.join("\n")}
               <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 transition duration-300">Proceed to Payment</button>
             </form>

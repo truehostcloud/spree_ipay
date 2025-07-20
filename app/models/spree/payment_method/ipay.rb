@@ -292,7 +292,7 @@ module Spree
     # @param phone [String] The customer's phone number
     def ipay_signature_hash(payment, phone = nil)
       # Get values from payment method preferences
-      vendor_id = preferred_vendor_id.to_s
+      vendor_id = preferred_vendor_id.to_s.downcase # Must be lowercase
       hash_key = preferred_hash_key.to_s
 
       # Validate required preferences
@@ -304,32 +304,33 @@ module Spree
       live = test_mode? ? "0" : "1"
 
       # Prepare values - must match exactly what will be sent in the form
-      oid = payment.order.number.to_s
-      inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
-      tel = phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000"
-      eml = payment.order.email.to_s
-      vid = vendor_id
-      curr = preferred_currency.presence || 'KES'
+      oid = payment.order.number.to_s.gsub(/[^a-zA-Z0-9]/, '')[0...26] # Max 26 alphanumeric chars
+      inv = oid[0...15] # Max 15 chars, use order ID if not specified
+      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents, no decimals
+      tel = (phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000").gsub(/\D/, '')[0...15] # Max 15 digits
+      eml = payment.order.email.to_s[0...30] # Max 30 chars
+      vid = vendor_id[0...12] # Max 12 chars
+      curr = (preferred_currency.presence || 'KES')[0...3] # Max 3 chars
       p1 = ""
       p2 = ""
       p3 = ""
       p4 = ""
-      cbk = preferred_callback_url.presence || "https://#{base_url}/ipay/confirm"
+      cbk = (preferred_callback_url.presence || "https://#{base_url}/ipay/confirm").gsub(/[;:~`!%^*\-><&_]/i, '') # Remove invalid chars
       cst = "1"
-      crl = "2"
+      crl = "0" # 0 for HTTP/HTTPS callback
 
       # Create datastring in the exact order required by iPay
-      datastring = [
-        live, oid, inv, ttl, tel, eml, vid, curr,
-        p1, p2, p3, p4, cbk, cst, crl
-      ].join
+      # IMPORTANT: This exact order must be maintained
+      datastring = live + oid + inv + ttl + tel + eml + vid + curr + p1 + p2 + p3 + p4 + cbk + cst + crl
 
       # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
       digest = OpenSSL::Digest.new('sha1')
-      OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
+      hash = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
+      
+      # Ensure the hash is lowercase to match PHP's output
+      hash.downcase
     rescue StandardError => e
-      raise "Error generating hash"
+      raise "Error generating hash: #{e.message}"
     end
 
     def generate_ipay_form_html(payment)
@@ -423,19 +424,15 @@ module Spree
       }
 
       # Add channel parameters based on preferences
-
-      channels = %i[
-        mpesa bonga airtel equity mobilebanking
-        creditcard unionpay mvisa vooma pesalink autopay
-      ]
-
+      channels = %i[mpesa airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay]
+      
+      # Add channel parameters with string keys for the API
       channels.each do |channel|
-        channel_value = send("preferred_#{channel}") ? '1' : '0'
-        ipay_params[channel] = channel_value
+        ipay_params[channel.to_s] = send("preferred_#{channel}") ? '1' : '0'
       end
 
       # Generate form HTML
-      form_html = "<form id='ipay_form' action='https://payments.ipayafrica.com/v3/ke' method='POST'>\n"
+      form_html = "<form id='ipay_form' action='#{api_endpoint}' method='POST'>\n"
 
       # Add all parameters with proper escaping
       ipay_params.each do |key, value|
