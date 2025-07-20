@@ -118,9 +118,18 @@ module Spree
 
       # Add channel parameters based on preferences
       %w[mpesa bonga airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay].each do |channel|
-        # Default to 1 (enabled) for mpesa, 0 (disabled) for others if not set
-        default_value = (channel == 'mpesa') ? '1' : '0'
-        ipay_params[channel] = ipay_method.preferences.fetch(channel, default_value) ? '1' : '0'
+        # Use the proper preference accessor method
+        preference_method = "preferred_#{channel}"
+        is_enabled = if ipay_method.respond_to?(preference_method)
+                      ipay_method.send(preference_method)
+                    else
+                      # Fallback to default (mpesa enabled, others disabled)
+                      channel == 'mpesa'
+                    end
+        ipay_params[channel] = is_enabled ? '1' : '0'
+        
+        # Log each channel's status for debugging
+        Rails.logger.info("iPay Channel #{channel}: #{is_enabled ? 'ENABLED' : 'DISABLED'}")
       end
 
       # Log the parameters being sent to iPay (remove in production)
