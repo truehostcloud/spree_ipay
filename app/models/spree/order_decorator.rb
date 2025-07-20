@@ -64,11 +64,18 @@ module Spree
     private
     
     def reset_state_if_modified
-      # If line items changed and we're in a state beyond address, reset to payment
-      if line_items_changed? && %w[confirm complete].include?(state)
-        self.state = 'payment'
-        self.payment_state = 'balance_due'
-        Rails.logger.info("Order #{number}: Reset to payment state due to modifications")
+      # If we're in a state beyond address, check if line items have changed
+      if %w[confirm complete].include?(state)
+        # Check if any line items have been added, removed, or changed
+        line_items_changed = line_items.any? do |line_item|
+          line_item.changed? || line_item.new_record? || line_item.marked_for_destruction?
+        end
+        
+        if line_items_changed
+          self.state = 'payment'
+          self.payment_state = 'balance_due'
+          Rails.logger.info("Order #{number}: Reset to payment state due to modifications")
+        end
       end
     end
   end
