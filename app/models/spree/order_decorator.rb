@@ -20,13 +20,19 @@ module Spree
     end
 
     def payment_required?
+      # Always require payment for iPay to ensure the payment step isn't skipped
       ipay_payment = payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
-      ipay_payment ? false : super
+      ipay_payment ? true : super
     end
 
     def confirmation_required?
-      ipay_payment = payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
-      ipay_payment || super
+      # Only require confirmation if the payment is completed
+      ipay_payment = payments.valid.find { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
+      if ipay_payment
+        ipay_payment.completed?
+      else
+        super
+      end
     end
     
     def log_before_confirm
