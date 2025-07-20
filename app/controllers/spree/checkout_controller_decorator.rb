@@ -173,6 +173,7 @@ module Spree
         </html>
       HTML
     rescue StandardError => e
+      Rails.logger.error("Error generating iPay form: #{e.message}\n#{e.backtrace.join("\n")}")
       raise "Error generating payment form: #{e.message}"
     end
     # Override update action to handle JSON responses
