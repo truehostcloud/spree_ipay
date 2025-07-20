@@ -21,10 +21,15 @@ module Spree
 
     def handle_ipay_redirect
       begin
+        Rails.logger.info("IPAY_DEBUG: [handle_ipay_redirect] State: #{params[:state]}, Order: #{@order&.number}")
+        
         # Get phone number and store in session during payment state
         if params[:state] == "payment"
           phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
-          session[:ipay_phone_number] = phone if phone.present?
+          if phone.present?
+            session[:ipay_phone_number] = phone
+            Rails.logger.info("IPAY_DEBUG: [handle_ipay_redirect] Stored phone number in session")
+          end
         end
 
         # Generate form and redirect during confirm state
@@ -80,6 +85,8 @@ module Spree
     end
 
     def generate_ipay_form_html(payment, phone, ipay_method)
+      Rails.logger.info("IPAY_DEBUG: [generate_ipay_form_html] Payment: #{payment.number}, Order: #{payment.order.number}")
+      
       # Generate the hash with the phone number first (this also validates and formats our values)
       hsh = ipay_method.ipay_signature_hash(payment, phone)
       
@@ -92,6 +99,13 @@ module Spree
       eml = payment.order.email.to_s[0...30] # Max 30 chars
       vid = (ipay_method.preferred_vendor_id.presence || '').downcase[0...12] # Max 12 chars, lowercase
       curr = (ipay_method.preferred_currency.presence || 'KES')[0...3] # Max 3 chars
+      
+      Rails.logger.debug("IPAY_DEBUG: [generate_ipay_form_html] " \
+                        "Order: #{oid}, " \
+                        "Amount: #{payment.amount} #{curr}, " \
+                        "Phone: #{tel}, " \
+                        "Email: #{eml}, " \
+                        "Test Mode: #{live == '1' ? 'No' : 'Yes'}")
       
       # Prepare callback URL - remove any invalid characters
       cbk = (ipay_method.preferred_callback_url.presence || "https://#{ipay_method.base_url}/ipay/callback").gsub(/[;:~`!%^*\-><&_]/i, '')
@@ -281,29 +295,133 @@ module Spree
     
     def reset_incomplete_payment_if_any
       return unless @order.payment_required?
-      return unless @order.payment?
-
-      # Get the most recent payment that's not completed
-      last_payment = @order.payments.where.not(state: 'completed').last
-      return unless last_payment
-
-      # If we have an incomplete payment, invalidate it and create a new one
-      if last_payment.processing? || last_payment.pending?
-        Rails.logger.info("Invalidating incomplete payment: #{last_payment.number}")
-        last_payment.void_transaction! if last_payment.can_void?
-        last_payment.invalidate! if last_payment.can_invalidate?
+      
+      # Log current order state for debugging
+      Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Order[#{@order&.number || 'nil'}] " \
+                       "State: #{@order.state}, " \
+                       "Payment State: #{@order.payment_state}, " \
+                       "Total: #{@order.total}")
+      
+      # Get all incomplete payments
+      incomplete_payments = @order.payments.select { |p| !p.completed? && !p.failed? && !p.void? }
+      
+      Rails.logger.debug("IPAY_DEBUG: [reset_incomplete_payment_if_any] Found #{incomplete_payments.size} incomplete payments: " \
+                        "#{incomplete_payments.map { |p| "#{p.number}:#{p.state}" }.join(', ')}")
+      
+      # If we have any incomplete payments, handle them
+      if incomplete_payments.any?
+        Rails.logger.info("Found #{incomplete_payments.count} incomplete payments for order #{@order.number}")
         
-        # Create a new payment with the same method
-        new_payment = @order.payments.create!(
-          payment_method_id: last_payment.payment_method_id,
-          amount: last_payment.amount,
-          state: 'checkout'
-        )
+        # Void and invalidate all incomplete payments
+        incomplete_payments.each do |payment|
+          begin
+            Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Processing payment: " \
+                            "#{payment.number} (State: #{payment.state}, Amount: #{payment.amount})")
+            
+            # Skip if already void or invalid
+            if payment.void? || payment.invalid?
+              Rails.logger.debug("IPAY_DEBUG: [reset_incomplete_payment_if_any] Skipping - " \
+                               "Payment #{payment.number} is already #{payment.void? ? 'void' : 'invalid'}")
+              next
+            end
+            
+            # Void the payment if possible
+            if payment.can_void?
+              Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Voiding payment: #{payment.number}")
+              payment.void_transaction!
+            else
+              Rails.logger.debug("IPAY_DEBUG: [reset_incomplete_payment_if_any] Cannot void payment: #{payment.number} (State: #{payment.state})")
+            end
+            
+            # Invalidate the payment
+            if payment.can_invalidate?
+              Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Invalidating payment: #{payment.number}")
+              payment.invalidate!
+            else
+              Rails.logger.debug("IPAY_DEBUG: [reset_incomplete_payment_if_any] Cannot invalidate payment: " \
+                               "#{payment.number} (State: #{payment.state})")
+            end
+          rescue StandardError => e
+            Rails.logger.error("IPAY_DEBUG: [reset_incomplete_payment_if_any] Error processing payment #{payment.number}: " \
+                             "#{e.class}: #{e.message}\n#{e.backtrace.take(5).join("\n")}")
+          end
+        end
         
-        # Update order's payment state
-        @order.update(payment_state: 'balance_due')
+        # Reset order to payment state if not already there
+        if @order.state != 'payment'
+          Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Resetting order #{@order.number} to payment state")
+          
+          begin
+            @order.update_columns(
+              state: 'payment',
+              payment_state: 'balance_due',
+              updated_at: Time.current
+            )
+            Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Order #{@order.number} reset to payment state")
+          rescue => e
+            Rails.logger.error("IPAY_DEBUG: [reset_incomplete_payment_if_any] Failed to reset order state: " \
+                             "#{e.class}: #{e.message}")
+            raise
+          end
+          
+          # Create a new checkout payment if we don't have any valid ones
+          if @order.payments.valid.none?
+            last_payment = @order.payments.last
+            if last_payment&.payment_method
+              begin
+                new_payment = @order.payments.create!(
+                  payment_method_id: last_payment.payment_method_id,
+                  amount: @order.outstanding_balance,
+                  state: 'checkout'
+                )
+                Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Created new checkout payment: " \
+                                "#{new_payment.number} (Amount: #{new_payment.amount})")
+              rescue => e
+                Rails.logger.error("IPAY_DEBUG: [reset_incomplete_payment_if_any] Failed to create new payment: " \
+                                 "#{e.class}: #{e.message}")
+                raise
+              end
+            else
+              Rails.logger.warn("IPAY_DEBUG: [reset_incomplete_payment_if_any] No valid payment method found " \
+                               "for order #{@order.number}")
+            end
+          else
+            Rails.logger.debug("IPAY_DEBUG: [reset_incomplete_payment_if_any] Valid payments exist, not creating new one")
+          end
+          
+          # Redirect to payment step to ensure proper state handling
+          if params[:state] != 'payment' && request.get?
+            Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Redirecting to payment step")
+            redirect_to checkout_state_path('payment') and return
+          else
+            Rails.logger.debug("IPAY_DEBUG: [reset_incomplete_payment_if_any] No redirect needed - " \
+                             "params[:state]: #{params[:state]}, request.get?: #{request.get?}")
+          end
+        end
+      end
+      
+      # If we're in the confirm state but don't have a valid payment, go back to payment
+      if @order.state == 'confirm' && @order.payments.valid.none?
+        Rails.logger.warn("IPAY_DEBUG: [reset_incomplete_payment_if_any] Order #{@order.number} in confirm state " \
+                         "without valid payments, resetting to payment state")
         
-        Rails.logger.info("Created new payment: #{new_payment.number} for order #{@order.number}")
+        begin
+          @order.update_columns(
+            state: 'payment',
+            payment_state: 'balance_due',
+            updated_at: Time.current
+          )
+          Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Order #{@order.number} reset to payment state")
+          
+          if request.get?
+            Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Redirecting to payment step")
+            redirect_to checkout_state_path('payment') and return
+          end
+        rescue => e
+          Rails.logger.error("IPAY_DEBUG: [reset_incomplete_payment_if_any] Failed to reset order state: " \
+                           "#{e.class}: #{e.message}")
+          raise
+        end
       end
     end
   end
