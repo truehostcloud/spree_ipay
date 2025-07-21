@@ -93,7 +93,7 @@ module Spree
       curr = (ipay_method.preferred_currency.presence || 'KES')[0...3] # Max 3 chars
       
       # Prepare callback URL - remove any invalid characters
-      cbk = (ipay_method.preferred_callback_url.presence || "https://#{ipay_method.base_url}/ipay/callback").gsub(/[;:~`!%^*\-><&_]/i, '')
+      cbk = (ipay_method.preferred_callback_url.presence || "https://#{ipay_method.base_url}/ipay/confirm").gsub(/[;~`!%^*\-\u003c\u003e\u0026_]/i, '')
       
       # Prepare iPay parameters - must match the exact order and parameters used in hash generation
       ipay_params = {

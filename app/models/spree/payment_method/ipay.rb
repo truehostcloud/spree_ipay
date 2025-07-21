@@ -306,7 +306,7 @@ module Spree
       # Prepare values - must match exactly what will be sent in the form
       oid = payment.order.number.to_s.gsub(/[^a-zA-Z0-9]/, '')[0...26] # Max 26 alphanumeric chars
       inv = oid[0...15] # Max 15 chars, use order ID if not specified
-      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents, no decimals
+      ttl = payment.amount.to_i.to_s # Amount as integer, no decimals
       tel = (phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000").gsub(/\D/, '')[0...15] # Max 15 digits
       eml = payment.order.email.to_s[0...30] # Max 30 chars
       vid = vendor_id[0...12] # Max 12 chars
@@ -504,7 +504,7 @@ module Spree
         live: preferred_test_mode ? '0' : '1',
         oid: payment.order.number,
         inv: payment.order.number,
-        ttl: payment.amount.to_f.round(2).to_s,
+        ttl: payment.amount.to_i.to_s,
         tel: phone,
         eml: payment.order.email,
         vid: preferred_vendor_id,
@@ -620,7 +620,7 @@ module Spree
       live = preferred_test_mode ? '0' : '1'
       oid = payment.order.number
       inv = payment.order.number
-      ttl = payment.amount.to_f.round(2).to_s
+      ttl = payment.amount.to_i.to_s
       eml = payment.order.email
       vid = preferred_vendor_id
       curr = preferred_currency.presence || 'KES'
