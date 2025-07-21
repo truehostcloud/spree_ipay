@@ -20,33 +20,56 @@ module Spree
 
     def handle_ipay_redirect
       begin
+        Rails.logger.info "omkuu: [Checkout] Handling iPay redirect for state: #{params[:state]}"
+        
         # Get phone number and store in session during payment state
         if params[:state] == "payment"
+          Rails.logger.info "omkuu: [Checkout] Processing payment state"
+          
           phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
-          session[:ipay_phone_number] = phone if phone.present?
+          if phone.present?
+            Rails.logger.info "omkuu: [Checkout] Storing phone number in session"
+            session[:ipay_phone_number] = phone
+          end
           
           # Invalidate any existing pending payments for this order
+          Rails.logger.info "omkuu: [Checkout] Invalidating existing payments"
           invalidate_existing_payments
         end
 
         # Generate form and redirect during confirm state
         if params[:state] == "confirm" && @order.payments.last&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
+          Rails.logger.info "omkuu: [Checkout] Processing confirm state for iPay"
+          
           payment = @order.payments.last
+          Rails.logger.info "omkuu: [Checkout] Current payment state: #{payment.state}"
           
           # Ensure we have a valid payment in the right state
           unless payment.checkout? || payment.pending?
-            @order.payments.create!(
+            Rails.logger.info "omkuu: [Checkout] Creating new payment as current is in state: #{payment.state}"
+            
+            new_payment = @order.payments.create!(
               payment_method: payment.payment_method,
               amount: @order.total,
-              response_code: "IPAY_#{Time.now.to_i}"
+              response_code: "IPAY_#{Time.now.to_i}",
+              state: 'checkout'
             )
-            payment = @order.payments.last
+            
+            Rails.logger.info "omkuu: [Checkout] Created new payment ID: #{new_payment.id}"
+            payment = new_payment
+            
+            # Invalidate any other pending payments
+            invalidate_existing_payments
           end
           
           ipay_method = payment.payment_method
           phone = session[:ipay_phone_number] || @order.bill_address&.phone
-
-          raise 'Phone number is required' if phone.blank?
+          
+          unless phone.present?
+            error_msg = 'Phone number is required for iPay payment'
+            Rails.logger.error "omkuu: [Checkout] #{error_msg}"
+            raise error_msg
+          end
 
           respond_to do |format|
             format.html do
