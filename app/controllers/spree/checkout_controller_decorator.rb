@@ -230,14 +230,17 @@ module Spree
             if response.success?
               Rails.logger.info("IPAY_DEBUG: [update] iPay payment processing started for order #{@order.number}")
               
-              # Move to the next state
-              if @order.next
-                Rails.logger.info("IPAY_DEBUG: [update] Moved order #{@order.number} to next state: #{@order.state}")
-              else
-                Rails.logger.error("IPAY_DEBUG: [update] Failed to move order #{@order.number} to next state. Errors: #{@order.errors.full_messages.join(', ')}")
-              end
-
+              # Store payment ID in session for confirmation
               session[:current_payment_id] = payment.id
+              
+              # Force reload the order to get the latest state
+              @order.reload
+              
+              # Manually set the next step to confirm since we're handling payment externally
+              @order.state = 'confirm'
+              @order.save(validate: false)
+              
+              Rails.logger.info("IPAY_DEBUG: [update] Order #{@order.number} moved to confirm state")
 
               respond_to do |format|
                 format.html { redirect_to checkout_state_path('confirm') }
