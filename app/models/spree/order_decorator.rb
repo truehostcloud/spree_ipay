@@ -3,10 +3,9 @@
 module Spree
   module OrderDecorator
     def self.prepended(base)
-      base.state_machine.before_transition(
-        to: :complete,
-        guard: ->(order) { order.allow_complete_with_ipay_payment? }
-      )
+      base.state_machine.before_transition(to: :complete) do |order|
+        order.allow_complete_with_ipay_payment?
+      end
     end
     
 
