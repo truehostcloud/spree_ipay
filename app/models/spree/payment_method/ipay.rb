@@ -135,6 +135,25 @@ module Spree
       source.nil? || source.is_a?(Spree::IpaySource)
     end
 
+    def process(response, source, gateway_options = {})
+      if response.success?
+        source.update_attributes(status: 'completed')
+        source.payment.complete! if source.payment
+      else
+        source.update_attributes(status: 'failed')
+        source.payment.failure! if source.payment
+      end
+    end
+
+    def cancel_pending_payment(order)
+      order.payments.valid.iPay.where(state: 'checkout').each do |payment|
+        if payment.source&.status == 'pending' && payment.created_at < 30.minutes.ago
+          payment.void_transaction!
+          payment.source.update_attributes(status: 'expired')
+        end
+      end
+    end
+
     def process_payment(payment)
       # Create a payment source if one doesn't exist
       if payment.source.nil?
