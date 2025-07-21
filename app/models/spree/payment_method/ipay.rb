@@ -20,19 +20,23 @@ module Spree
     preference :currency, :string, default: 'KES'
     preference :callback_url, :string, default: '/ipay/confirm'
     preference :return_url, :string, default: -> {
-      # First try to get from environment variable
+      # 1. Try environment variable first
       if ENV['SITE_URL'].present?
-        return "#{ENV['SITE_URL'].chomp('/')}/ipay/confirm"
-      end
-      
-      # Then try to get from Spree store
-      if defined?(Spree::Store) && Spree::Store.current && Spree::Store.current.url.present?
-        url = Spree::Store.current.url.chomp('/')
-        url = "https://#{url}" unless url.start_with?('http')
+        url = ENV['SITE_URL'].chomp('/')
         return "#{url}/ipay/confirm"
       end
       
-      # Fallback to relative path
+      # 2. Try Spree store URL
+      if defined?(Spree::Store) && Spree::Store.current
+        store = Spree::Store.current
+        if store.url.present?
+          url = store.url.chomp('/')
+          return "https://#{url}/ipay/confirm" unless url.start_with?('http')
+          return "#{url}/ipay/confirm"
+        end
+      end
+      
+      # 3. Fallback to relative path (will be made absolute by base_url)
       '/ipay/confirm'
     }
 
@@ -830,43 +834,56 @@ module Spree
     end
 
     def base_url
-      # Try to get from Spree store first
+      # 1. Try environment variable first (highest priority)
+      if ENV['SITE_URL'].present?
+        url = ENV['SITE_URL'].chomp('/')
+        return "https://#{url}" unless url.start_with?('http')
+        return url
+      end
+
+      # 2. Try Spree store URL
       if defined?(Spree::Store) && Spree::Store.current
         store = Spree::Store.current
         if store.url.present?
           url = store.url.chomp('/')
-          url = "https://#{url}" unless url.start_with?('http')
+          return "https://#{url}" unless url.start_with?('http')
           return url
         end
       end
       
-      # Try to get from Rails URL helpers
+      # 3. Try Rails URL helpers
       if defined?(Rails.application.routes.url_helpers)
         begin
-          # Set default URL options if not set
+          # Ensure default_url_options is initialized
           Rails.application.routes.default_url_options ||= {}
-          Rails.application.routes.default_url_options[:host] ||= ENV['HOST']
           
-          if Rails.application.routes.default_url_options[:host].present?
-            protocol = Rails.application.routes.default_url_options[:protocol] || 'https'
-            host = Rails.application.routes.default_url_options[:host].chomp('/')
-            return "#{protocol}://#{host}"
+          # Set defaults if not present
+          host = Rails.application.routes.default_url_options[:host] || ENV['HOST']
+          protocol = Rails.application.routes.default_url_options[:protocol] || 'https'
+          
+          if host.present?
+            return "#{protocol}://#{host.chomp('/')}"
           end
         rescue => e
           Rails.logger.error("IPAY_DEBUG: [base_url] Error with url_helpers: #{e.message}")
         end
       end
       
-      # Fallback to environment variable or default
-      if ENV['SITE_URL'].present?
-        return ENV['SITE_URL'].chomp('/')
+      # 4. Try ngrok in development
+      if Rails.env.development? && ENV['NGROK_URL'].present?
+        return ENV['NGROK_URL'].chomp('/')
+      end
+      
+      # 5. Fallback to request host if available
+      if defined?(request) && request.present?
+        return "#{request.protocol}#{request.host_with_port}"
       end
       
       # Final fallback
       'https://example.com'
     rescue => e
       Rails.logger.error("IPAY_DEBUG: [base_url] Error generating URL: #{e.message}")
-      ENV['SITE_URL'] || 'https://example.com'
+      'https://example.com'
     end
 
     def test_mode?
