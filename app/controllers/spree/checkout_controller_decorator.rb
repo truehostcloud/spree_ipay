@@ -93,7 +93,7 @@ module Spree
       curr = (ipay_method.preferred_currency.presence || 'KES')[0...3] # Max 3 chars
       
       # Prepare callback URL - remove any invalid characters
-      cbk = (ipay_method.preferred_callback_url.presence || "https://#{ipay_method.base_url}/ipay/confirm").gsub(/[;~`!%^*\-\u003c\u003e\u0026_]/i, '')
+      cbk = (ipay_method.preferred_callback_url.presence || "https://#{ipay_method.base_url}/ipay/confirm").gsub(/[;:~`!%^*\-\u003e\u003c\u0026_]/i, '')
       
       # Prepare iPay parameters - must match the exact order and parameters used in hash generation
       ipay_params = {
@@ -133,7 +133,7 @@ module Spree
       end
 
       # Log the parameters being sent to iPay (remove in production)
-      Rails.logger.info("iPay Form Parameters: #{ipay_params.to_json}")
+      Rails.logger.info("[iPay FORM DEBUG] ipay_params: #{ipay_params.to_json}")
       Rails.logger.info("iPay Test Mode: #{ipay_method.preferred_test_mode ? 'Yes' : 'No'}")
       Rails.logger.info("iPay Form Action: #{ipay_method.preferred_test_mode ? 'https://sandbox.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'}")
 
