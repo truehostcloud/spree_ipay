@@ -34,6 +34,3 @@ module Spree
 end
 
 Spree::Order.prepend(Spree::OrderDecorator) if defined?(Spree::Order)
-end
-
-Spree::Order.prepend(Spree::OrderDecorator) if defined?(Spree::Order)
