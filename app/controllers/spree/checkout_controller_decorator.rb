@@ -112,11 +112,13 @@ module Spree
         'p3' => '',
         'p4' => '',
         'cbk' => cbk,
-        'lbk' => cbk, # Use same as callback for simplicity
+        'lbk' => lbk, # Use the actual return URL
         'cst' => '1', # 1 = send customer email notifications
         'crl' => '0', # 0 = HTTP/HTTPS callback
         'hsh' => hsh
       }
+
+      Rails.logger.info("[iPay FORM DEBUG] ipay_params: #{ipay_params.to_json}")
 
       # Add channel parameters based on preferences
       %w[mpesa bonga airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay].each do |channel|

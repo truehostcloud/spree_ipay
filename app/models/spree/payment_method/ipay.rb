@@ -315,7 +315,7 @@ module Spree
       p2 = ""
       p3 = ""
       p4 = ""
-      cbk = (preferred_callback_url.presence || "https://#{base_url}/ipay/confirm").gsub(/[;~`!%^*\-\u003e\u003c\u0026_]/i, '') # Remove invalid chars but keep colon
+      cbk = (preferred_callback_url.presence || "https://#{base_url}/ipay/confirm").gsub(/[;~`!%^*><]/i, '') # Remove only truly problematic chars
       cst = "1"
       crl = "0" # 0 for HTTP/HTTPS callback
 
@@ -335,16 +335,9 @@ module Spree
       
       
       
-      
-      
-      
-      
-
-      # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
       digest = OpenSSL::Digest.new('sha1')
       hash = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
-      
-      
+      Rails.logger.info("[iPay HASH DEBUG] hash: #{hash.downcase}")
       # Ensure the hash is lowercase to match PHP's output
       hash.downcase
     rescue StandardError => e
