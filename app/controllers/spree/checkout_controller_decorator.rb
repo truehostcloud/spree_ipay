@@ -53,8 +53,14 @@ module Spree
           end
           
           # Create a new payment if none exists
+          Rails.logger.info "omkuu: [Checkout] Checking for existing payments"
+          Rails.logger.info "omkuu: [Checkout] Order ID: #{@order.id}, Payments count: #{@order.payments.count}"
+          
           if @order.payments.empty?
             Rails.logger.info "omkuu: [Checkout] No payments exist, creating new payment"
+            Rails.logger.info "omkuu: [Checkout] Payment method: #{payment_method&.inspect}"
+            Rails.logger.info "omkuu: [Checkout] Order total: #{@order.total}"
+            
             begin
               payment = @order.payments.build(
                 payment_method: payment_method,
@@ -63,19 +69,33 @@ module Spree
                 state: 'checkout'
               )
               
-              if payment.save
-                Rails.logger.info "omkuu: [Checkout] Successfully created payment: #{payment.id}"
-                @order.reload
+              Rails.logger.info "omkuu: [Checkout] Built payment: #{payment.inspect}"
+              
+              if payment.valid?
+                Rails.logger.info "omkuu: [Checkout] Payment is valid, attempting to save..."
+                if payment.save
+                  Rails.logger.info "omkuu: [Checkout] Successfully created payment: #{payment.id}"
+                  Rails.logger.info "omkuu: [Checkout] Payment details: #{payment.attributes}"
+                  @order.reload
+                  Rails.logger.info "omkuu: [Checkout] Order after payment creation - Payments count: #{@order.payments.count}"
+                else
+                  error_msg = "Failed to save payment: #{payment.errors.full_messages.join(', ')}"
+                  Rails.logger.error "omkuu: [Checkout] #{error_msg}"
+                  raise error_msg
+                end
               else
-                Rails.logger.error "omkuu: [Checkout] Failed to create payment: #{payment.errors.full_messages.join(', ')}"
-                raise "Failed to create payment: #{payment.errors.full_messages.join(', ')}"
+                error_msg = "Payment validation failed: #{payment.errors.full_messages.join(', ')}"
+                Rails.logger.error "omkuu: [Checkout] #{error_msg}"
+                raise error_msg
               end
             rescue StandardError => e
-              error_msg = "Error creating payment: #{e.message}"
+              error_msg = "Error creating payment: #{e.message}\n#{e.backtrace.take(5).join("\n")}"
               Rails.logger.error "omkuu: [Checkout] #{error_msg}"
               flash[:error] = "Unable to process payment. Please try again."
               redirect_to checkout_state_path(@order.state) and return
             end
+          else
+            Rails.logger.info "omkuu: [Checkout] Existing payments found: #{@order.payments.map { |p| "ID: #{p.id}, State: #{p.state}" }.join('; ')}"
           end
           
           # Ensure we have a valid payment
