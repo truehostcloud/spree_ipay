@@ -365,22 +365,50 @@ module Spree
         raise "Missing required iPay credentials"
       end
 
+      # Ensure we have a valid payment object
+      unless payment.is_a?(Spree::Payment)
+        raise ArgumentError, "Invalid payment object provided"
+      end
+
+      # Ensure payment has an associated order
+      unless payment.order
+        raise "Payment is missing an associated order"
+      end
+
       # Set live mode (0 for test, 1 for live)
       live = test_mode? ? "0" : "1"
 
       # Prepare values - must match exactly what will be sent in the form
-      oid = payment.order.number.to_s.gsub(/[^a-zA-Z0-9]/, '')[0...26] # Max 26 alphanumeric chars
+      order = payment.order
+      oid = order.number.to_s.gsub(/[^a-zA-Z0-9]/, '')[0...26] # Max 26 alphanumeric chars
       inv = oid[0...15] # Max 15 chars, use order ID if not specified
-      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents, no decimals
-      tel = (phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000").gsub(/\D/, '')[0...15] # Max 15 digits
-      eml = payment.order.email.to_s[0...30] # Max 30 chars
+      
+      # Format amount to 2 decimal places and convert to integer cents
+      amount_in_cents = (payment.amount.to_f * 100).round
+      ttl = format('%.2f', (amount_in_cents / 100.0)) # Format as string with 2 decimal places
+      
+      # Get phone number from various possible sources
+      tel = if phone.present?
+              phone.to_s.gsub(/\D/, '')
+            elsif order.bill_address&.phone.present?
+              order.bill_address.phone.gsub(/\D/, '')
+            else
+              '0700000000'
+            end[0...15] # Max 15 digits
+            
+      eml = order.email.to_s[0...30] # Max 30 chars
       vid = vendor_id[0...12] # Max 12 chars
       curr = (preferred_currency.presence || 'KES')[0...3] # Max 3 chars
       p1 = ""
       p2 = ""
       p3 = ""
       p4 = ""
-      cbk = (preferred_callback_url.presence || "https://#{base_url}/ipay/confirm").gsub(/[;:~`!%^*\-><&_]/i, '') # Remove invalid chars
+      
+      # Generate callback URL safely
+      cbk_host = base_url.gsub(/^https?:\/\//, '') # Remove protocol if present
+      cbk = (preferred_callback_url.presence || "https://#{cbk_host}/ipay/confirm")
+            .gsub(/[;:~`!%^*-&gt;&lt;&_]/i, '') # Remove invalid chars
+            
       cst = "1"
       crl = "0" # 0 for HTTP/HTTPS callback
 

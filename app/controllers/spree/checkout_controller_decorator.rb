@@ -212,41 +212,64 @@ module Spree
           if payment_method.is_a?(Spree::PaymentMethod::Ipay)
             Rails.logger.info("IPAY_DEBUG: [update] Processing iPay payment for order #{@order.number}")
             
-            # Create a new payment in processing state
-            payment = @order.payments.create!(
-              payment_method: payment_method,
-              amount: @order.total,
-              state: 'checkout'
-            )
-            
-            # Process the payment with amount
-            response = payment_method.process!(
-              payment: payment,
-              amount: @order.total,
-              phone: payment_params.dig(:source_attributes, :phone),
-              options: { controller: self }
-            )
-            
-            if response.success?
-              Rails.logger.info("IPAY_DEBUG: [update] iPay payment processing started for order #{@order.number}")
+            begin
+              # Create a new payment in processing state
+              payment = @order.payments.create!(
+                payment_method: payment_method,
+                amount: @order.total,
+                state: 'checkout'
+              )
               
-              # Store payment ID in session for confirmation
-              session[:current_payment_id] = payment.id
+              Rails.logger.info("IPAY_DEBUG: [update] Created payment #{payment.number} for order #{@order.number}")
               
-              # Force reload the order to get the latest state
-              @order.reload
+              # Process the payment with amount
+              response = payment_method.process!(
+                payment: payment,
+                amount: @order.total,
+                phone: payment_params.dig(:source_attributes, :phone),
+                options: { controller: self }
+              )
               
-              # Manually set the next step to confirm since we're handling payment externally
-              @order.state = 'confirm'
-              @order.save(validate: false)
-              
-              Rails.logger.info("IPAY_DEBUG: [update] Order #{@order.number} moved to confirm state")
-
-              respond_to do |format|
-                format.html { redirect_to checkout_state_path('confirm') }
-                format.json { render json: { status: 'success', redirect: checkout_state_path('confirm') } }
+              if response.success? && payment.persisted?
+                Rails.logger.info("IPAY_DEBUG: [update] iPay payment processing started for order #{@order.number}")
+                
+                # Store payment ID in session for confirmation
+                session[:current_payment_id] = payment.id
+                
+                # Force reload the order to get the latest state
+                @order.reload
+                
+                # Manually set the next step to confirm since we're handling payment externally
+                @order.state = 'confirm'
+                @order.payment_state = 'balance_due' if @order.respond_to?(:payment_state=)
+                
+                if @order.save(validate: false)
+                  Rails.logger.info("IPAY_DEBUG: [update] Order #{@order.number} moved to confirm state")
+                  
+                  respond_to do |format|
+                    format.html { redirect_to checkout_state_path('confirm') }
+                    format.json { render json: { status: 'success', redirect: checkout_state_path('confirm') } }
+                  end
+                  return
+                else
+                  error_msg = "Failed to save order: #{@order.errors.full_messages.join(', ')}"
+                  Rails.logger.error("IPAY_DEBUG: [update] #{error_msg}")
+                  flash[:error] = "Failed to process payment: #{error_msg}"
+                end
+              else
+                error_msg = response.try(:message) || "Payment processing failed"
+                Rails.logger.error("IPAY_DEBUG: [update] Payment processing failed: #{error_msg}")
+                flash[:error] = "Payment processing failed: #{error_msg}"
               end
-              return
+            rescue StandardError => e
+              error_msg = "Error processing payment: #{e.message}"
+              Rails.logger.error("IPAY_DEBUG: [update] #{error_msg}\n#{e.backtrace.take(5).join("\n")}")
+              flash[:error] = error_msg
+            end
+            
+            # If we get here, something went wrong
+            redirect_to checkout_state_path('payment')
+            return
             else
               flash[:error] = response.message
               redirect_to checkout_state_path('payment')
