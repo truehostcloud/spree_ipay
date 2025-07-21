@@ -8,6 +8,14 @@ module Spree
       base.before_action :handle_ipay_redirect, only: [:update]
       base.before_action :set_request_variant
       base.before_action :cleanup_pending_payments, only: [:update], if: -> { params[:state] == 'payment' || params[:state] == 'confirm' }
+      base.before_action :log_state_transition, only: [:update]
+    end
+    
+    def log_state_transition
+      @previous_state = @order.state
+      Rails.logger.info("Order ##{@order.number} - Current state before update: #{@previous_state}")
+      Rails.logger.info("Request params: #{params[:state]}")
+      Rails.logger.info("Order next event: #{@order.checkout_steps.inspect}")
     end
     
     def log_checkout_state
@@ -191,13 +199,38 @@ module Spree
       # First validate the current state
       current_state = params[:state].presence || @order.state
       
-      # If we're trying to skip from address to complete, force back to address
-      if current_state == 'address' && @order.state == 'complete'
+      Rails.logger.info("Order update started - Current state: #{@order.state}, Params state: #{params[:state]}")
+      
+      # Debug: Log the full params
+      Rails.logger.debug("Update params: #{params.to_unsafe_h}")
+      
+      # Force state to address if we detect an invalid transition
+      if @order.state == 'complete' && current_state == 'address'
+        Rails.logger.warn("Invalid state transition detected - Resetting from complete to address")
         @order.update_columns(state: 'address')
         @order.reload
+        return redirect_to checkout_state_path('address')
       end
       
-      if @order.update_from_params(params, permitted_checkout_attributes, request.headers.env)
+      # Ensure we have a valid state
+      unless @order.checkout_steps.include?(@order.state)
+        Rails.logger.warn("Invalid order state: #{@order.state} - Resetting to address")
+        @order.update_columns(state: 'address')
+        @order.reload
+        return redirect_to checkout_state_path('address')
+      end
+      
+      # Update order with strong parameters
+      update_success = false
+      
+      begin
+        update_success = @order.update_from_params(params, permitted_checkout_attributes, request.headers_env)
+      rescue StandardError => e
+        Rails.logger.error("Error updating order: #{e.message}\n#{e.backtrace.join("\n")}")
+        update_success = false
+      end
+      
+      if update_success
         respond_to do |format|
           format.html do
             if @order.next
@@ -210,9 +243,25 @@ module Spree
           end
           
           format.json do
-            if @order.next
-              # Get the next state after the transition
+            Rails.logger.info("Attempting to advance order state from: #{@order.state}")
+            
+            # Store the current state before transition
+            previous_state = @order.state
+            
+            # Advance the state
+            transition_success = @order.next
+            
+            if transition_success
               next_state = @order.state
+              Rails.logger.info("State transition: #{previous_state} -> #{next_state}")
+              
+              # If we're transitioning from address, force to delivery
+              if previous_state == 'address' && next_state != 'delivery'
+                Rails.logger.warn("Invalid transition from address to #{next_state}, forcing to delivery")
+                @order.update_columns(state: 'delivery')
+                next_state = 'delivery'
+                @order.reload
+              end
               
               # Prevent skipping from address to complete
               if current_state == 'address' && next_state == 'complete'
