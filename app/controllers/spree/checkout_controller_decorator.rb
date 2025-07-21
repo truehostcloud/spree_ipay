@@ -270,11 +270,6 @@ module Spree
             # If we get here, something went wrong
             redirect_to checkout_state_path('payment')
             return
-            else
-              flash[:error] = response.message
-              redirect_to checkout_state_path('payment')
-              return
-            end
           end
         end
       end

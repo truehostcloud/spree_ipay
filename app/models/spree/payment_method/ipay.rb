@@ -407,7 +407,7 @@ module Spree
       # Generate callback URL safely
       cbk_host = base_url.gsub(/^https?:\/\//, '') # Remove protocol if present
       cbk = (preferred_callback_url.presence || "https://#{cbk_host}/ipay/confirm")
-            .gsub(/[;:~`!%^*-&gt;&lt;&_]/i, '') # Remove invalid chars
+            .gsub(/[;:~`!%^*-<>_]/i, '') # Remove invalid chars
             
       cst = "1"
       crl = "0" # 0 for HTTP/HTTPS callback
