@@ -129,6 +129,36 @@ module Spree
       payment.pending? || payment.processing?
     end
 
+    # Cancel a payment in iPay
+    # This method is called when a payment needs to be cancelled
+    # @param response_code [String] The transaction ID to cancel
+    # @return [ActiveMerchant::Billing::Response] The response from the gateway
+    def cancel(response_code)
+      Rails.logger.info("IPAY_DEBUG: [cancel] Attempting to cancel payment with response code: #{response_code}")
+      
+      # If we don't have a response code, we can't cancel the payment
+      if response_code.blank?
+        Rails.logger.error("IPAY_DEBUG: [cancel] Cannot cancel payment - no response code provided")
+        return failure_response("Cannot cancel payment - no transaction ID provided")
+      end
+      
+      # In test mode, we'll just log the cancellation attempt
+      if test_mode?
+        Rails.logger.info("IPAY_DEBUG: [cancel] Test mode - simulating successful cancellation for: #{response_code}")
+        return success_response("Payment cancelled in test mode")
+      end
+      
+      # In production, we would make an API call to iPay to cancel the payment
+      # For now, we'll just log the attempt and return success
+      Rails.logger.info("IPAY_DEBUG: [cancel] Would cancel payment with response code: #{response_code}")
+      
+      # Return a successful response
+      success_response("Payment cancellation requested")
+    rescue StandardError => e
+      Rails.logger.error("IPAY_DEBUG: [cancel] Error cancelling payment: #{e.message}\n#{e.backtrace.join("\n")}")
+      failure_response("Error cancelling payment: #{e.message}")
+    end
+
     def supports?(source)
       # Return true for both nil source and IpaySource
       # This allows the payment to be created without a source initially

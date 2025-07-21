@@ -356,18 +356,27 @@ module Spree
             end
             
             # For processing payments, try to cancel them first
-            if payment.processing? && payment.payment_method.respond_to?(:cancel)
-              begin
-                Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Cancelling processing payment: #{payment.number}")
-                payment.payment_method.cancel(payment.response_code)
+            if payment.processing?
+              if payment.payment_method.respond_to?(:cancel)
+                begin
+                  Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Cancelling processing payment: #{payment.number}")
+                  payment.payment_method.cancel(payment.response_code)
+                  payment.update_columns(
+                    state: 'void',
+                    updated_at: Time.current
+                  )
+                  next
+                rescue StandardError => e
+                  Rails.logger.error("IPAY_DEBUG: [reset_incomplete_payment_if_any] Error cancelling payment #{payment.number}: " \
+                                   "#{e.class}: #{e.message}")
+                end
+              else
+                Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Payment method doesn't support cancellation, marking as failed: #{payment.number}")
                 payment.update_columns(
-                  state: 'void',
+                  state: 'failed',
                   updated_at: Time.current
                 )
                 next
-              rescue StandardError => e
-                Rails.logger.error("IPAY_DEBUG: [reset_incomplete_payment_if_any] Error cancelling payment #{payment.number}: " \
-                                 "#{e.class}: #{e.message}")
               end
             end
             
