@@ -434,8 +434,10 @@ module Spree
       # Generate return URL for customer redirect after payment
       # Point to the frontend order confirmation page
       order_number = payment.order.number
-      order_token = payment.order.guest_token
+      # Use token or guest_token depending on what's available
+      order_token = payment.order.respond_to?(:token) ? payment.order.token : payment.order.guest_token
       rst = preferred_return_url.presence || "#{default_protocol}://#{default_host}/orders/#{order_number}?order_token=#{order_token}"
+      Rails.logger.info("IPAY_DEBUG: [generate_ipay_form_html] Generated return URL: #{rst}")
 
       cst = "1"  # Customer email notification flag
       crl = "2"  # Customer phone notification flag

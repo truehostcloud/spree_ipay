@@ -331,18 +331,18 @@ module Spree
       # Check if the order was modified (items added/removed) after payment was initiated
       order_was_modified = @order.line_items.any? { |item| item.updated_at > 1.minute.ago }
       
-      # Get all incomplete payments
-      incomplete_payments = @order.payments.select { |p| !p.completed? && !p.failed? && !p.void? }
+      # Get all incomplete payments (include processing and pending payments)
+      incomplete_payments = @order.payments.reject(&:completed?).reject(&:failed?).reject(&:void?)
       
-      Rails.logger.debug("IPAY_DEBUG: [reset_incomplete_payment_if_any] Found #{incomplete_payments.size} incomplete payments: " \
-                        "#{incomplete_payments.map { |p| "#{p.number}:#{p.state}" }.join(', ')}")
+      Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Found #{incomplete_payments.size} incomplete payments: " \
+                       "#{incomplete_payments.map { |p| "#{p.number}:#{p.state}" }.join(', ')}")
       
       # If we have any incomplete payments or order was modified, handle them
       if incomplete_payments.any? || order_was_modified
         Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Processing #{incomplete_payments.count} incomplete payments " \
                          "and order_was_modified=#{order_was_modified} for order #{@order.number}")
         
-        # Void and invalidate all incomplete payments
+        # Process all incomplete payments
         incomplete_payments.each do |payment|
           begin
             Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Processing payment: " \
@@ -350,26 +350,76 @@ module Spree
             
             # Skip if already void or invalid
             if payment.void? || payment.invalid?
-              Rails.logger.debug("IPAY_DEBUG: [reset_incomplete_payment_if_any] Skipping - " \
-                               "Payment #{payment.number} is already #{payment.void? ? 'void' : 'invalid'}")
+              Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Skipping - " \
+                              "Payment #{payment.number} is already #{payment.void? ? 'void' : 'invalid'}")
               next
             end
             
-            # Void the payment if possible
-            if payment.can_void?
-              Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Voiding payment: #{payment.number}")
-              payment.void_transaction!
-            else
-              Rails.logger.debug("IPAY_DEBUG: [reset_incomplete_payment_if_any] Cannot void payment: #{payment.number} (State: #{payment.state})")
+            # For processing payments, try to cancel them first
+            if payment.processing? && payment.payment_method.respond_to?(:cancel)
+              begin
+                Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Cancelling processing payment: #{payment.number}")
+                payment.payment_method.cancel(payment.response_code)
+                payment.update_columns(
+                  state: 'void',
+                  updated_at: Time.current
+                )
+                next
+              rescue StandardError => e
+                Rails.logger.error("IPAY_DEBUG: [reset_incomplete_payment_if_any] Error cancelling payment #{payment.number}: " \
+                                 "#{e.class}: #{e.message}")
+              end
             end
             
-            # Invalidate the payment
-            if payment.can_invalidate?
-              Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Invalidating payment: #{payment.number}")
-              payment.invalidate!
+            # Try to void the payment if it's voidable
+            if payment.can_void?
+              begin
+                Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Voiding payment: #{payment.number}")
+                payment.void_transaction!
+              rescue StandardError => e
+                Rails.logger.error("IPAY_DEBUG: [reset_incomplete_payment_if_any] Error voiding payment #{payment.number}: " \
+                                 "#{e.class}: #{e.message}")
+                # If void fails, try to mark as failed
+                payment.update_columns(
+                  state: 'failed',
+                  updated_at: Time.current
+                )
+              end
             else
-              Rails.logger.debug("IPAY_DEBUG: [reset_incomplete_payment_if_any] Cannot invalidate payment: " \
-                               "#{payment.number} (State: #{payment.state})")
+              Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Cannot void payment: " \
+                              "#{payment.number} (State: #{payment.state})")
+              # If we can't void, mark as failed
+              payment.update_columns(
+                state: 'failed',
+                updated_at: Time.current
+              )
+            end
+            
+            # Skip invalidation if already failed or voided
+            next if payment.failed? || payment.void?
+            
+            # Try to invalidate the payment
+            if payment.can_invalidate?
+              begin
+                Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Invalidating payment: #{payment.number}")
+                payment.invalidate!
+              rescue StandardError => e
+                Rails.logger.error("IPAY_DEBUG: [reset_incomplete_payment_if_any] Error invalidating payment #{payment.number}: " \
+                                 "#{e.class}: #{e.message}")
+                # If invalidation fails, mark as failed
+                payment.update_columns(
+                  state: 'failed',
+                  updated_at: Time.current
+                )
+              end
+            else
+              Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Cannot invalidate payment: " \
+                              "#{payment.number} (State: #{payment.state})")
+              # If we can't invalidate, mark as failed
+              payment.update_columns(
+                state: 'failed',
+                updated_at: Time.current
+              )
             end
           rescue StandardError => e
             Rails.logger.error("IPAY_DEBUG: [reset_incomplete_payment_if_any] Error processing payment #{payment.number}: " \
