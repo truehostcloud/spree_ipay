@@ -1,5 +1,0 @@
-en:
-  spree:
-    payment_in_progress: "Please complete your iPay payment before continuing."
-    ipay:
-      payment_not_completed: "Your iPay payment has not been completed. Please try again or choose another payment method."

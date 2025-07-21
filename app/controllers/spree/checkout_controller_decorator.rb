@@ -7,7 +7,6 @@ module Spree
       base.before_action :log_checkout_state, only: [:update]
       base.before_action :handle_ipay_redirect, only: [:update]
       base.before_action :set_request_variant
-      base.before_action :check_ipay_payment_status, only: [:update], if: -> { @order&.payment? }
     end
     
     def log_checkout_state
@@ -524,80 +523,6 @@ module Spree
         order_path(order, order_token: order.guest_token)
       end
     end
-  end
-  
-  private
-  
-  # Check if iPay payment is completed before allowing order completion
-  def check_ipay_payment_status
-    return unless @order.payments.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
-    
-    payment = @order.payments.valid.iPay.pending.last
-    if payment && payment.source&.status != 'completed' && params[:state] == 'confirm'
-      flash[:error] = I18n.t('spree.ipay.payment_not_completed')
-      redirect_to checkout_state_path('payment') and return false
-    end
-  end
-  
-  # Override the update action to handle iPay payments
-  def update
-    if @order.payment? && params[:state] == 'payment'
-      # Get the payment method
-      payment_method = Spree::PaymentMethod.find_by(type: 'Spree::PaymentMethod::Ipay', active: true)
-      
-      if payment_method && params[:order] && params[:order][:payments_attributes]
-        # Get phone number from params
-        phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
-        
-        # Create or update payment source
-        if phone.present?
-          # Find or initialize payment
-          payment = @order.payments.iPay.last || @order.payments.build(payment_method: payment_method)
-          
-          # Create or update source
-          if payment.source.nil?
-            payment.source = Spree::IpaySource.new(phone: phone, payment_method: payment_method)
-          else
-            payment.source.phone = phone
-          end
-          
-          # Save payment and source
-          unless payment.save && payment.source.save
-            flash[:error] = payment.errors.full_messages.to_sentence.presence || 
-                           payment.source.errors.full_messages.to_sentence.presence || 
-                           'Failed to save payment details.'
-            redirect_to checkout_state_path('payment') and return
-          end
-          
-          # Store phone in session
-          session[:ipay_phone_number] = phone
-        end
-      end
-    end
-    
-    # Check payment status when confirming order
-    if @order.payment? && params[:state] == 'confirm' && @order.payments.iPay.any?
-      payment = @order.payments.valid.iPay.pending.last
-      if payment && !payment.completed? && payment.source&.status != 'completed'
-        flash[:error] = I18n.t('spree.ipay.payment_not_completed')
-        redirect_to checkout_state_path('payment') and return
-      end
-    end
-    
-    super
-  end
-  
-  # Override next_step_url_for to handle iPay payment state
-  def next_step_url_for(order, next_step)
-    return super unless order.payment? && order.payments.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
-    
-    payment = order.payments.valid.iPay.pending.last
-    if payment && payment.source&.status != 'completed' && next_step == 'confirm'
-      flash[:notice] = I18n.t('spree.ipay.payment_in_progress')
-      return checkout_state_path('payment')
-    end
-    
-    super
   end
 end
 

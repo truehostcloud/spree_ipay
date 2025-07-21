@@ -7,9 +7,6 @@ module Spree
       base.before_validation :invalidate_previous_payments, if: :ipay_payment?
       base.validates :source, presence: { message: 'must be present for iPay payments' }, if: :ipay_payment?
       
-      # Add scopes for iPay payments
-      base.scope :iPay, -> { where(payment_method: Spree::PaymentMethod::Ipay) }
-      
       # Log all state transitions
       states = base.state_machines[:state].states.map(&:name)
       states.each do |from_state|
@@ -58,40 +55,6 @@ module Spree
     
     def ipay_payment?
       payment_method&.is_a?(Spree::PaymentMethod::Ipay)
-    end
-    
-    # Ensure payment is sufficient for order completion
-    def sufficient?
-      return super unless ipay_payment?
-      
-      # If payment is completed, it's sufficient
-      return true if completed?
-      
-      # For iPay, we also check if the source is marked as completed
-      if source&.status == 'completed'
-        # If source is completed but payment isn't, update the payment state
-        update_columns(state: 'completed', completed_at: Time.current) unless completed?
-        return true
-      end
-      
-      false
-    end
-    
-    # Prevent auto-completion of order if payment isn't confirmed
-    def can_complete?(order)
-      return super unless ipay_payment?
-      
-      # If payment is completed, it can complete
-      return true if completed?
-      
-      # For iPay, we also check if the source is marked as completed
-      if source&.status == 'completed'
-        # If source is completed but payment isn't, update the payment state
-        update_columns(state: 'completed', completed_at: Time.current) unless completed?
-        return true
-      end
-      
-      false
     end
     
     def source_required?
