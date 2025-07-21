@@ -249,6 +249,7 @@ module Spree
 
     def process!(phone: nil, payment: nil, amount: nil, options: {})
       Rails.logger.info("IPAY_DEBUG: [process!] Starting payment processing for order #{payment&.order&.number}")
+      Rails.logger.info("IPAY_DEBUG: [process!] Payment amount: #{amount} (original: #{payment&.amount})")
       
       # Validate required parameters
       unless phone.present? && payment.present? && payment.order.present? && amount.present?
@@ -298,8 +299,8 @@ module Spree
           Rails.logger.info("IPAY_DEBUG: [process!] Payment #{payment.number} marked as processing")
         end
 
-        # Generate the iPay form HTML
-        form_html = generate_ipay_form_html(payment, phone, self)
+        # Generate the iPay form HTML with phone number
+        form_html = generate_ipay_form_html(payment, phone)
         
         # Return success with form HTML
         Rails.logger.info("IPAY_DEBUG: [process!] Successfully generated iPay form for order #{payment.order.number}")
@@ -353,9 +354,15 @@ module Spree
       cst = "1"
       crl = "0" # 0 for HTTP/HTTPS callback
 
+      # Format amount to 2 decimal places
+      formatted_ttl = format('%.2f', ttl.to_f)
+      
       # Create datastring in the exact order required by iPay
       # IMPORTANT: This exact order must be maintained
-      datastring = live + oid + inv + ttl + tel + eml + vid + curr + p1 + p2 + p3 + p4 + cbk + cst + crl
+      datastring = live + oid + inv + formatted_ttl + tel + eml + vid + curr + p1 + p2 + p3 + p4 + cbk + cst + crl
+      
+      # Log the datastring for debugging
+      Rails.logger.info("IPAY_DEBUG: [ipay_signature_hash] Datastring: #{datastring}")
 
       # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
       digest = OpenSSL::Digest.new('sha1')
@@ -367,14 +374,17 @@ module Spree
       raise "Error generating hash: #{e.message}"
     end
 
-    def generate_ipay_form_html(payment)
+    def generate_ipay_form_html(payment, phone = nil)
       # Get required values
       live = test_mode? ? "0" : "1"
       # Use numeric order ID for transaction code
       oid = payment.order.id.to_s
       # Use numeric order ID for invoice as well
       inv = payment.order.id.to_s
-      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
+      
+      # Format amount to 2 decimal places and convert to cents (integer)
+      amount_in_cents = (payment.amount.to_f * 100).round
+      ttl = format('%.2f', (amount_in_cents / 100.0)) # Format as string with 2 decimal places
       tel = payment.order.bill_address&.phone || session[:ipay_phone_number] || "0700000000"
       eml = payment.order.email
       vid = preferred_vendor_id
@@ -649,17 +659,24 @@ module Spree
       }
     end
 
-    def generate_hash(payment)
+    def generate_hash(payment, phone: nil)
       # Prepare all values
-      live = preferred_test_mode ? '0' : '1'
+      live = preferred_test_mode 
       oid = payment.order.number
-      inv = payment.order.number
-      ttl = payment.amount.to_f.round(2).to_s
+      inv = "INV-#{payment.order.number}"
+      ttl = payment.amount.to_s
+      
+      # Use provided phone or fall back to billing address phone
+      tel = if phone.present?
+              phone.to_s.gsub(/\D/, '')
+            else
+              payment.order.bill_address&.phone.to_s.gsub(/\D/, '')
+            end
+      
       eml = payment.order.email
       vid = preferred_vendor_id
       curr = preferred_currency.presence || 'KES'
       cbk = preferred_callback_url.presence || '/ipay/confirm'
-
 
       # Create data string in the exact order required by iPay
       data_string = [
