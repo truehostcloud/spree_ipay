@@ -19,14 +19,30 @@ module Spree
       )
     end
 
-    def payment_required?
-      ipay_payment = payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
-      ipay_payment ? false : super
+    # Only allow complete if iPay payment is confirmed
+    def self.prepended(base)
+      base.state_machine.before_transition(
+        to: :confirm,
+        do: :log_before_confirm
+      )
+      base.state_machine.after_transition(
+        to: :confirm,
+        do: :log_after_confirm
+      )
+      base.state_machine.after_transition(
+        to: :complete,
+        do: :log_complete_transition
+      )
+      base.state_machine.before_transition(
+        to: :complete,
+        guard: ->(order) { order.ipay_payment_confirmed? }
+      )
     end
 
-    def confirmation_required?
-      ipay_payment = payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
-      ipay_payment || super
+    def ipay_payment_confirmed?
+      payments.valid.any? do |p|
+        p.payment_method.is_a?(Spree::PaymentMethod::Ipay) && p.completed?
+      end
     end
     
     def log_before_confirm
