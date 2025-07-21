@@ -224,7 +224,7 @@ module Spree
               payment: payment,
               amount: @order.total,
               phone: payment_params.dig(:source_attributes, :phone),
-              controller: self
+              options: { controller: self }
             )
             
             if response.success?
