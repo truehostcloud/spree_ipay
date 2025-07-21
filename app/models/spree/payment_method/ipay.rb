@@ -194,11 +194,23 @@ module Spree
       payment = options[:payment] if options[:payment].is_a?(Spree::Payment)
       payment ||= options[:originator] if options[:originator].is_a?(Spree::Payment)
       
-      # If we still don't have a payment, try to create one
-      if payment.nil? && source.is_a?(Spree::IpaySource)
-        order = source.order || options[:order]
-        return failure_response("Could not determine order for payment") if order.nil?
-        
+      # Get the order from options or payment
+      order = options[:order] || (payment.order if payment.respond_to?(:order))
+      
+      # If we still don't have an order, try to get it from the source's payment if it exists
+      if order.nil? && source.respond_to?(:payment) && source.payment.present?
+        order = source.payment.order
+      end
+      
+      # If we still don't have an order, try to get it from the controller
+      if order.nil? && options[:controller].is_a?(ActionController::Base) && options[:controller].respond_to?(:current_order)
+        order = options[:controller].current_order
+      end
+      
+      return failure_response("Could not determine order for payment") if order.nil?
+      
+      # If we don't have a payment, create one
+      if payment.nil?
         payment = order.payments.create!(
           payment_method_id: id,
           amount: amount,
@@ -208,10 +220,6 @@ module Spree
       
       # Ensure we have a payment and it's valid
       return failure_response("Invalid payment") unless payment.is_a?(Spree::Payment)
-      
-      # Get the order from the payment
-      order = payment.order
-      return failure_response("Order not found for payment") if order.nil?
 
       # Ensure the order is in the correct state
       return failure_response("Order is not in a confirmable state") unless order.checkout_steps.include?('confirm')
