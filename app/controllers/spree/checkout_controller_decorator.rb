@@ -186,15 +186,26 @@ module Spree
       Rails.logger.error("Error generating iPay form: #{e.message}\n#{e.backtrace.join("\n")}")
       raise "Error generating payment form: #{e.message}"
     end
-    # Override update action to handle JSON responses
+    # Override update action to handle JSON responses and prevent skipping steps
     def update
+      # First validate the current state
+      current_state = params[:state].presence || @order.state
+      
+      # If we're trying to skip from address to complete, force back to address
+      if current_state == 'address' && @order.state == 'complete'
+        @order.update_columns(state: 'address')
+        @order.reload
+      end
+      
       if @order.update_from_params(params, permitted_checkout_attributes, request.headers.env)
         respond_to do |format|
           format.html do
             if @order.next
               redirect_to checkout_state_path(@order.state)
             else
-              redirect_to checkout_state_path(@order.state)
+              # If next step fails, redirect back to current state
+              flash[:error] = @order.errors.full_messages.to_sentence
+              redirect_to checkout_state_path(current_state)
             end
           end
           
@@ -203,13 +214,20 @@ module Spree
               # Get the next state after the transition
               next_state = @order.state
               
+              # Prevent skipping from address to complete
+              if current_state == 'address' && next_state == 'complete'
+                @order.update_columns(state: 'address')
+                next_state = 'delivery' # Force to next valid state
+                @order.reload
+              end
+              
               # Prepare response data
               response_data = {
                 status: 'success',
                 next_step: next_state,
                 order: {
                   number: @order.number,
-                  state: @order.state,
+                  state: next_state,
                   total: @order.total.to_f,
                   payment_state: @order.payment_state,
                   shipment_state: @order.shipment_state
@@ -238,7 +256,10 @@ module Spree
               render json: {
                 status: 'error',
                 errors: @order.errors.messages,
-                message: @order.errors.full_messages.to_sentence
+                message: @order.errors.full_messages.to_sentence,
+                current_state: current_state,
+                next_state: @order.state,
+                validation_errors: @order.errors.full_messages
               }, status: :unprocessable_entity
             end
           end
@@ -251,7 +272,8 @@ module Spree
               status: 'error',
               errors: @order.errors.messages,
               message: @order.errors.full_messages.to_sentence,
-              validation_errors: @order.errors.full_messages
+              validation_errors: @order.errors.full_messages,
+              current_state: current_state
             }, status: :unprocessable_entity
           end
         end
