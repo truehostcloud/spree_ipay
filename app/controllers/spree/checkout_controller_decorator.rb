@@ -230,9 +230,11 @@ module Spree
             if response.success?
               Rails.logger.info("IPAY_DEBUG: [update] iPay payment processing started for order #{@order.number}")
               
-              # Only proceed to next state if we're in payment state
-              if @order.payment?
-                @order.next! if @order.next_step_complete?
+              # Move to the next state
+              if @order.next
+                Rails.logger.info("IPAY_DEBUG: [update] Moved order #{@order.number} to next state: #{@order.state}")
+              else
+                Rails.logger.error("IPAY_DEBUG: [update] Failed to move order #{@order.number} to next state. Errors: #{@order.errors.full_messages.join(', ')}")
               end
 
               session[:current_payment_id] = payment.id
