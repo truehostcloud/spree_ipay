@@ -145,6 +145,9 @@ module Spree
         state: ['pending', 'checkout', 'processing']
       )
       
+      # Get the payment IDs before we modify them
+      payment_ids = pending_payments.pluck(:id)
+      
       # Void or cancel each pending payment
       pending_payments.each do |payment|
         begin
@@ -158,11 +161,11 @@ module Spree
         end
       end
       
-      # Clear any stored session data
-      Spree::IpaySource.where(
-        order_id: order.id,
-        status: ['pending', 'initiated']
-      ).update_all(status: 'cancelled')
+      # Update any related IPay sources through the payments association
+      Spree::IpaySource.joins(:payments)
+                       .where(spree_payments: { id: payment_ids })
+                       .where(status: ['pending', 'initiated'])
+                       .update_all(status: 'cancelled')
       
       true
     end
