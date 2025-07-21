@@ -17,7 +17,7 @@ module Spree
       )
       base.state_machine.before_transition(
         to: :complete,
-        if: ->(order) { order.ipay_payment_confirmed? }
+        guard: :ipay_payment_confirmed?
       )
     end
 
