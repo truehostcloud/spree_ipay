@@ -444,9 +444,6 @@ module Spree
                           "(order_was_modified=#{order_was_modified})")
           
           begin
-            # Recalculate the order to ensure totals are up to date
-            @order.recalculate
-            
             # Reset the order state
             @order.update_columns(
               state: 'payment',
