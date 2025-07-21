@@ -30,6 +30,13 @@ module Spree
     def log_complete_transition
       # No logging needed
     end
+
+    # Only allow order completion if there is a completed iPay payment
+    def allow_complete_with_ipay_payment?
+      payments.valid.any? do |payment|
+        payment.payment_method.is_a?(Spree::PaymentMethod::Ipay) && payment.completed?
+      end
+    end
   end
 end
 
