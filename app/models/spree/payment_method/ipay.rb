@@ -323,27 +323,27 @@ module Spree
       # IMPORTANT: This exact order must be maintained
       datastring = live + oid + inv + ttl + tel + eml + vid + curr + p1 + p2 + p3 + p4 + cbk + cst + crl
 
-      Rails.logger.info("[iPay HASH DEBUG] live: #{live}")
-      Rails.logger.info("[iPay HASH DEBUG] oid: #{oid}")
-      Rails.logger.info("[iPay HASH DEBUG] inv: #{inv}")
-      Rails.logger.info("[iPay HASH DEBUG] ttl: #{ttl}")
-      Rails.logger.info("[iPay HASH DEBUG] tel: #{tel}")
-      Rails.logger.info("[iPay HASH DEBUG] eml: #{eml}")
-      Rails.logger.info("[iPay HASH DEBUG] vid: #{vid}")
-      Rails.logger.info("[iPay HASH DEBUG] curr: #{curr}")
-      Rails.logger.info("[iPay HASH DEBUG] p1: #{p1}")
-      Rails.logger.info("[iPay HASH DEBUG] p2: #{p2}")
-      Rails.logger.info("[iPay HASH DEBUG] p3: #{p3}")
-      Rails.logger.info("[iPay HASH DEBUG] p4: #{p4}")
-      Rails.logger.info("[iPay HASH DEBUG] cbk: #{cbk}")
-      Rails.logger.info("[iPay HASH DEBUG] cst: #{cst}")
-      Rails.logger.info("[iPay HASH DEBUG] crl: #{crl}")
-      Rails.logger.info("[iPay HASH DEBUG] datastring: #{datastring}")
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
 
       # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
       digest = OpenSSL::Digest.new('sha1')
       hash = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
-      Rails.logger.info("[iPay HASH DEBUG] hash: #{hash.downcase}")
+      
       
       # Ensure the hash is lowercase to match PHP's output
       hash.downcase

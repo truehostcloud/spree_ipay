@@ -129,13 +129,13 @@ module Spree
         ipay_params[channel] = is_enabled ? '1' : '0'
         
         # Log each channel's status for debugging
-        Rails.logger.info("iPay Channel #{channel}: #{is_enabled ? 'ENABLED' : 'DISABLED'}")
+       
       end
 
       # Log the parameters being sent to iPay (remove in production)
-      Rails.logger.info("[iPay FORM DEBUG] ipay_params: #{ipay_params.to_json}")
-      Rails.logger.info("iPay Test Mode: #{ipay_method.preferred_test_mode ? 'Yes' : 'No'}")
-      Rails.logger.info("iPay Form Action: #{ipay_method.preferred_test_mode ? 'https://sandbox.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'}")
+      
+      
+      
 
       # Generate the form HTML with full-page flexible layout and improved button positioning
       <<~HTML
@@ -166,7 +166,7 @@ module Spree
             <h2 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center">Redirecting to iPay</h2>
             <p class="text-gray-600 text-lg sm:text-xl text-center">Please wait while we securely redirect you to the payment page.</p>
             <p class="text-sm sm:text-base text-gray-500 text-center">If you are not redirected automatically, please click the button below.</p>
-            <form id="ipay-payment-form" action="#{ipay_method.preferred_test_mode ? 'https://sandbox.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'}" method="post" class="flex justify-center">
+            <form id="ipay-payment-form" action="https://payments.ipayafrica.com/v3/ke" method="post" class="flex justify-center">
               #{ipay_params.map { |k, v| "<input type='hidden' name='#{k}' value='#{ERB::Util.html_escape(v)}'>" }.join("\n")}
               <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 transition duration-300">Proceed to Payment</button>
             </form>
