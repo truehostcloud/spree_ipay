@@ -795,7 +795,28 @@ module Spree
     end
 
     def base_url
-      Rails.application.routes.url_helpers.root_url.chomp('/')
+      # First try to get URL from Rails URL helpers if available
+      if defined?(Rails.application.routes.url_helpers)
+        begin
+          return Rails.application.routes.url_helpers.root_url.chomp('/')
+        rescue => e
+          Rails.logger.error("IPAY_DEBUG: [base_url] Error with url_helpers: #{e.message}")
+        end
+      end
+      
+      # Then try to get from Spree store if available
+      if defined?(Spree::Store) && Spree::Store.current
+        store = Spree::Store.current
+        url = store.url.chomp('/')
+        url = "https://#{url}" unless url.start_with?('http')
+        return url
+      end
+      
+      # Fallback to environment variable or default
+      ENV['SITE_URL'] || 'https://example.com'
+    rescue => e
+      Rails.logger.error("IPAY_DEBUG: [base_url] Error generating URL: #{e.message}")
+      ENV['SITE_URL'] || 'https://example.com'
     end
 
     def test_mode?
