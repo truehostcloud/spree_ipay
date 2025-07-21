@@ -107,8 +107,20 @@ module Spree
                         "Email: #{eml}, " \
                         "Test Mode: #{live == '1' ? 'No' : 'Yes'}")
       
-      # Prepare callback URL - use the return_url preference which is now properly set
-      cbk = ipay_method.preferred_return_url.presence || "#{ipay_method.preferred_return_url}/ipay/callback"
+      # Prepare callback URL - use the return_url preference
+      cbk = if ipay_method.preferred_return_url.present?
+              # If return_url is a full URL, use it as is, otherwise prepend the current host
+              if ipay_method.preferred_return_url.start_with?('http')
+                ipay_method.preferred_return_url
+              else
+                "#{request.protocol}#{request.host_with_port}#{ipay_method.preferred_return_url}"
+              end
+            else
+              # Fallback to default callback URL
+              "#{request.protocol}#{request.host_with_port}/ipay/callback"
+            end
+      
+      # Sanitize the URL
       cbk = cbk.gsub(/[;:~`!%^*\-><&_]/i, '')
       
       # Prepare iPay parameters - must match the exact order and parameters used in hash generation

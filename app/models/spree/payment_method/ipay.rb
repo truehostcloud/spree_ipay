@@ -20,8 +20,20 @@ module Spree
     preference :currency, :string, default: 'KES'
     preference :callback_url, :string, default: '/ipay/confirm'
     preference :return_url, :string, default: -> {
-      Rails.application.routes.default_url_options[:host] = Spree::Store.current.url if Spree::Store.current.url.present?
-      Rails.application.routes.url_helpers.root_url(host: Spree::Store.current.url, protocol: 'https').chomp('/') + '/ipay/confirm'
+      # First try to get from environment variable
+      if ENV['SITE_URL'].present?
+        return "#{ENV['SITE_URL'].chomp('/')}/ipay/confirm"
+      end
+      
+      # Then try to get from Spree store
+      if defined?(Spree::Store) && Spree::Store.current && Spree::Store.current.url.present?
+        url = Spree::Store.current.url.chomp('/')
+        url = "https://#{url}" unless url.start_with?('http')
+        return "#{url}/ipay/confirm"
+      end
+      
+      # Fallback to relative path
+      '/ipay/confirm'
     }
 
     # Payment channels (in display order)
