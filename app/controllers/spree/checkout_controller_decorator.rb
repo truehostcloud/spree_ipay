@@ -20,49 +20,87 @@ module Spree
 
     def handle_ipay_redirect
       begin
-        Rails.logger.info "omkuu: [Checkout] Handling iPay redirect for state: #{params[:state]}"
+        Rails.logger.info "omkuu: [Checkout] ====== HANDLE IPAY REDIRECT ======"
+        Rails.logger.info "omkuu: [Checkout] Current state: #{params[:state]}, Order: #{@order&.number}"
         
         # Get phone number and store in session during payment state
         if params[:state] == "payment"
-          Rails.logger.info "omkuu: [Checkout] Processing payment state"
+          Rails.logger.info "omkuu: [Checkout] ====== PROCESSING PAYMENT STATE ======"
+          
+          # Log order state and payments before making any changes
+          log_order_payments("Before payment processing")
           
           phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
           if phone.present?
-            Rails.logger.info "omkuu: [Checkout] Storing phone number in session"
+            Rails.logger.info "omkuu: [Checkout] Storing phone number in session: #{phone}"
             session[:ipay_phone_number] = phone
+          else
+            Rails.logger.warn "omkuu: [Checkout] No phone number provided in params"
+          end
+          
+          # Ensure we have a payment method
+          payment_method = Spree::PaymentMethod.find_by(type: 'Spree::PaymentMethod::Ipay')
+          unless payment_method
+            error_msg = 'iPay payment method not found'
+            Rails.logger.error "omkuu: [Checkout] #{error_msg}"
+            raise error_msg
+          end
+          
+          # Create a new payment if none exists
+          if @order.payments.empty?
+            Rails.logger.info "omkuu: [Checkout] No payments exist, creating new payment"
+            @order.payments.create!(
+              payment_method: payment_method,
+              amount: @order.total,
+              response_code: "IPAY_#{Time.now.to_i}",
+              state: 'checkout'
+            )
+            @order.reload
+            Rails.logger.info "omkuu: [Checkout] Created new payment: #{@order.payments.last&.id}"
           end
           
           # Invalidate any existing pending payments for this order
           Rails.logger.info "omkuu: [Checkout] Invalidating existing payments"
           invalidate_existing_payments
+          
+          log_order_payments("After payment processing")
         end
 
         # Generate form and redirect during confirm state
-        if params[:state] == "confirm" && @order.payments.last&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
-          Rails.logger.info "omkuu: [Checkout] Processing confirm state for iPay"
+        if params[:state] == "confirm"
+          Rails.logger.info "omkuu: [Checkout] ====== PROCESSING CONFIRM STATE ======"
           
-          payment = @order.payments.last
-          Rails.logger.info "omkuu: [Checkout] Current payment state: #{payment.state}"
+          # Ensure we have an iPay payment method
+          payment_method = Spree::PaymentMethod.find_by(type: 'Spree::PaymentMethod::Ipay')
+          unless payment_method
+            error_msg = 'iPay payment method not found'
+            Rails.logger.error "omkuu: [Checkout] #{error_msg}"
+            raise error_msg
+          end
           
-          # Ensure we have a valid payment in the right state
-          unless payment.checkout? || payment.pending?
-            Rails.logger.info "omkuu: [Checkout] Creating new payment as current is in state: #{payment.state}"
+          # Get or create payment
+          payment = @order.payments.where(payment_method: payment_method).last
+          
+          # Create a new payment if none exists or if existing payment is in a terminal state
+          if payment.nil? || payment.completed? || payment.failed? || payment.void?
+            Rails.logger.info "omkuu: [Checkout] Creating new payment (existing: #{payment&.id}, state: #{payment&.state})"
             
-            new_payment = @order.payments.create!(
-              payment_method: payment.payment_method,
+            payment = @order.payments.create!(
+              payment_method: payment_method,
               amount: @order.total,
               response_code: "IPAY_#{Time.now.to_i}",
               state: 'checkout'
             )
             
-            Rails.logger.info "omkuu: [Checkout] Created new payment ID: #{new_payment.id}"
-            payment = new_payment
+            Rails.logger.info "omkuu: [Checkout] Created new payment ID: #{payment.id}"
             
             # Invalidate any other pending payments
             invalidate_existing_payments
           end
           
-          ipay_method = payment.payment_method
+          Rails.logger.info "omkuu: [Checkout] Using payment ID: #{payment.id}, state: #{payment.state}"
+          
+          # Get phone number from session or order
           phone = session[:ipay_phone_number] || @order.bill_address&.phone
           
           unless phone.present?
@@ -296,12 +334,56 @@ module Spree
     
     private
     
-    # Invalidate existing payments for this order
-    def invalidate_existing_payments
+    # Log detailed information about order payments
+    def log_order_payments(context = "")
       return unless @order
       
+      Rails.logger.info "omkuu: [Checkout] ====== ORDER PAYMENTS #{context} ======"
+      Rails.logger.info "omkuu: [Checkout] Order: #{@order.number}, State: #{@order.state}"
+      
+      # Log order attributes
+      Rails.logger.info "omkuu: [Checkout] Order state: #{@order.state}, " \
+                       "Payment state: #{@order.payment_state}, " \
+                       "Shipment state: #{@order.shipment_state}"
+      
+      # Log all payments
+      Rails.logger.info "omkuu: [Checkout] Found #{@order.payments.count} payments"
+      
+      @order.payments.each_with_index do |payment, i|
+        Rails.logger.info "omkuu: [Checkout] Payment #{i+1}: " \
+                         "ID: #{payment.id}, " \
+                         "Type: #{payment.payment_method&.type}, " \
+                         "State: #{payment.state}, " \
+                         "Amount: #{payment.amount}, " \
+                         "Created: #{payment.created_at}"
+      end
+      
+      # Log payment methods
+      payment_methods = Spree::PaymentMethod.available(:both)
+      Rails.logger.info "omkuu: [Checkout] Available payment methods: #{payment_methods.map(&:type).join(', ')}"
+      
+      Rails.logger.info "omkuu: [Checkout] ====== END ORDER PAYMENTS ======"
+    end
+    
+    # Invalidate existing payments for this order
+    def invalidate_existing_payments
       Rails.logger.info "omkuu: [Checkout] ====== STARTING PAYMENT INVALIDATION ======"
-      Rails.logger.info "omkuu: [Checkout] Order: #{@order.number}"
+      
+      unless @order
+        Rails.logger.error "omkuu: [Checkout] No order found for payment invalidation"
+        return
+      end
+      
+      Rails.logger.info "omkuu: [Checkout] Order: #{@order.number}, State: #{@order.state}"
+      
+      # Debug order state and payments
+      Rails.logger.info "omkuu: [Checkout] Order payments count: #{@order.payments.count}"
+      @order.payments.each_with_index do |p, i|
+        Rails.logger.info "omkuu: [Checkout] Payment #{i+1}: ID: #{p.id}, " \
+                         "Method: #{p.payment_method&.type}, " \
+                         "State: #{p.state}, " \
+                         "Amount: #{p.amount}"
+      end
       
       # Get all iPay payments for this order
       all_payments = @order.payments
@@ -309,12 +391,19 @@ module Spree
                          .where(spree_payment_methods: { type: 'Spree::PaymentMethod::Ipay' })
                          .order(created_at: :desc)
       
-      Rails.logger.info "omkuu: [Checkout] Found #{all_payments.count} total iPay payments"
+      Rails.logger.info "omkuu: [Checkout] Found #{all_payments.count} iPay payments"
       
       # Log all payments for debugging
-      all_payments.each do |p|
-        Rails.logger.info "omkuu: [Checkout] - Payment ID: #{p.id}, State: #{p.state}, " \
-                         "Amount: #{p.amount}, Created: #{p.created_at}, Updated: #{p.updated_at}"
+      all_payments.each_with_index do |p, i|
+        Rails.logger.info "omkuu: [Checkout] iPay Payment #{i+1}: " \
+                         "ID: #{p.id}, " \
+                         "State: #{p.state}, " \
+                         "Amount: #{p.amount}, " \
+                         "Created: #{p.created_at}, " \
+                         "Updated: #{p.updated_at}, " \
+                         "Checkout: #{p.checkout?}, " \
+                         "Pending: #{p.pending?}, " \
+                         "Completed: #{p.completed?}"
       end
       
       # Find payments to invalidate (exclude completed, void, failed, invalid)
