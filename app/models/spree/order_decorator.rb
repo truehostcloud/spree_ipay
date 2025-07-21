@@ -15,10 +15,9 @@ module Spree
         to: :complete,
         do: :log_complete_transition
       )
-      base.state_machine.before_transition(
-        to: :complete,
-        guard: :ipay_payment_confirmed?
-      )
+      base.state_machine.before_transition(to: :complete) do |order|
+        order.ipay_payment_confirmed?
+      end
     end
 
     def ipay_payment_confirmed?
