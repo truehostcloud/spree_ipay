@@ -63,13 +63,35 @@ module Spree
     # Ensure payment is sufficient for order completion
     def sufficient?
       return super unless ipay_payment?
-      completed? || (checkout? && source&.status == 'completed')
+      
+      # If payment is completed, it's sufficient
+      return true if completed?
+      
+      # For iPay, we also check if the source is marked as completed
+      if source&.status == 'completed'
+        # If source is completed but payment isn't, update the payment state
+        update_columns(state: 'completed', completed_at: Time.current) unless completed?
+        return true
+      end
+      
+      false
     end
     
     # Prevent auto-completion of order if payment isn't confirmed
     def can_complete?(order)
       return super unless ipay_payment?
-      completed? || (checkout? && source&.status == 'completed')
+      
+      # If payment is completed, it can complete
+      return true if completed?
+      
+      # For iPay, we also check if the source is marked as completed
+      if source&.status == 'completed'
+        # If source is completed but payment isn't, update the payment state
+        update_columns(state: 'completed', completed_at: Time.current) unless completed?
+        return true
+      end
+      
+      false
     end
     
     def source_required?

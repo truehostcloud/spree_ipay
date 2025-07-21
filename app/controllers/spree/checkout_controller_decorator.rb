@@ -541,14 +541,46 @@ module Spree
   
   # Override the update action to handle iPay payments
   def update
-    if @order.payment? && @order.payments.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
-      payment = @order.payments.valid.iPay.pending.last
-      if payment && params[:state] == 'confirm'
-        # If we're trying to confirm but payment isn't complete
-        unless payment.completed? || payment.source&.status == 'completed'
-          flash[:error] = I18n.t('spree.ipay.payment_not_completed')
-          redirect_to checkout_state_path('payment') and return
+    if @order.payment? && params[:state] == 'payment'
+      # Get the payment method
+      payment_method = Spree::PaymentMethod.find_by(type: 'Spree::PaymentMethod::Ipay', active: true)
+      
+      if payment_method && params[:order] && params[:order][:payments_attributes]
+        # Get phone number from params
+        phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
+        
+        # Create or update payment source
+        if phone.present?
+          # Find or initialize payment
+          payment = @order.payments.iPay.last || @order.payments.build(payment_method: payment_method)
+          
+          # Create or update source
+          if payment.source.nil?
+            payment.source = Spree::IpaySource.new(phone: phone, payment_method: payment_method)
+          else
+            payment.source.phone = phone
+          end
+          
+          # Save payment and source
+          unless payment.save && payment.source.save
+            flash[:error] = payment.errors.full_messages.to_sentence.presence || 
+                           payment.source.errors.full_messages.to_sentence.presence || 
+                           'Failed to save payment details.'
+            redirect_to checkout_state_path('payment') and return
+          end
+          
+          # Store phone in session
+          session[:ipay_phone_number] = phone
         end
+      end
+    end
+    
+    # Check payment status when confirming order
+    if @order.payment? && params[:state] == 'confirm' && @order.payments.iPay.any?
+      payment = @order.payments.valid.iPay.pending.last
+      if payment && !payment.completed? && payment.source&.status != 'completed'
+        flash[:error] = I18n.t('spree.ipay.payment_not_completed')
+        redirect_to checkout_state_path('payment') and return
       end
     end
     
