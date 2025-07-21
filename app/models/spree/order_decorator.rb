@@ -17,7 +17,7 @@ module Spree
       )
       base.state_machine.before_transition(
         to: :complete,
-        guard: ->(order) { order.ipay_payment_confirmed? }
+        if: ->(order) { order.ipay_payment_confirmed? }
       )
     end
 
@@ -26,19 +26,14 @@ module Spree
         p.payment_method.is_a?(Spree::PaymentMethod::Ipay) && p.completed?
       end
     end
-    
-    def log_before_confirm
-      # No logging needed
-    end
-    
-    def log_after_confirm
-      # No logging needed
-    end
-    
-    def log_complete_transition
-      # No logging needed
-    end
+
+    def log_before_confirm; end
+    def log_after_confirm; end
+    def log_complete_transition; end
   end
+end
+
+Spree::Order.prepend(Spree::OrderDecorator) if defined?(Spree::Order)
 end
 
 Spree::Order.prepend(Spree::OrderDecorator) if defined?(Spree::Order)
