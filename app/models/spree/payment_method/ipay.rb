@@ -248,40 +248,74 @@ module Spree
     end
 
     def process!(phone: nil, payment: nil, amount: nil, options: {})
+      Rails.logger.info("IPAY_DEBUG: [process!] Starting payment processing for order #{payment&.order&.number}")
+      
       # Validate required parameters
       unless phone.present? && payment.present? && payment.order.present? && amount.present?
-        return failure_response("Missing required parameters")
+        error_msg = "Missing required parameters: phone=#{phone.present?}, payment=#{payment.present?}, order=#{payment&.order.present?}, amount=#{amount.present?}"
+        Rails.logger.error("IPAY_DEBUG: [process!] #{error_msg}")
+        return failure_response("Payment processing failed: #{error_msg}")
       end
 
       # Validate phone number format
       phone_digits = phone.to_s.gsub(/\D/, '')
-      unless phone_digits.match?(/^\d{10}$/)
-        return failure_response("Invalid phone number format")
+      unless phone_digits.match?(/^\d{10,15}$/)
+        error_msg = "Invalid phone number format: #{phone}"
+        Rails.logger.error("IPAY_DEBUG: [process!] #{error_msg}")
+        return failure_response("Please enter a valid 10-15 digit phone number")
       end
 
       # Validate credentials are set
       if preferred_vendor_id.blank? || preferred_hash_key.blank?
-        return failure_response("Payment configuration error")
+        error_msg = "Payment configuration error: vendor_id=#{preferred_vendor_id.present?}, hash_key=#{preferred_hash_key.present?}"
+        Rails.logger.error("IPAY_DEBUG: [process!] #{error_msg}")
+        return failure_response("Payment configuration error. Please contact support.")
       end
 
       # Validate payment amount
       unless amount.to_f > 0
-        return failure_response('Invalid payment amount')
+        error_msg = "Invalid payment amount: #{amount}"
+        Rails.logger.error("IPAY_DEBUG: [process!] #{error_msg}")
+        return failure_response("Invalid payment amount")
       end
 
-      # Update payment amount if needed
-      if (payment.amount.to_f - amount.to_f).abs > Float::EPSILON
-        payment.amount = amount
-        payment.save!
+      begin
+        # Update payment amount if needed
+        if (payment.amount.to_f - amount.to_f).abs > Float::EPSILON
+          payment.amount = amount
+          payment.save!
+        end
+
+        # Store phone number in session if we have a controller context
+        if options[:controller]&.respond_to?(:session)
+          options[:controller].session[:ipay_phone_number] = phone
+          Rails.logger.info("IPAY_DEBUG: [process!] Stored phone number in session")
+        end
+
+        # Transition payment to processing state
+        if payment.respond_to?(:started_processing!)
+          payment.started_processing!
+          Rails.logger.info("IPAY_DEBUG: [process!] Payment #{payment.number} marked as processing")
+        end
+
+        # Generate the iPay form HTML
+        form_html = generate_ipay_form_html(payment, phone, self)
+        
+        # Return success with form HTML
+        Rails.logger.info("IPAY_DEBUG: [process!] Successfully generated iPay form for order #{payment.order.number}")
+        
+        # Return a success response with the form HTML
+        ActiveMerchant::Billing::Response.new(
+          true,
+          'iPay payment processing started',
+          { form_html: form_html },
+          { test: test_mode? }
+        )
+      rescue StandardError => e
+        error_msg = "Error in process!: #{e.class}: #{e.message}\n#{e.backtrace.take(5).join("\n")}"
+        Rails.logger.error("IPAY_DEBUG: [process!] #{error_msg}")
+        failure_response("Payment processing failed: #{e.message}")
       end
-
-      # Store phone number in session if we have a controller context
-      options[:controller].session[:ipay_phone_number] = phone if options[:controller]&.respond_to?(:session)
-
-      # Transition payment to processing state
-      payment.started_processing! if payment.respond_to?(:started_processing!)
-
-      success_response('Payment processing started')
     rescue StandardError => e
       failure_response("Payment processing failed")
     end

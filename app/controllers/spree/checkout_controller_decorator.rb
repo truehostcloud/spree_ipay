@@ -323,7 +323,11 @@ module Spree
       Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Order[#{@order&.number || 'nil'}] " \
                        "State: #{@order.state}, " \
                        "Payment State: #{@order.payment_state}, " \
-                       "Total: #{@order.total}")
+                       "Total: #{@order.total}, " \
+                       "Line Items: #{@order.line_items.count}")
+      
+      # Check if the order was modified (items added/removed) after payment was initiated
+      order_was_modified = @order.line_items.any? { |item| item.updated_at > 1.minute.ago }
       
       # Get all incomplete payments
       incomplete_payments = @order.payments.select { |p| !p.completed? && !p.failed? && !p.void? }
@@ -331,9 +335,10 @@ module Spree
       Rails.logger.debug("IPAY_DEBUG: [reset_incomplete_payment_if_any] Found #{incomplete_payments.size} incomplete payments: " \
                         "#{incomplete_payments.map { |p| "#{p.number}:#{p.state}" }.join(', ')}")
       
-      # If we have any incomplete payments, handle them
-      if incomplete_payments.any?
-        Rails.logger.info("Found #{incomplete_payments.count} incomplete payments for order #{@order.number}")
+      # If we have any incomplete payments or order was modified, handle them
+      if incomplete_payments.any? || order_was_modified
+        Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Processing #{incomplete_payments.count} incomplete payments " \
+                         "and order_was_modified=#{order_was_modified} for order #{@order.number}")
         
         # Void and invalidate all incomplete payments
         incomplete_payments.each do |payment|
@@ -370,28 +375,43 @@ module Spree
           end
         end
         
-        # Reset order to payment state if not already there
-        if @order.state != 'payment'
-          Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Resetting order #{@order.number} to payment state")
+        # Reset order to payment state if not already there or if order was modified
+        if @order.state != 'payment' || order_was_modified
+          Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Resetting order #{@order.number} to payment state " \
+                          "(order_was_modified=#{order_was_modified})")
           
           begin
+            # Recalculate the order to ensure totals are up to date
+            @order.recalculate
+            
+            # Reset the order state
             @order.update_columns(
               state: 'payment',
               payment_state: 'balance_due',
               updated_at: Time.current
             )
-            Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Order #{@order.number} reset to payment state")
+            
+            Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Order #{@order.number} reset to payment state " \
+                            "with total: #{@order.total}")
+            
+            # If order was modified, log the changes
+            if order_was_modified
+              Rails.logger.info("IPAY_DEBUG: [reset_incomplete_payment_if_any] Order #{@order.number} was modified. " \
+                              "New line items: #{@order.line_items.count}, New total: #{@order.total}")
+            end
+            
           rescue => e
             Rails.logger.error("IPAY_DEBUG: [reset_incomplete_payment_if_any] Failed to reset order state: " \
                              "#{e.class}: #{e.message}")
             raise
           end
           
-          # Create a new checkout payment if we don't have any valid ones
-          if @order.payments.valid.none?
+          # Create a new checkout payment if we don't have any valid ones or if order was modified
+          if @order.payments.valid.none? || order_was_modified
             last_payment = @order.payments.last
             if last_payment&.payment_method
               begin
+                # Create a new payment with the updated amount
                 new_payment = @order.payments.create!(
                   payment_method_id: last_payment.payment_method_id,
                   amount: @order.outstanding_balance,
