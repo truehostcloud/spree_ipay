@@ -524,15 +524,15 @@ module Spree
         order_path(order, order_token: order.guest_token)
       end
     end
-  end
-  
-  private
-  
-  def handle_pending_ipay_payment
-    return unless @order.payments.valid.iPay.any? { |p| p.checkout? && p.source&.status == 'pending' }
     
-    flash[:notice] = I18n.t('spree.please_complete_payment')
-    redirect_to checkout_state_path('payment')
+    private
+    
+    def handle_pending_ipay_payment
+      return unless @order.payments.valid.iPay.any? { |p| p.checkout? && p.source&.status == 'pending' }
+      
+      flash[:notice] = I18n.t('spree.please_complete_payment')
+      redirect_to checkout_state_path('payment')
+    end
   end
 end
 
