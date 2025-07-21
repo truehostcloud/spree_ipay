@@ -190,8 +190,28 @@ module Spree
     end
 
     def authorize(amount, source, options = {})
-      options[:originator]
+      # Get the payment from options or create a new one
+      payment = options[:payment] if options[:payment].is_a?(Spree::Payment)
+      payment ||= options[:originator] if options[:originator].is_a?(Spree::Payment)
+      
+      # If we still don't have a payment, try to create one
+      if payment.nil? && source.is_a?(Spree::IpaySource)
+        order = source.order || options[:order]
+        return failure_response("Could not determine order for payment") if order.nil?
+        
+        payment = order.payments.create!(
+          payment_method_id: id,
+          amount: amount,
+          source: source
+        )
+      end
+      
+      # Ensure we have a payment and it's valid
+      return failure_response("Invalid payment") unless payment.is_a?(Spree::Payment)
+      
+      # Get the order from the payment
       order = payment.order
+      return failure_response("Order not found for payment") if order.nil?
 
       # Ensure the order is in the correct state
       return failure_response("Order is not in a confirmable state") unless order.checkout_steps.include?('confirm')
@@ -200,28 +220,22 @@ module Spree
       return failure_response("Invalid payment source") if source.blank? || !source.is_a?(Spree::IpaySource)
 
       # Ensure source is associated with payment method
-      if source.payment_method_id != id && !source.update(payment_method_id: id)
-        return failure_response("Failed to update payment source")
-      end
-
-      # Get phone from source
-      phone = source.phone
-
-      # Store phone number in session if we have a controller context
-      options[:controller].session[:ipay_phone_number] = phone if options[:controller]&.respond_to?(:session)
-
-      # Ensure payment has the source assigned
-      if payment.source.nil? || !payment.source.is_a?(Spree::IpaySource)
-        payment.source = source
-        payment.payment_method_id = id
-
-        # Save the payment to ensure source is associated
-        unless payment.save
-          return failure_response("Failed to save payment: #{payment.errors.full_messages.to_sentence}")
-        end
-      else
-        payment.source.phone = phone
-        return failure_response("Failed to update payment source") if payment.source.changed? && !payment.source.save
+      source.payment_method_id = id
+      
+      # Get phone number from source or options
+      phone = source.phone.presence || 
+              options.dig(:originator, :source_attributes, :phone) || 
+              options.dig(:originator, :source, :phone) ||
+              (options[:controller].is_a?(ActionController::Base) && options[:controller].session[:ipay_phone_number])
+      
+      return failure_response("Phone number is required") if phone.blank?
+      
+      # Ensure payment source is set and has phone number
+      payment.source ||= source
+      payment.source.phone = phone
+      
+      unless payment.save
+        return failure_response("Failed to save payment: #{payment.errors.full_messages.to_sentence}")
       end
 
       # Process the payment
