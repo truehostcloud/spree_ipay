@@ -7,24 +7,6 @@ module Spree
         to: :confirm,
         do: :log_before_confirm
       )
-      
-      base.state_machine.after_transition(
-        to: :confirm,
-        do: :log_after_confirm
-      )
-      
-      base.state_machine.after_transition(
-        to: :complete,
-        do: :log_complete_transition
-      )
-    end
-
-    # Only allow complete if iPay payment is confirmed
-    def self.prepended(base)
-      base.state_machine.before_transition(
-        to: :confirm,
-        do: :log_before_confirm
-      )
       base.state_machine.after_transition(
         to: :confirm,
         do: :log_after_confirm
