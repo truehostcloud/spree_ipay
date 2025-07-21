@@ -3,10 +3,12 @@
 module Spree
   module PaymentDecorator
     def self.prepended(base)
-      base.scope :iPay, -> { where(payment_method: Spree::PaymentMethod::Ipay) }
       base.before_validation :ensure_payment_source, if: :ipay_payment?
       base.before_validation :invalidate_previous_payments, if: :ipay_payment?
       base.validates :source, presence: { message: 'must be present for iPay payments' }, if: :ipay_payment?
+      
+      # Add scopes for iPay payments
+      base.scope :iPay, -> { where(payment_method: Spree::PaymentMethod::Ipay) }
       
       # Log all state transitions
       states = base.state_machines[:state].states.map(&:name)
@@ -58,6 +60,18 @@ module Spree
       payment_method&.is_a?(Spree::PaymentMethod::Ipay)
     end
     
+    # Ensure payment is sufficient for order completion
+    def sufficient?
+      return super unless ipay_payment?
+      completed? || (checkout? && source&.status == 'completed')
+    end
+    
+    # Prevent auto-completion of order if payment isn't confirmed
+    def can_complete?(order)
+      return super unless ipay_payment?
+      completed? || (checkout? && source&.status == 'completed')
+    end
+    
     def source_required?
       !(payment_method.respond_to?(:source_required?) && !payment_method.source_required?)
     end
@@ -88,15 +102,6 @@ module Spree
     
     def log_void_state
       # No data logging
-    end
-    
-    def sufficient?
-      return super unless ipay_payment?
-      completed? || (checkout? && source&.status == 'completed')
-    end
-    
-    def self.has_pending_ipay_payment?(order)
-      order.payments.valid.iPay.any? { |p| p.checkout? && p.source&.status == 'pending' }
     end
     
     # Invalidates any previous pending or processing payments for this order

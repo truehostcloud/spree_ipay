@@ -7,7 +7,7 @@ module Spree
       base.before_action :log_checkout_state, only: [:update]
       base.before_action :handle_ipay_redirect, only: [:update]
       base.before_action :set_request_variant
-      base.before_action :handle_pending_ipay_payment, only: [:edit], if: -> { @order&.payment? }
+      base.before_action :check_ipay_payment_status, only: [:update], if: -> { @order&.payment? }
     end
     
     def log_checkout_state
@@ -53,14 +53,8 @@ module Spree
           end
           
           # Create a new payment if none exists
-          Rails.logger.info "omkuu: [Checkout] Checking for existing payments"
-          Rails.logger.info "omkuu: [Checkout] Order ID: #{@order.id}, Payments count: #{@order.payments.count}"
-          
           if @order.payments.empty?
             Rails.logger.info "omkuu: [Checkout] No payments exist, creating new payment"
-            Rails.logger.info "omkuu: [Checkout] Payment method: #{payment_method&.inspect}"
-            Rails.logger.info "omkuu: [Checkout] Order total: #{@order.total}"
-            
             begin
               payment = @order.payments.build(
                 payment_method: payment_method,
@@ -69,33 +63,19 @@ module Spree
                 state: 'checkout'
               )
               
-              Rails.logger.info "omkuu: [Checkout] Built payment: #{payment.inspect}"
-              
-              if payment.valid?
-                Rails.logger.info "omkuu: [Checkout] Payment is valid, attempting to save..."
-                if payment.save
-                  Rails.logger.info "omkuu: [Checkout] Successfully created payment: #{payment.id}"
-                  Rails.logger.info "omkuu: [Checkout] Payment details: #{payment.attributes}"
-                  @order.reload
-                  Rails.logger.info "omkuu: [Checkout] Order after payment creation - Payments count: #{@order.payments.count}"
-                else
-                  error_msg = "Failed to save payment: #{payment.errors.full_messages.join(', ')}"
-                  Rails.logger.error "omkuu: [Checkout] #{error_msg}"
-                  raise error_msg
-                end
+              if payment.save
+                Rails.logger.info "omkuu: [Checkout] Successfully created payment: #{payment.id}"
+                @order.reload
               else
-                error_msg = "Payment validation failed: #{payment.errors.full_messages.join(', ')}"
-                Rails.logger.error "omkuu: [Checkout] #{error_msg}"
-                raise error_msg
+                Rails.logger.error "omkuu: [Checkout] Failed to create payment: #{payment.errors.full_messages.join(', ')}"
+                raise "Failed to create payment: #{payment.errors.full_messages.join(', ')}"
               end
             rescue StandardError => e
-              error_msg = "Error creating payment: #{e.message}\n#{e.backtrace.take(5).join("\n")}"
+              error_msg = "Error creating payment: #{e.message}"
               Rails.logger.error "omkuu: [Checkout] #{error_msg}"
               flash[:error] = "Unable to process payment. Please try again."
               redirect_to checkout_state_path(@order.state) and return
             end
-          else
-            Rails.logger.info "omkuu: [Checkout] Existing payments found: #{@order.payments.map { |p| "ID: #{p.id}, State: #{p.state}" }.join('; ')}"
           end
           
           # Ensure we have a valid payment
@@ -544,15 +524,48 @@ module Spree
         order_path(order, order_token: order.guest_token)
       end
     end
+  end
+  
+  private
+  
+  # Check if iPay payment is completed before allowing order completion
+  def check_ipay_payment_status
+    return unless @order.payments.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
     
-    private
-    
-    def handle_pending_ipay_payment
-      return unless @order.payments.valid.iPay.any? { |p| p.checkout? && p.source&.status == 'pending' }
-      
-      flash[:notice] = I18n.t('spree.please_complete_payment')
-      redirect_to checkout_state_path('payment')
+    payment = @order.payments.valid.iPay.pending.last
+    if payment && payment.source&.status != 'completed' && params[:state] == 'confirm'
+      flash[:error] = I18n.t('spree.ipay.payment_not_completed')
+      redirect_to checkout_state_path('payment') and return false
     end
+  end
+  
+  # Override the update action to handle iPay payments
+  def update
+    if @order.payment? && @order.payments.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
+      payment = @order.payments.valid.iPay.pending.last
+      if payment && params[:state] == 'confirm'
+        # If we're trying to confirm but payment isn't complete
+        unless payment.completed? || payment.source&.status == 'completed'
+          flash[:error] = I18n.t('spree.ipay.payment_not_completed')
+          redirect_to checkout_state_path('payment') and return
+        end
+      end
+    end
+    
+    super
+  end
+  
+  # Override next_step_url_for to handle iPay payment state
+  def next_step_url_for(order, next_step)
+    return super unless order.payment? && order.payments.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
+    
+    payment = order.payments.valid.iPay.pending.last
+    if payment && payment.source&.status != 'completed' && next_step == 'confirm'
+      flash[:notice] = I18n.t('spree.ipay.payment_in_progress')
+      return checkout_state_path('payment')
+    end
+    
+    super
   end
 end
 

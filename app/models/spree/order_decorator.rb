@@ -20,12 +20,9 @@ module Spree
     end
 
     def payment_required?
-      return false if paid?
-      return super unless has_ipay_payments?
-      return false if Spree::Payment.has_pending_ipay_payment?(self)
-      
-      ipay_payment = payments.valid.iPay.last
-      ipay_payment.nil? || ipay_payment.completed? || ipay_payment.source&.status == 'completed'
+      ipay_payment = payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
+      return false if ipay_payment && payments.valid.iPay.any? { |p| p.completed? || p.source&.status == 'completed' }
+      ipay_payment ? false : super
     end
 
     def confirmation_required?
@@ -33,10 +30,17 @@ module Spree
       ipay_payment || super
     end
     
-    private
-    
-    def has_ipay_payments?
-      payments.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
+    # Override the next! method to prevent auto-completion for iPay orders
+    def next(*args)
+      return false unless payment_required?
+      
+      if payment? && payments.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
+        # For iPay, ensure payment is completed first
+        ipay_payment = payments.find_by(payment_method: Spree::PaymentMethod::Ipay.first)
+        return false if ipay_payment && !ipay_payment.completed? && ipay_payment.source&.status != 'completed'
+      end
+      
+      super
     end
     
     def log_before_confirm
