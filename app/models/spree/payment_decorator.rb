@@ -93,18 +93,39 @@ module Spree
     def invalidate_previous_payments
       return unless order && (pending? || checkout?)
       
-      order.payments.where.not(id: id).where(payment_method: payment_method).each do |payment|
-        next unless payment.checkout? || payment.pending? || payment.processing?
-        
+      Rails.logger.info "omkuu: Starting payment invalidation for order #{order.number}"
+      Rails.logger.info "omkuu: Current payment state: #{state}, ID: #{id}"
+      
+      payments_to_invalidate = order.payments
+                                 .where.not(id: id)
+                                 .where(payment_method: payment_method)
+                                 .where(state: ['checkout', 'pending', 'processing'])
+      
+      Rails.logger.info "omkuu: Found #{payments_to_invalidate.count} payments to invalidate"
+      
+      payments_to_invalidate.each do |payment|
         begin
-          payment.void_transaction! unless payment.void?
-          payment.update_columns(
-            state: 'invalid',
-            updated_at: Time.current
-          )
-          Rails.logger.info "Invalidated previous payment #{payment.id} for order #{order.number}"
+          Rails.logger.info "omkuu: Invalidating payment #{payment.id} (state: #{payment.state})"
+          
+          # Skip if already voided or invalid
+          unless payment.void? || payment.state == 'invalid'
+            payment.void_transaction! unless payment.void?
+            result = payment.update_columns(
+              state: 'invalid',
+              updated_at: Time.current
+            )
+            
+            if result
+              Rails.logger.info "omkuu: Successfully invalidated payment #{payment.id}"
+            else
+              Rails.logger.error "omkuu: Failed to update payment #{payment.id} - #{payment.errors.full_messages.join(', ')}"
+            end
+          else
+            Rails.logger.info "omkuu: Payment #{payment.id} already in state: #{payment.state}"
+          end
         rescue StandardError => e
-          Rails.logger.error "Failed to invalidate payment #{payment.id}: #{e.message}"
+          Rails.logger.error "omkuu: ERROR invalidating payment #{payment.id}: #{e.class} - #{e.message}"
+          Rails.logger.error "omkuu: Backtrace: #{e.backtrace.first(5).join("\n")}"
         end
       end
     end

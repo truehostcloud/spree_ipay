@@ -277,19 +277,40 @@ module Spree
     def invalidate_existing_payments
       return unless @order
       
-      @order.payments.each do |payment|
-        next unless payment.payment_method.is_a?(Spree::PaymentMethod::Ipay)
-        next unless payment.checkout? || payment.pending? || payment.processing?
-        
+      Rails.logger.info "omkuu: [Checkout] Starting invalidation for order #{@order.number}"
+      
+      payments = @order.payments.select do |payment|
+        payment.payment_method.is_a?(Spree::PaymentMethod::Ipay) && 
+        (payment.checkout? || payment.pending? || payment.processing?)
+      end
+      
+      Rails.logger.info "omkuu: [Checkout] Found #{payments.count} iPay payments to invalidate"
+      
+      payments.each do |payment|
         begin
-          payment.void_transaction! unless payment.void?
-          payment.update_columns(
-            state: 'invalid',
-            updated_at: Time.current
-          )
-          Rails.logger.info "[iPay] Invalidated previous payment #{payment.id} for order #{@order.number}"
+          Rails.logger.info "omkuu: [Checkout] Processing payment #{payment.id} (state: #{payment.state})"
+          
+          unless payment.void? || payment.state == 'invalid'
+            Rails.logger.info "omkuu: [Checkout] Voiding transaction for payment #{payment.id}"
+            payment.void_transaction! unless payment.void?
+            
+            Rails.logger.info "omkuu: [Checkout] Updating payment #{payment.id} state to 'invalid'"
+            result = payment.update_columns(
+              state: 'invalid',
+              updated_at: Time.current
+            )
+            
+            if result
+              Rails.logger.info "omkuu: [Checkout] Successfully invalidated payment #{payment.id}"
+            else
+              Rails.logger.error "omkuu: [Checkout] Failed to update payment #{payment.id} - #{payment.errors.full_messages.join(', ')}"
+            end
+          else
+            Rails.logger.info "omkuu: [Checkout] Payment #{payment.id} already in state: #{payment.state}"
+          end
         rescue StandardError => e
-          Rails.logger.error "[iPay] Failed to invalidate payment #{payment.id}: #{e.message}"
+          Rails.logger.error "omkuu: [Checkout] ERROR processing payment #{payment.id}: #{e.class} - #{e.message}"
+          Rails.logger.error "omkuu: [Checkout] Backtrace: #{e.backtrace.first(5).join("\n")}"
         end
       end
     end
