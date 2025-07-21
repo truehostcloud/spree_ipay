@@ -2,7 +2,7 @@
 
 Spree::Core::Engine.routes.draw do
   # iPay payment confirmation callback
-  match '/ipay/confirm', to: 'gateway_callbacks#confirm', via: [:get, :post]
+  get '/ipay/confirm', to: 'spree/gateway_callbacks#confirm'
   get '/ipay/checkout/:id', to: 'ipay#interactive_checkout', as: :ipay_interactive_checkout
   
   # API endpoints

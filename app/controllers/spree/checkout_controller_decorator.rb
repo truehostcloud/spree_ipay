@@ -97,6 +97,9 @@ module Spree
       # Prepare return URL from preferences - remove any invalid characters
       lbk = (ipay_method.preferred_return_url.presence).to_s.gsub(/[;~`!%^*\-\u003e\u003c\u0026_]/i, '')
 
+      Rails.logger.info("[iPay DEBUG] cbk (callback URL): #{cbk}")
+      Rails.logger.info("[iPay DEBUG] lbk (return URL): #{lbk}")
+
       # Prepare iPay parameters - must match the exact order and parameters used in hash generation
       ipay_params = {
         'live' => live,
