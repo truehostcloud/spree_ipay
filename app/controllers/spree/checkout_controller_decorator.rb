@@ -200,60 +200,84 @@ module Spree
       Rails.logger.error("Error generating iPay form: #{e.message}\n#{e.backtrace.join("\n")}")
       raise "Error generating payment form: #{e.message}"
     end
-    # Override update action to handle JSON responses
+    
     def update
-      if @order.update_from_params(params, permitted_checkout_attributes, request.headers.env)
-        respond_to do |format|
-          format.html do
-            if @order.next
-              redirect_to checkout_state_path(@order.state)
+      Rails.logger.info("IPAY_DEBUG: [update] Starting update for order #{@order.number} in state #{@order.state}")
+
+      # Handle iPay payment specifically
+      if @order.state == 'payment' && params[:state] == 'payment'
+        payment_params = params.dig(:order, :payments_attributes, 0)
+        if payment_params && payment_params[:payment_method_id].present?
+          payment_method = Spree::PaymentMethod.find(payment_params[:payment_method_id])
+          if payment_method.is_a?(Spree::PaymentMethod::Ipay)
+            Rails.logger.info("IPAY_DEBUG: [update] Processing iPay payment for order #{@order.number}")
+            
+            # Create a new payment in processing state
+            payment = @order.payments.create!(
+              payment_method: payment_method,
+              amount: @order.total,
+              state: 'checkout'
+            )
+            
+            # Process the payment
+            response = payment_method.process!(
+              payment: payment,
+              phone: payment_params.dig(:source_attributes, :phone)
+            )
+            
+            if response.success?
+              Rails.logger.info("IPAY_DEBUG: [update] iPay payment processing started for order #{@order.number}")
+              
+              # Move to confirm state
+              @order.next! if @order.can_complete?
+              
+              # Store the payment ID in the session
+              session[:current_payment_id] = payment.id
+              
+              # Redirect to confirm state
+              respond_to do |format|
+                format.html { redirect_to checkout_state_path('confirm') }
+                format.json { render json: { status: 'success', redirect: checkout_state_path('confirm') } }
+              end
+              return
             else
-              redirect_to checkout_state_path(@order.state)
+              flash[:error] = response.message
+              redirect_to checkout_state_path('payment')
+              return
             end
           end
-          
-          format.json do
-            if @order.next
-              # Get the next state after the transition
-              next_state = @order.state
-              
-              # Prepare response data
-              response_data = {
+        end
+      end
+      
+      # Standard update flow for non-iPay payments
+      if @order.update_from_params(params, permitted_checkout_attributes, request.headers.env)
+        @order.temporary_address = !params[:save_user_address]
+        
+        unless @order.next
+          flash[:error] = @order.errors.full_messages.join("\n")
+          redirect_to(checkout_state_path(@order.state)) && return
+        end
+
+        if @order.completed?
+          @current_order = nil
+          flash.notice = Spree.t(:order_processed_successfully)
+          flash['order_completed'] = true
+          redirect_to completion_route
+        else
+          respond_to do |format|
+            format.html { redirect_to checkout_state_path(@order.state) }
+            format.json do
+              render json: {
                 status: 'success',
-                next_step: next_state,
+                next_step: @order.state,
                 order: {
                   number: @order.number,
                   state: @order.state,
                   total: @order.total.to_f,
                   payment_state: @order.payment_state,
                   shipment_state: @order.shipment_state
-                },
-                payment_required: @order.payment_required?,
-                checkout_steps: @order.checkout_steps,
-                current_step: next_state,
-                next_step_url: next_step_url_for(@order, next_state)
-              }
-              
-              # Add payment info if in payment state
-              if next_state == 'payment' && @order.payments.any?
-                payment = @order.payments.last
-                response_data[:payment] = {
-                  id: payment.id,
-                  number: payment.number,
-                  state: payment.state,
-                  amount: payment.amount.to_f,
-                  payment_method_id: payment.payment_method_id,
-                  payment_method_type: payment.payment_method&.type
                 }
-              end
-              
-              render json: response_data
-            else
-              render json: {
-                status: 'error',
-                errors: @order.errors.messages,
-                message: @order.errors.full_messages.to_sentence
-              }, status: :unprocessable_entity
+              }
             end
           end
         end
@@ -264,8 +288,7 @@ module Spree
             render json: {
               status: 'error',
               errors: @order.errors.messages,
-              message: @order.errors.full_messages.to_sentence,
-              validation_errors: @order.errors.full_messages
+              message: @order.errors.full_messages.to_sentence
             }, status: :unprocessable_entity
           end
         end
