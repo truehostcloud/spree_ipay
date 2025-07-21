@@ -230,13 +230,13 @@ module Spree
             if response.success?
               Rails.logger.info("IPAY_DEBUG: [update] iPay payment processing started for order #{@order.number}")
               
-              # Move to confirm state
-              @order.next! if @order.can_complete?
-              
-              # Store the payment ID in the session
+              # Only proceed to next state if we're in payment state
+              if @order.payment?
+                @order.next! if @order.next_step_complete?
+              end
+
               session[:current_payment_id] = payment.id
-              
-              # Redirect to confirm state
+
               respond_to do |format|
                 format.html { redirect_to checkout_state_path('confirm') }
                 format.json { render json: { status: 'success', redirect: checkout_state_path('confirm') } }
