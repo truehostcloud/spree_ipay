@@ -219,10 +219,12 @@ module Spree
               state: 'checkout'
             )
             
-            # Process the payment
+            # Process the payment with amount
             response = payment_method.process!(
               payment: payment,
-              phone: payment_params.dig(:source_attributes, :phone)
+              amount: @order.total,
+              phone: payment_params.dig(:source_attributes, :phone),
+              controller: self
             )
             
             if response.success?
