@@ -20,25 +20,8 @@ module Spree
     preference :currency, :string, default: 'KES'
     preference :callback_url, :string, default: '/ipay/confirm'
     preference :return_url, :string, default: -> {
-      # 1. Try environment variable first
-      if ENV['SITE_URL'].present?
-        url = ENV['SITE_URL'].chomp('/')
-        return "#{url}/ipay/confirm"
-      end
-      
-      # 2. Try Spree store URL
-      if defined?(Spree::Store) && Spree::Store.current
-        store = Spree::Store.current
-        if store.url.present?
-          url = store.url.chomp('/')
-          return "https://#{url}/ipay/confirm" unless url.start_with?('http')
-          return "#{url}/ipay/confirm"
-        end
-      end
-      
-      # 3. Fallback to relative path (will be made absolute by base_url)
-      '/ipay/confirm'
-    }
+                                              "#{Rails.application.routes.url_helpers.root_url.chomp('/')}/ipay/confirm"
+                                            }
 
     # Payment channels (in display order)
     preference :mpesa, :boolean, default: true
@@ -146,36 +129,6 @@ module Spree
       payment.pending? || payment.processing?
     end
 
-    # Cancel a payment in iPay
-    # This method is called when a payment needs to be cancelled
-    # @param response_code [String] The transaction ID to cancel
-    # @return [ActiveMerchant::Billing::Response] The response from the gateway
-    def cancel(response_code)
-      Rails.logger.info("IPAY_DEBUG: [cancel] Attempting to cancel payment with response code: #{response_code}")
-      
-      # If we don't have a response code, we can't cancel the payment
-      if response_code.blank?
-        Rails.logger.error("IPAY_DEBUG: [cancel] Cannot cancel payment - no response code provided")
-        return failure_response("Cannot cancel payment - no transaction ID provided")
-      end
-      
-      # In test mode, we'll just log the cancellation attempt
-      if test_mode?
-        Rails.logger.info("IPAY_DEBUG: [cancel] Test mode - simulating successful cancellation for: #{response_code}")
-        return success_response("Payment cancelled in test mode")
-      end
-      
-      # In production, we would make an API call to iPay to cancel the payment
-      # For now, we'll just log the attempt and return success
-      Rails.logger.info("IPAY_DEBUG: [cancel] Would cancel payment with response code: #{response_code}")
-      
-      # Return a successful response
-      success_response("Payment cancellation requested")
-    rescue StandardError => e
-      Rails.logger.error("IPAY_DEBUG: [cancel] Error cancelling payment: #{e.message}\n#{e.backtrace.join("\n")}")
-      failure_response("Error cancelling payment: #{e.message}")
-    end
-
     def supports?(source)
       # Return true for both nil source and IpaySource
       # This allows the payment to be created without a source initially
@@ -207,36 +160,8 @@ module Spree
     end
 
     def authorize(amount, source, options = {})
-      # Get the payment from options or create a new one
-      payment = options[:payment] if options[:payment].is_a?(Spree::Payment)
-      payment ||= options[:originator] if options[:originator].is_a?(Spree::Payment)
-      
-      # Get the order from options or payment
-      order = options[:order] || (payment.order if payment.respond_to?(:order))
-      
-      # If we still don't have an order, try to get it from the source's payment if it exists
-      if order.nil? && source.respond_to?(:payment) && source.payment.present?
-        order = source.payment.order
-      end
-      
-      # If we still don't have an order, try to get it from the controller
-      if order.nil? && options[:controller].is_a?(ActionController::Base) && options[:controller].respond_to?(:current_order)
-        order = options[:controller].current_order
-      end
-      
-      return failure_response("Could not determine order for payment") if order.nil?
-      
-      # If we don't have a payment, create one
-      if payment.nil?
-        payment = order.payments.create!(
-          payment_method_id: id,
-          amount: amount,
-          source: source
-        )
-      end
-      
-      # Ensure we have a payment and it's valid
-      return failure_response("Invalid payment") unless payment.is_a?(Spree::Payment)
+      options[:originator]
+      order = payment.order
 
       # Ensure the order is in the correct state
       return failure_response("Order is not in a confirmable state") unless order.checkout_steps.include?('confirm')
@@ -245,22 +170,28 @@ module Spree
       return failure_response("Invalid payment source") if source.blank? || !source.is_a?(Spree::IpaySource)
 
       # Ensure source is associated with payment method
-      source.payment_method_id = id
-      
-      # Get phone number from source or options
-      phone = source.phone.presence || 
-              options.dig(:originator, :source_attributes, :phone) || 
-              options.dig(:originator, :source, :phone) ||
-              (options[:controller].is_a?(ActionController::Base) && options[:controller].session[:ipay_phone_number])
-      
-      return failure_response("Phone number is required") if phone.blank?
-      
-      # Ensure payment source is set and has phone number
-      payment.source ||= source
-      payment.source.phone = phone
-      
-      unless payment.save
-        return failure_response("Failed to save payment: #{payment.errors.full_messages.to_sentence}")
+      if source.payment_method_id != id && !source.update(payment_method_id: id)
+        return failure_response("Failed to update payment source")
+      end
+
+      # Get phone from source
+      phone = source.phone
+
+      # Store phone number in session if we have a controller context
+      options[:controller].session[:ipay_phone_number] = phone if options[:controller]&.respond_to?(:session)
+
+      # Ensure payment has the source assigned
+      if payment.source.nil? || !payment.source.is_a?(Spree::IpaySource)
+        payment.source = source
+        payment.payment_method_id = id
+
+        # Save the payment to ensure source is associated
+        unless payment.save
+          return failure_response("Failed to save payment: #{payment.errors.full_messages.to_sentence}")
+        end
+      else
+        payment.source.phone = phone
+        return failure_response("Failed to update payment source") if payment.source.changed? && !payment.source.save
       end
 
       # Process the payment
@@ -317,75 +248,40 @@ module Spree
     end
 
     def process!(phone: nil, payment: nil, amount: nil, options: {})
-      Rails.logger.info("IPAY_DEBUG: [process!] Starting payment processing for order #{payment&.order&.number}")
-      Rails.logger.info("IPAY_DEBUG: [process!] Payment amount: #{amount} (original: #{payment&.amount})")
-      
       # Validate required parameters
       unless phone.present? && payment.present? && payment.order.present? && amount.present?
-        error_msg = "Missing required parameters: phone=#{phone.present?}, payment=#{payment.present?}, order=#{payment&.order.present?}, amount=#{amount.present?}"
-        Rails.logger.error("IPAY_DEBUG: [process!] #{error_msg}")
-        return failure_response("Payment processing failed: #{error_msg}")
+        return failure_response("Missing required parameters")
       end
 
       # Validate phone number format
       phone_digits = phone.to_s.gsub(/\D/, '')
-      unless phone_digits.match?(/^\d{10,15}$/)
-        error_msg = "Invalid phone number format: #{phone}"
-        Rails.logger.error("IPAY_DEBUG: [process!] #{error_msg}")
-        return failure_response("Please enter a valid 10-15 digit phone number")
+      unless phone_digits.match?(/^\d{10}$/)
+        return failure_response("Invalid phone number format")
       end
 
       # Validate credentials are set
       if preferred_vendor_id.blank? || preferred_hash_key.blank?
-        error_msg = "Payment configuration error: vendor_id=#{preferred_vendor_id.present?}, hash_key=#{preferred_hash_key.present?}"
-        Rails.logger.error("IPAY_DEBUG: [process!] #{error_msg}")
-        return failure_response("Payment configuration error. Please contact support.")
+        return failure_response("Payment configuration error")
       end
 
       # Validate payment amount
       unless amount.to_f > 0
-        error_msg = "Invalid payment amount: #{amount}"
-        Rails.logger.error("IPAY_DEBUG: [process!] #{error_msg}")
-        return failure_response("Invalid payment amount")
+        return failure_response('Invalid payment amount')
       end
 
-      begin
-        # Update payment amount if needed
-        if (payment.amount.to_f - amount.to_f).abs > Float::EPSILON
-          payment.amount = amount
-          payment.save!
-        end
-
-        # Store phone number in session if we have a controller context
-        if options[:controller]&.respond_to?(:session)
-          options[:controller].session[:ipay_phone_number] = phone
-          Rails.logger.info("IPAY_DEBUG: [process!] Stored phone number in session")
-        end
-
-        # Transition payment to processing state
-        if payment.respond_to?(:started_processing!)
-          payment.started_processing!
-          Rails.logger.info("IPAY_DEBUG: [process!] Payment #{payment.number} marked as processing")
-        end
-
-        # Generate the iPay form HTML with phone number
-        form_html = generate_ipay_form_html(payment, phone)
-        
-        # Return success with form HTML
-        Rails.logger.info("IPAY_DEBUG: [process!] Successfully generated iPay form for order #{payment.order.number}")
-        
-        # Return a success response with the form HTML
-        ActiveMerchant::Billing::Response.new(
-          true,
-          'iPay payment processing started',
-          { form_html: form_html },
-          { test: test_mode? }
-        )
-      rescue StandardError => e
-        error_msg = "Error in process!: #{e.class}: #{e.message}\n#{e.backtrace.take(5).join("\n")}"
-        Rails.logger.error("IPAY_DEBUG: [process!] #{error_msg}")
-        failure_response("Payment processing failed: #{e.message}")
+      # Update payment amount if needed
+      if (payment.amount.to_f - amount.to_f).abs > Float::EPSILON
+        payment.amount = amount
+        payment.save!
       end
+
+      # Store phone number in session if we have a controller context
+      options[:controller].session[:ipay_phone_number] = phone if options[:controller]&.respond_to?(:session)
+
+      # Transition payment to processing state
+      payment.started_processing! if payment.respond_to?(:started_processing!)
+
+      success_response('Payment processing started')
     rescue StandardError => e
       failure_response("Payment processing failed")
     end
@@ -404,62 +300,28 @@ module Spree
         raise "Missing required iPay credentials"
       end
 
-      # Ensure we have a valid payment object
-      unless payment.is_a?(Spree::Payment)
-        raise ArgumentError, "Invalid payment object provided"
-      end
-
-      # Ensure payment has an associated order
-      unless payment.order
-        raise "Payment is missing an associated order"
-      end
-
       # Set live mode (0 for test, 1 for live)
       live = test_mode? ? "0" : "1"
 
       # Prepare values - must match exactly what will be sent in the form
-      order = payment.order
-      oid = order.number.to_s.gsub(/[^a-zA-Z0-9]/, '')[0...26] # Max 26 alphanumeric chars
+      oid = payment.order.number.to_s.gsub(/[^a-zA-Z0-9]/, '')[0...26] # Max 26 alphanumeric chars
       inv = oid[0...15] # Max 15 chars, use order ID if not specified
-      
-      # Format amount to 2 decimal places and convert to integer cents
-      amount_in_cents = (payment.amount.to_f * 100).round
-      ttl = format('%.2f', (amount_in_cents / 100.0)) # Format as string with 2 decimal places
-      
-      # Get phone number from various possible sources
-      tel = if phone.present?
-              phone.to_s.gsub(/\D/, '')
-            elsif order.bill_address&.phone.present?
-              order.bill_address.phone.gsub(/\D/, '')
-            else
-              '0700000000'
-            end[0...15] # Max 15 digits
-            
-      eml = order.email.to_s[0...30] # Max 30 chars
+      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents, no decimals
+      tel = (phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000").gsub(/\D/, '')[0...15] # Max 15 digits
+      eml = payment.order.email.to_s[0...30] # Max 30 chars
       vid = vendor_id[0...12] # Max 12 chars
       curr = (preferred_currency.presence || 'KES')[0...3] # Max 3 chars
       p1 = ""
       p2 = ""
       p3 = ""
       p4 = ""
-      
-      # Generate callback URL safely
-      cbk_host = base_url.gsub(/^https?:\/\//, '') # Remove protocol if present
-      cbk = (preferred_callback_url.presence || "https://#{cbk_host}/ipay/confirm")
-            .gsub(/[;:~`!%^*-<>_]/i, '') # Remove invalid chars
-            
+      cbk = (preferred_callback_url.presence || "https://#{base_url}/ipay/confirm").gsub(/[;:~`!%^*\-><&_]/i, '') # Remove invalid chars
       cst = "1"
       crl = "0" # 0 for HTTP/HTTPS callback
 
-      # Format amount to 2 decimal places
-      formatted_ttl = format('%.2f', ttl.to_f)
-      
       # Create datastring in the exact order required by iPay
       # IMPORTANT: This exact order must be maintained
-      datastring = live + oid + inv + formatted_ttl + tel + eml + vid + curr + p1 + p2 + p3 + p4 + cbk + cst + crl
-      
-      # Log the datastring for debugging
-      Rails.logger.info("IPAY_DEBUG: [ipay_signature_hash] Datastring: #{datastring}")
+      datastring = live + oid + inv + ttl + tel + eml + vid + curr + p1 + p2 + p3 + p4 + cbk + cst + crl
 
       # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
       digest = OpenSSL::Digest.new('sha1')
@@ -471,17 +333,14 @@ module Spree
       raise "Error generating hash: #{e.message}"
     end
 
-    def generate_ipay_form_html(payment, phone = nil)
+    def generate_ipay_form_html(payment)
       # Get required values
       live = test_mode? ? "0" : "1"
       # Use numeric order ID for transaction code
       oid = payment.order.id.to_s
       # Use numeric order ID for invoice as well
       inv = payment.order.id.to_s
-      
-      # Format amount to 2 decimal places and convert to cents (integer)
-      amount_in_cents = (payment.amount.to_f * 100).round
-      ttl = format('%.2f', (amount_in_cents / 100.0)) # Format as string with 2 decimal places
+      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
       tel = payment.order.bill_address&.phone || session[:ipay_phone_number] || "0700000000"
       eml = payment.order.email
       vid = preferred_vendor_id
@@ -531,10 +390,8 @@ module Spree
       # Generate return URL for customer redirect after payment
       # Point to the frontend order confirmation page
       order_number = payment.order.number
-      # Use token or guest_token depending on what's available
-      order_token = payment.order.respond_to?(:token) ? payment.order.token : payment.order.guest_token
+      order_token = payment.order.guest_token
       rst = preferred_return_url.presence || "#{default_protocol}://#{default_host}/orders/#{order_number}?order_token=#{order_token}"
-      Rails.logger.info("IPAY_DEBUG: [generate_ipay_form_html] Generated return URL: #{rst}")
 
       cst = "1"  # Customer email notification flag
       crl = "2"  # Customer phone notification flag
@@ -758,24 +615,17 @@ module Spree
       }
     end
 
-    def generate_hash(payment, phone: nil)
+    def generate_hash(payment)
       # Prepare all values
-      live = preferred_test_mode 
+      live = preferred_test_mode ? '0' : '1'
       oid = payment.order.number
-      inv = "INV-#{payment.order.number}"
-      ttl = payment.amount.to_s
-      
-      # Use provided phone or fall back to billing address phone
-      tel = if phone.present?
-              phone.to_s.gsub(/\D/, '')
-            else
-              payment.order.bill_address&.phone.to_s.gsub(/\D/, '')
-            end
-      
+      inv = payment.order.number
+      ttl = payment.amount.to_f.round(2).to_s
       eml = payment.order.email
       vid = preferred_vendor_id
       curr = preferred_currency.presence || 'KES'
       cbk = preferred_callback_url.presence || '/ipay/confirm'
+
 
       # Create data string in the exact order required by iPay
       data_string = [
@@ -834,56 +684,7 @@ module Spree
     end
 
     def base_url
-      # 1. Try environment variable first (highest priority)
-      if ENV['SITE_URL'].present?
-        url = ENV['SITE_URL'].chomp('/')
-        return "https://#{url}" unless url.start_with?('http')
-        return url
-      end
-
-      # 2. Try Spree store URL
-      if defined?(Spree::Store) && Spree::Store.current
-        store = Spree::Store.current
-        if store.url.present?
-          url = store.url.chomp('/')
-          return "https://#{url}" unless url.start_with?('http')
-          return url
-        end
-      end
-      
-      # 3. Try Rails URL helpers
-      if defined?(Rails.application.routes.url_helpers)
-        begin
-          # Ensure default_url_options is initialized
-          Rails.application.routes.default_url_options ||= {}
-          
-          # Set defaults if not present
-          host = Rails.application.routes.default_url_options[:host] || ENV['HOST']
-          protocol = Rails.application.routes.default_url_options[:protocol] || 'https'
-          
-          if host.present?
-            return "#{protocol}://#{host.chomp('/')}"
-          end
-        rescue => e
-          Rails.logger.error("IPAY_DEBUG: [base_url] Error with url_helpers: #{e.message}")
-        end
-      end
-      
-      # 4. Try ngrok in development
-      if Rails.env.development? && ENV['NGROK_URL'].present?
-        return ENV['NGROK_URL'].chomp('/')
-      end
-      
-      # 5. Fallback to request host if available
-      if defined?(request) && request.present?
-        return "#{request.protocol}#{request.host_with_port}"
-      end
-      
-      # Final fallback
-      'https://example.com'
-    rescue => e
-      Rails.logger.error("IPAY_DEBUG: [base_url] Error generating URL: #{e.message}")
-      'https://example.com'
+      Rails.application.routes.url_helpers.root_url.chomp('/')
     end
 
     def test_mode?
