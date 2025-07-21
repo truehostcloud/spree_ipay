@@ -315,7 +315,7 @@ module Spree
       p2 = ""
       p3 = ""
       p4 = ""
-      cbk = (preferred_callback_url.presence || "https://#{base_url}/ipay/confirm").gsub(/[;:~`!%^*\-><&_]/i, '') # Remove invalid chars
+      cbk = (preferred_callback_url.presence || "https://#{base_url}/ipay/confirm").gsub(/[;~`!%^*\-\u003e\u003c\u0026_]/i, '') # Remove invalid chars but keep colon
       cst = "1"
       crl = "0" # 0 for HTTP/HTTPS callback
 
