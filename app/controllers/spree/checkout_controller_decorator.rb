@@ -24,11 +24,25 @@ module Spree
         if params[:state] == "payment"
           phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
           session[:ipay_phone_number] = phone if phone.present?
+          
+          # Invalidate any existing pending payments for this order
+          invalidate_existing_payments
         end
 
         # Generate form and redirect during confirm state
         if params[:state] == "confirm" && @order.payments.last&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
           payment = @order.payments.last
+          
+          # Ensure we have a valid payment in the right state
+          unless payment.checkout? || payment.pending?
+            @order.payments.create!(
+              payment_method: payment.payment_method,
+              amount: @order.total,
+              response_code: "IPAY_#{Time.now.to_i}"
+            )
+            payment = @order.payments.last
+          end
+          
           ipay_method = payment.payment_method
           phone = session[:ipay_phone_number] || @order.bill_address&.phone
 
@@ -258,6 +272,27 @@ module Spree
     end
     
     private
+    
+    # Invalidates any existing payments for this order that are in a pending state
+    def invalidate_existing_payments
+      return unless @order
+      
+      @order.payments.each do |payment|
+        next unless payment.payment_method.is_a?(Spree::PaymentMethod::Ipay)
+        next unless payment.checkout? || payment.pending? || payment.processing?
+        
+        begin
+          payment.void_transaction! unless payment.void?
+          payment.update_columns(
+            state: 'invalid',
+            updated_at: Time.current
+          )
+          Rails.logger.info "[iPay] Invalidated previous payment #{payment.id} for order #{@order.number}"
+        rescue StandardError => e
+          Rails.logger.error "[iPay] Failed to invalidate payment #{payment.id}: #{e.message}"
+        end
+      end
+    end
     
     def next_step_url_for(order, next_step)
       return unless next_step

@@ -4,6 +4,7 @@ module Spree
   module PaymentDecorator
     def self.prepended(base)
       base.before_validation :ensure_payment_source, if: :ipay_payment?
+      base.before_validation :invalidate_previous_payments, if: :ipay_payment?
       base.validates :source, presence: { message: 'must be present for iPay payments' }, if: :ipay_payment?
       
       # Log all state transitions
@@ -86,6 +87,26 @@ module Spree
     
     def log_void_state
       # No data logging
+    end
+    
+    # Invalidates any previous pending or processing payments for this order
+    def invalidate_previous_payments
+      return unless order && (pending? || checkout?)
+      
+      order.payments.where.not(id: id).where(payment_method: payment_method).each do |payment|
+        next unless payment.checkout? || payment.pending? || payment.processing?
+        
+        begin
+          payment.void_transaction! unless payment.void?
+          payment.update_columns(
+            state: 'invalid',
+            updated_at: Time.current
+          )
+          Rails.logger.info "Invalidated previous payment #{payment.id} for order #{order.number}"
+        rescue StandardError => e
+          Rails.logger.error "Failed to invalidate payment #{payment.id}: #{e.message}"
+        end
+      end
     end
     
     private
