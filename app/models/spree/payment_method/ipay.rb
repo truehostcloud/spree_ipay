@@ -20,8 +20,9 @@ module Spree
     preference :currency, :string, default: 'KES'
     preference :callback_url, :string, default: '/ipay/confirm'
     preference :return_url, :string, default: -> {
-                                              "#{Rails.application.routes.url_helpers.root_url.chomp('/')}/ipay/confirm"
-                                            }
+      Rails.application.routes.default_url_options[:host] = Spree::Store.current.url if Spree::Store.current.url.present?
+      Rails.application.routes.url_helpers.root_url(host: Spree::Store.current.url, protocol: 'https').chomp('/') + '/ipay/confirm'
+    }
 
     # Payment channels (in display order)
     preference :mpesa, :boolean, default: true
@@ -817,25 +818,40 @@ module Spree
     end
 
     def base_url
-      # First try to get URL from Rails URL helpers if available
+      # Try to get from Spree store first
+      if defined?(Spree::Store) && Spree::Store.current
+        store = Spree::Store.current
+        if store.url.present?
+          url = store.url.chomp('/')
+          url = "https://#{url}" unless url.start_with?('http')
+          return url
+        end
+      end
+      
+      # Try to get from Rails URL helpers
       if defined?(Rails.application.routes.url_helpers)
         begin
-          return Rails.application.routes.url_helpers.root_url.chomp('/')
+          # Set default URL options if not set
+          Rails.application.routes.default_url_options ||= {}
+          Rails.application.routes.default_url_options[:host] ||= ENV['HOST']
+          
+          if Rails.application.routes.default_url_options[:host].present?
+            protocol = Rails.application.routes.default_url_options[:protocol] || 'https'
+            host = Rails.application.routes.default_url_options[:host].chomp('/')
+            return "#{protocol}://#{host}"
+          end
         rescue => e
           Rails.logger.error("IPAY_DEBUG: [base_url] Error with url_helpers: #{e.message}")
         end
       end
       
-      # Then try to get from Spree store if available
-      if defined?(Spree::Store) && Spree::Store.current
-        store = Spree::Store.current
-        url = store.url.chomp('/')
-        url = "https://#{url}" unless url.start_with?('http')
-        return url
+      # Fallback to environment variable or default
+      if ENV['SITE_URL'].present?
+        return ENV['SITE_URL'].chomp('/')
       end
       
-      # Fallback to environment variable or default
-      ENV['SITE_URL'] || 'https://example.com'
+      # Final fallback
+      'https://example.com'
     rescue => e
       Rails.logger.error("IPAY_DEBUG: [base_url] Error generating URL: #{e.message}")
       ENV['SITE_URL'] || 'https://example.com'

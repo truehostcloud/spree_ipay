@@ -107,8 +107,9 @@ module Spree
                         "Email: #{eml}, " \
                         "Test Mode: #{live == '1' ? 'No' : 'Yes'}")
       
-      # Prepare callback URL - remove any invalid characters
-      cbk = (ipay_method.preferred_callback_url.presence || "https://#{ipay_method.base_url}/ipay/callback").gsub(/[;:~`!%^*\-><&_]/i, '')
+      # Prepare callback URL - use the return_url preference which is now properly set
+      cbk = ipay_method.preferred_return_url.presence || "#{ipay_method.preferred_return_url}/ipay/callback"
+      cbk = cbk.gsub(/[;:~`!%^*\-><&_]/i, '')
       
       # Prepare iPay parameters - must match the exact order and parameters used in hash generation
       ipay_params = {
