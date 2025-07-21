@@ -91,25 +91,26 @@ module Spree
     
     # Invalidates any previous pending or processing payments for this order
     def invalidate_previous_payments
-      return unless order && (pending? || checkout?)
-      
       Rails.logger.info "omkuu: ====== STARTING PAYMENT INVALIDATION ======"
-      Rails.logger.info "omkuu: Order: #{order.number}, Current payment ID: #{id || 'nil'}, State: #{state}"
+      Rails.logger.info "omkuu: Order: #{order&.number || 'no order'}, Current payment ID: #{id || 'nil'}, State: #{state}"
       
       # Get all payments for this order with the same payment method
-      all_payments = order.payments
-                        .where(payment_method: payment_method)
-                        .order(created_at: :desc)
+      all_payments = order ? order.payments.where(payment_method: payment_method).order(created_at: :desc) : []
       
       # Log all payments for debugging
-      Rails.logger.info "omkuu: All payments for order #{order.number}:"
+      Rails.logger.info "omkuu: Found #{all_payments.count} total payments for order"
       all_payments.each do |p|
-        Rails.logger.info "omkuu: - Payment ID: #{p.id}, State: #{p.state}, Amount: #{p.amount}, Created: #{p.created_at}, Updated: #{p.updated_at}"
+        Rails.logger.info "omkuu: - Payment ID: #{p.id}, State: #{p.state}, Amount: #{p.amount}, " \
+                         "Created: #{p.created_at}, Updated: #{p.updated_at}, " \
+                         "Completed: #{p.completed?}, Pending: #{p.pending?}, Checkout: #{p.checkout?}"
       end
       
-      # Find payments to invalidate (exclude current payment and already invalid/voided ones)
-      payments_to_invalidate = all_payments.reject do |p| 
-        (id.present? && p.id == id) || p.void? || p.state == 'invalid' || p.state == 'completed' || p.state == 'failed'
+      # Find payments to invalidate
+      payments_to_invalidate = all_payments.select do |p| 
+        # Include payments that are in a processable state and not the current payment
+        (p.checkout? || p.pending? || p.processing?) && 
+        (id.blank? || p.id != id) &&
+        !p.completed? && !p.void? && p.state != 'invalid' && p.state != 'failed'
       end
       
       Rails.logger.info "omkuu: Found #{payments_to_invalidate.count} payments to invalidate"
@@ -124,33 +125,42 @@ module Spree
           Rails.logger.info "omkuu: ====== PROCESSING PAYMENT #{payment.id} ======"
           Rails.logger.info "omkuu: Current state: #{payment.state}, Amount: #{payment.amount}"
           
-          # Double check state before processing
-          if payment.void? || payment.state == 'invalid' || payment.state == 'completed'
+          # Double check state
+          if payment.completed? || payment.void? || payment.state == 'invalid' || payment.state == 'failed'
             Rails.logger.info "omkuu: Payment #{payment.id} already in final state: #{payment.state}, skipping"
             next
           end
           
-          # Void the transaction if not already voided
-          unless payment.void?
-            Rails.logger.info "omkuu: Voiding payment #{payment.id}"
-            payment.void_transaction!
-          end
-          
-          # Update payment state to invalid
-          Rails.logger.info "omkuu: Marking payment #{payment.id} as invalid"
-          result = payment.update_columns(
-            state: 'invalid',
-            updated_at: Time.current
-          )
-          
-          if result
-            Rails.logger.info "omkuu: Successfully invalidated payment #{payment.id}"
-          else
-            Rails.logger.error "omkuu: Failed to update payment #{payment.id} - #{payment.errors.full_messages.join(', ')}"
+          # Try to void the payment
+          begin
+            unless payment.void?
+              Rails.logger.info "omkuu: Voiding payment #{payment.id}"
+              payment.void_transaction! rescue nil # Continue even if void fails
+            end
+            
+            # Direct SQL update to ensure state change
+            Rails.logger.info "omkuu: Marking payment #{payment.id} as invalid"
+            result = payment.class.connection.execute(
+              "UPDATE spree_payments SET state = 'invalid', updated_at = NOW() WHERE id = #{payment.id}"
+            )
+            
+            # Reload to verify
+            payment.reload
+            Rails.logger.info "omkuu: Payment #{payment.id} new state: #{payment.state}"
+            
+            if payment.state == 'invalid'
+              Rails.logger.info "omkuu: Successfully invalidated payment #{payment.id}"
+            else
+              Rails.logger.error "omkuu: Failed to invalidate payment #{payment.id} - State is #{payment.state}"
+            end
+            
+          rescue StandardError => e
+            Rails.logger.error "omkuu: ERROR updating payment #{payment.id}: #{e.class} - #{e.message}"
+            Rails.logger.error "omkuu: Backtrace: #{e.backtrace.first(5).join("\n")}"
           end
           
         rescue StandardError => e
-          Rails.logger.error "omkuu: ERROR processing payment #{payment.id}: #{e.class} - #{e.message}"
+          Rails.logger.error "omkuu: FATAL ERROR processing payment #{payment.id}: #{e.class} - #{e.message}"
           Rails.logger.error "omkuu: Backtrace: #{e.backtrace.first(5).join("\n")}"
         end
       end
