@@ -134,41 +134,6 @@ module Spree
       # This allows the payment to be created without a source initially
       source.nil? || source.is_a?(Spree::IpaySource)
     end
-    
-    # Clean up pending payments when an order is modified
-    def cleanup_pending_payments(order)
-      return unless order.is_a?(Spree::Order)
-      
-      # Find all pending payments for this order
-      pending_payments = order.payments.where(
-        payment_method_id: id,
-        state: ['pending', 'checkout', 'processing']
-      )
-      
-      # Get the payment IDs before we modify them
-      payment_ids = pending_payments.pluck(:id)
-      
-      # Void or cancel each pending payment
-      pending_payments.each do |payment|
-        begin
-          if payment.can_void?
-            payment.void_transaction!
-          else
-            payment.cancel!
-          end
-        rescue StandardError => e
-          Rails.logger.error("Failed to clean up payment #{payment.number}: #{e.message}")
-        end
-      end
-      
-      # Update any related IPay sources through the payments association
-      Spree::IpaySource.joins(:payments)
-                       .where(spree_payments: { id: payment_ids })
-                       .where(status: ['pending', 'initiated'])
-                       .update_all(status: 'cancelled')
-      
-      true
-    end
 
     def process_payment(payment)
       # Create a payment source if one doesn't exist

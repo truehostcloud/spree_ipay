@@ -7,15 +7,6 @@ module Spree
       base.before_action :log_checkout_state, only: [:update]
       base.before_action :handle_ipay_redirect, only: [:update]
       base.before_action :set_request_variant
-      base.before_action :cleanup_pending_payments, only: [:update], if: -> { params[:state] == 'payment' || params[:state] == 'confirm' }
-      base.before_action :log_state_transition, only: [:update]
-    end
-    
-    def log_state_transition
-      @previous_state = @order.state
-      Rails.logger.info("Order ##{@order.number} - Current state before update: #{@previous_state}")
-      Rails.logger.info("Request params: #{params[:state]}")
-      Rails.logger.info("Order next event: #{@order.checkout_steps.inspect}")
     end
     
     def log_checkout_state
@@ -194,81 +185,22 @@ module Spree
       Rails.logger.error("Error generating iPay form: #{e.message}\n#{e.backtrace.join("\n")}")
       raise "Error generating payment form: #{e.message}"
     end
-    # Override update action to handle JSON responses and prevent skipping steps
+    # Override update action to handle JSON responses
     def update
-      # First validate the current state
-      current_state = params[:state].presence || @order.state
-      
-      Rails.logger.info("Order update started - Current state: #{@order.state}, Params state: #{params[:state]}")
-      
-      # Debug: Log the full params
-      Rails.logger.debug("Update params: #{params.to_unsafe_h}")
-      
-      # Force state to address if we detect an invalid transition
-      if @order.state == 'complete' && current_state == 'address'
-        Rails.logger.warn("Invalid state transition detected - Resetting from complete to address")
-        @order.update_columns(state: 'address')
-        @order.reload
-        return redirect_to checkout_state_path('address')
-      end
-      
-      # Ensure we have a valid state
-      unless @order.checkout_steps.include?(@order.state)
-        Rails.logger.warn("Invalid order state: #{@order.state} - Resetting to address")
-        @order.update_columns(state: 'address')
-        @order.reload
-        return redirect_to checkout_state_path('address')
-      end
-      
-      # Update order with strong parameters
-      update_success = false
-      
-      begin
-        update_success = @order.update_from_params(params, permitted_checkout_attributes, request.headers_env)
-      rescue StandardError => e
-        Rails.logger.error("Error updating order: #{e.message}\n#{e.backtrace.join("\n")}")
-        update_success = false
-      end
-      
-      if update_success
+      if @order.update_from_params(params, permitted_checkout_attributes, request.headers.env)
         respond_to do |format|
           format.html do
             if @order.next
               redirect_to checkout_state_path(@order.state)
             else
-              # If next step fails, redirect back to current state
-              flash[:error] = @order.errors.full_messages.to_sentence
-              redirect_to checkout_state_path(current_state)
+              redirect_to checkout_state_path(@order.state)
             end
           end
           
           format.json do
-            Rails.logger.info("Attempting to advance order state from: #{@order.state}")
-            
-            # Store the current state before transition
-            previous_state = @order.state
-            
-            # Advance the state
-            transition_success = @order.next
-            
-            if transition_success
+            if @order.next
+              # Get the next state after the transition
               next_state = @order.state
-              Rails.logger.info("State transition: #{previous_state} -> #{next_state}")
-              
-              # If we're transitioning from address, force to delivery
-              if previous_state == 'address' && next_state != 'delivery'
-                Rails.logger.warn("Invalid transition from address to #{next_state}, forcing to delivery")
-                @order.update_columns(state: 'delivery')
-                next_state = 'delivery'
-                @order.reload
-              end
-              
-              # Prevent skipping from address to complete
-              if current_state == 'address' && next_state == 'complete'
-                @order.update_columns(state: 'address')
-                next_state = 'delivery' # Force to next valid state
-                @order.reload
-              end
               
               # Prepare response data
               response_data = {
@@ -276,7 +208,7 @@ module Spree
                 next_step: next_state,
                 order: {
                   number: @order.number,
-                  state: next_state,
+                  state: @order.state,
                   total: @order.total.to_f,
                   payment_state: @order.payment_state,
                   shipment_state: @order.shipment_state
@@ -305,10 +237,7 @@ module Spree
               render json: {
                 status: 'error',
                 errors: @order.errors.messages,
-                message: @order.errors.full_messages.to_sentence,
-                current_state: current_state,
-                next_state: @order.state,
-                validation_errors: @order.errors.full_messages
+                message: @order.errors.full_messages.to_sentence
               }, status: :unprocessable_entity
             end
           end
@@ -321,8 +250,7 @@ module Spree
               status: 'error',
               errors: @order.errors.messages,
               message: @order.errors.full_messages.to_sentence,
-              validation_errors: @order.errors.full_messages,
-              current_state: current_state
+              validation_errors: @order.errors.full_messages
             }, status: :unprocessable_entity
           end
         end
@@ -330,21 +258,6 @@ module Spree
     end
     
     private
-    
-    def cleanup_pending_payments
-      return unless @order
-      
-      # Find iPay payment method
-      ipay_method = Spree::PaymentMethod.find_by(type: 'Spree::PaymentMethod::Ipay')
-      return unless ipay_method
-      
-      # Clean up any pending payments
-      ipay_method.cleanup_pending_payments(@order)
-      
-      # Clear any stored session data
-      session.delete(:ipay_phone_number)
-      session.delete(:ipay_redirect_url)
-    end
     
     def next_step_url_for(order, next_step)
       return unless next_step
