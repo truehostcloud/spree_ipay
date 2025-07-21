@@ -7,6 +7,7 @@ module Spree
       base.before_action :log_checkout_state, only: [:update]
       base.before_action :handle_ipay_redirect, only: [:update]
       base.before_action :set_request_variant
+      base.before_action :cleanup_pending_payments, only: [:update], if: -> { params[:state] == 'payment' || params[:state] == 'confirm' }
     end
     
     def log_checkout_state
@@ -258,6 +259,21 @@ module Spree
     end
     
     private
+    
+    def cleanup_pending_payments
+      return unless @order
+      
+      # Find iPay payment method
+      ipay_method = Spree::PaymentMethod.find_by(type: 'Spree::PaymentMethod::Ipay')
+      return unless ipay_method
+      
+      # Clean up any pending payments
+      ipay_method.cleanup_pending_payments(@order)
+      
+      # Clear any stored session data
+      session.delete(:ipay_phone_number)
+      session.delete(:ipay_redirect_url)
+    end
     
     def next_step_url_for(order, next_step)
       return unless next_step
