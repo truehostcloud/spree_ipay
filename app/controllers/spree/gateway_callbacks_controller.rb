@@ -50,17 +50,36 @@ module Spree
         note = "Partial payment of #{paid_amount} received (Expected: #{required_amount}). "
         
         if paid_amount > 0
-          # If some amount was paid, create a payment record for the partial amount
-          payment.amount = paid_amount
-          payment.save(validate: false)
+          # Create a new payment for the partial amount
+          new_payment = order.payments.build(
+            payment_method: payment.payment_method,
+            amount: paid_amount,
+            state: 'completed',
+            response_code: params[:txnid],
+            source: payment.source
+          )
           
-          # Update the order total to reflect the remaining amount
-          remaining_amount = (required_amount - paid_amount).round(2)
-          note += "Remaining balance: #{remaining_amount}"
-          
-          # Redirect to payment page with the remaining amount
-          flash[:error] = "Partial payment received. Please pay the remaining #{remaining_amount}"
-          redirect_to checkout_state_path(:payment)
+          # Save the payment and update order totals
+          if new_payment.save
+            # Update the order's payment state
+            order.updater.update_payment_state
+            
+            # Update the order's totals
+            order.update_with_updater!
+            
+            # Calculate remaining amount
+            remaining_amount = (required_amount - paid_amount).round(2)
+            note += "Remaining balance: #{remaining_amount}"
+            
+            # Set the remaining amount in the session
+            session[:remaining_amount] = remaining_amount
+            
+            # Redirect to payment page with the remaining amount
+            flash[:error] = "Partial payment of #{paid_amount} received. Please pay the remaining #{remaining_amount}"
+            redirect_to checkout_state_path(:payment)
+          else
+            raise "Failed to record partial payment: #{new_payment.errors.full_messages.join(', ')}"
+          end
         else
           # If no amount was paid, show error and redirect to payment
           flash[:error] = "Payment failed. No amount was received. Please try again."

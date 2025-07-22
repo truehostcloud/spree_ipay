@@ -20,6 +20,10 @@ module Spree
 
     def handle_ipay_redirect
       begin
+        # Clear any previous remaining amount at the start of a new payment
+        if params[:state] == "payment"
+          session.delete(:remaining_amount)
+        end
         # Get phone number and store in session during payment state
         if params[:state] == "payment"
           phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
@@ -34,28 +38,28 @@ module Spree
 
           raise 'Phone number is required' if phone.blank?
 
-          # Calculate remaining amount and update payment amount
-          remaining_amount = @order.remaining_balance
-          payment.amount = remaining_amount
-          payment.save(validate: false) if payment.amount_changed?
-
           respond_to do |format|
             format.html do
-              render html: generate_ipay_form_html(payment, phone, ipay_method, remaining_amount).html_safe,
-                     layout: 'spree/layouts/checkout'
+              # Generate and render the iPay form immediately
+              render html: generate_ipay_form_html(payment, phone, ipay_method).html_safe, layout: 'spree/layouts/checkout'
             end
             format.json do
               render json: {
                 status: 'success',
                 next_step: 'confirm',
-                form_html: generate_ipay_form_html(payment, phone, ipay_method, remaining_amount)
+                form_html: generate_ipay_form_html(payment, phone, ipay_method)
               }
             end
           end
-          return false
+          return false # Prevent further processing
         end
       rescue => e
-        Rails.logger.error("iPay Redirect Error: #{e.message}")
+        if Rails.env.development?
+          Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}\n#{e.backtrace.take(5).join("\n")}")
+        else
+          Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}")
+        end
+        
         error_message = Rails.env.development? ? e.message : 'Unable to process payment. Please try again.'
         
         respond_to do |format|
@@ -78,13 +82,20 @@ module Spree
       end
     end
 
-    def generate_ipay_form_html(payment, phone, ipay_method, amount = nil)
-      amount ||= payment.amount
+    def generate_ipay_form_html(payment, phone, ipay_method)
       # Get required values from payment method preferences
       live = ipay_method.preferred_test_mode ? '0' : '1'
       oid = payment.order.number
       inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      ttl = amount.to_i.to_s  # Use the provided amount
+      
+      # Calculate amount - use remaining amount from session if available
+      remaining_amount = session[:remaining_amount]&.to_f
+      ttl = if remaining_amount && remaining_amount > 0 && remaining_amount < payment.amount
+              remaining_amount.to_i.to_s
+            else
+              payment.amount.to_i.to_s
+            end
+              
       eml = payment.order.email
       vid = ipay_method.preferred_vendor_id.presence || ''
       curr = ipay_method.preferred_currency.presence || 'KES'
