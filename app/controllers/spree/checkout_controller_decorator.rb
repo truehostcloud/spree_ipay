@@ -94,8 +94,10 @@ module Spree
       
       # Prepare callback URL from preferences - remove any invalid characters
       cbk = (ipay_method.preferred_callback_url.presence).to_s.gsub(/[;~`!%^*><]/i, '')
+      Rails.logger.info("[iPay FORM DEBUG] Using callback URL (cbk): #{cbk}")
       # Prepare return URL from preferences - remove any invalid characters
       lbk = (ipay_method.preferred_return_url.presence).to_s.gsub(/[;~`!%^*><]/i, '')
+      Rails.logger.info("[iPay FORM DEBUG] Using return URL (lbk): #{lbk}")
 
       # Prepare iPay parameters - must match the exact order and parameters used in hash generation
       ipay_params = {

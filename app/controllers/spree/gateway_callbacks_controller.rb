@@ -64,7 +64,9 @@ module Spree
             elsif code == 'bdi6p2yy76etrs'
               render 'pending', status: :ok
             else
-              payment.failure! unless payment.failed?
+              if payment.respond_to?(:can_failure?) && payment.can_failure?
+                payment.failure!
+              end
               render 'failure', status: :payment_required
             end
             return
