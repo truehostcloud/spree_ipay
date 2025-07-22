@@ -129,6 +129,7 @@ module Spree
                       channel == 'mpesa'
                     end
         ipay_params[channel] = is_enabled ? '1' : '0'
+      end
 
       # Generate the form HTML with full-page flexible layout and improved button positioning
       <<~HTML
