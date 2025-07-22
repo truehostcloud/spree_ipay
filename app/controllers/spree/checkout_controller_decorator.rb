@@ -101,34 +101,30 @@ module Spree
 
       # Prepare iPay parameters - must match the exact order and parameters used in hash generation
       ipay_params = {
-        live: live,
-        oid: oid,
-        inv: inv,
-        ttl: ttl,
-        tel: phone || '0700000000',
-        eml: eml,
-        vid: vid,
-        curr: curr,
-        p1: p1,
-        p2: p2,
-        p3: p3,
-        p4: p4,
-        cbk: cbk,
-        cst: cst,
-        crl: crl,
-        hsh: hsh
+        'live' => live,
+        'oid' => oid,
+        'inv' => inv,
+        'ttl' => ttl,
+        'tel' => phone || '0700000000',
+        'eml' => eml,
+        'vid' => vid,
+        'curr' => curr,
+        'p1' => p1,
+        'p2' => p2,
+        'p3' => p3,
+        'p4' => p4,
+        'cbk' => cbk,
+        'cst' => cst,
+        'crl' => crl,
+        'hsh' => hsh
       }
 
-      # Add channel parameters based on preferences from the payment method
-      %w[mpesa bonga airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay].each do |channel|
-        preference_method = "preferred_#{channel}"
-        is_enabled = if ipay_method.respond_to?(preference_method, true)
-                      ipay_method.send(preference_method)
-                    else
-                      # Fallback to default (mpesa enabled, others disabled)
-                      channel == 'mpesa'
-                    end
-        ipay_params[channel] = is_enabled ? '1' : '0'
+      # Add channel parameters based on preferences
+      %i[
+        mpesa bonga airtel equity mobilebanking
+        creditcard unionpay mvisa vooma pesalink autopay
+      ].each do |channel|
+        ipay_params[channel.to_s] = ipay_method.preferences["#{channel}"] ? '1' : '0'
       end
 
       # Generate the form HTML with full-page flexible layout and improved button positioning
@@ -160,11 +156,9 @@ module Spree
             <h2 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center">Redirecting to iPay</h2>
             <p class="text-gray-600 text-lg sm:text-xl text-center">Please wait while we securely redirect you to the payment page.</p>
             <p class="text-sm sm:text-base text-gray-500 text-center">If you are not redirected automatically, please click the button below.</p>
-            <form id="ipay-payment-form" action="#{ipay_method.api_endpoint}" method="post" class="flex flex-col items-center space-y-4">
-              #{ipay_params.map { |k, v| "<input type='hidden' name='#{k}' value='#{ERB::Util.html_escape(v.to_s)}'>" }.join("\n")}
-              <button type="submit" class="bg-blue-600 text-white font-semibold py-3 px-8 rounded-md hover:bg-blue-700 transition duration-300 w-full sm:w-auto">
-                Proceed to Payment
-              </button>
+            <form id="ipay-payment-form" action="#{ipay_method.preferred_test_mode ? 'https://payments.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'}" method="post" class="flex justify-center">
+              #{ipay_params.map { |k, v| "<input type='hidden' name='#{k}' value='#{ERB::Util.html_escape(v)}'>" }.join("\n")}
+              <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 transition duration-300">Proceed to Payment</button>
             </form>
             <script>
               document.addEventListener('DOMContentLoaded', function() {

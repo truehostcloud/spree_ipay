@@ -292,7 +292,7 @@ module Spree
     # @param phone [String] The customer's phone number
     def ipay_signature_hash(payment, phone = nil)
       # Get values from payment method preferences
-      vendor_id = preferred_vendor_id.to_s.downcase # Ensure vendor_id is lowercase
+      vendor_id = preferred_vendor_id.to_s
       hash_key = preferred_hash_key.to_s
 
       # Validate required preferences
@@ -300,6 +300,7 @@ module Spree
         raise "Missing required iPay credentials"
       end
 
+      # Set live mode (0 for test, 1 for live)
       # Always use live mode (1) as per requirements
       live = "1"
 
@@ -317,25 +318,18 @@ module Spree
       p3 = ""
       p4 = ""
       cbk = preferred_callback_url.presence || "https://#{base_url}/ipay/confirm"
-      rst = ""
       cst = "1"
       crl = "2"
 
       # Create datastring in the exact order required by iPay
-      # This must match the order of parameters in the form
       datastring = [
         live, oid, inv, ttl, tel, eml, vid, curr,
-        p1, p2, p3, p4, cbk, rst, cst, crl
+        p1, p2, p3, p4, cbk, cst, crl
       ].join
 
-      Rails.logger.info("[iPay DEBUG] Datastring for hash: #{datastring}")
-      
       # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
       digest = OpenSSL::Digest.new('sha1')
-      hash = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring).downcase
-      
-      Rails.logger.info("[iPay DEBUG] Generated hash: #{hash}")
-      hash
+      OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
     rescue StandardError => e
       raise "Error generating hash"
     end
@@ -410,7 +404,7 @@ module Spree
         raise "Error generating payment hash: #{e.message}"
       end
 
-      # Prepare iPay parameters - ensure this matches the checkout controller
+      # Prepare iPay parameters
       ipay_params = {
         live: live,
         oid: oid,
@@ -432,16 +426,15 @@ module Spree
       }
 
       # Add channel parameters based on preferences
-      %w[mpesa bonga airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay].each do |channel|
-        # Use the proper preference accessor method
-        preference_method = "preferred_#{channel}"
-        is_enabled = if respond_to?(preference_method, true)
-                      send(preference_method)
-                    else
-                      # Fallback to default (mpesa enabled, others disabled)
-                      channel == 'mpesa'
-                    end
-        ipay_params[channel] = is_enabled ? '1' : '0'
+
+      channels = %i[
+        mpesa bonga airtel equity mobilebanking
+        creditcard unionpay mvisa vooma pesalink autopay
+      ]
+
+      channels.each do |channel|
+        channel_value = send("preferred_#{channel}") ? '1' : '0'
+        ipay_params[channel] = channel_value
       end
 
       # Generate form HTML
