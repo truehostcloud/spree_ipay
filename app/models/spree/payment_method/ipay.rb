@@ -306,8 +306,8 @@ module Spree
       # Prepare values - must match exactly what will be sent in the form
       oid = payment.order.number.to_s
       inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      # Convert to integer without multiplying by 100 since Spree already handles the amount in cents
-      ttl = payment.amount.to_i.to_s
+      # Round up the amount to the nearest integer for iPay
+      ttl = payment.amount.ceil.to_s
       tel = phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000"
       eml = payment.order.email.to_s
       vid = vendor_id
@@ -340,8 +340,8 @@ module Spree
       oid = payment.order.id.to_s
       # Use numeric order ID for invoice as well
       inv = payment.order.id.to_s
-      # Convert to integer without multiplying by 100 since Spree already handles the amount in cents
-      ttl = payment.amount.to_i.to_s
+      # Round up the amount to the nearest integer for iPay
+      ttl = payment.amount.ceil.to_s
       tel = payment.order.bill_address&.phone || session[:ipay_phone_number] || "0700000000"
       eml = payment.order.email
       vid = preferred_vendor_id
