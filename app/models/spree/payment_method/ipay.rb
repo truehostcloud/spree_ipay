@@ -16,7 +16,7 @@ module Spree
     # Core settings (in display order)
     preference :vendor_id, :string
     preference :hash_key, :string
-    preference :test_mode, :boolean, default: false  # Live mode is default
+    preference :test_mode, :boolean, default: true
     preference :currency, :string, default: 'KES'
     preference :callback_url, :string, default: '/ipay/confirm'
     preference :return_url, :string, default: -> {
@@ -25,14 +25,14 @@ module Spree
 
     # Payment channels (in display order)
     preference :mpesa, :boolean, default: true
-    preference :airtel, :boolean, default: true
-    preference :equity, :boolean, default: true
+    preference :airtel, :boolean, default: false
+    preference :equity, :boolean, default: false
     preference :mobilebanking, :boolean, default: false
-    preference :creditcard, :boolean, default: true
+    preference :creditcard, :boolean, default: false
     preference :unionpay, :boolean, default: false
     preference :mvisa, :boolean, default: false
     preference :vooma, :boolean, default: false
-    preference :pesalink, :boolean, default: true
+    preference :pesalink, :boolean, default: false
     preference :autopay, :boolean, default: false
 
     # Ensure preferences are sorted in the desired display order
@@ -301,8 +301,7 @@ module Spree
       end
 
       # Set live mode (0 for test, 1 for live)
-      # Always use live mode (1) as per requirements
-      live = "1"
+      live = test_mode? ? "0" : "1"
 
       # Prepare values - must match exactly what will be sent in the form
       oid = payment.order.number.to_s
@@ -698,7 +697,7 @@ module Spree
     end
 
     def api_endpoint
-      'https://payments.ipayafrica.com/v3/ke'  # Always use live endpoint
+      preferred_test_mode ? 'https://sandbox.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'
     end
 
     def success_response(message = 'Success')
