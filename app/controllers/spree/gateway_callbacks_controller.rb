@@ -8,6 +8,7 @@ module Spree
 
     def confirm
       Rails.logger.info("[iPay CALLBACK PARAMS] #{params.to_unsafe_h}")
+      Rails.logger.info("[iPay CALLBACK PARAMS] order_id: #{params[:order_id]}, id: #{params[:id]}, ivm: #{params[:ivm]}, oid: #{params[:oid]}")
       txn_id = params[:txnid]
       status = params[:status]
       # Check which param actually contains the order number from the log above

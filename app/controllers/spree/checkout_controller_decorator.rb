@@ -84,8 +84,8 @@ module Spree
       
       # Get values from payment method preferences
       live = ipay_method.preferred_test_mode ? '0' : '1'
-      oid = payment.order.number.to_s.gsub(/[^a-zA-Z0-9]/, '')[0...26] # Max 26 alphanumeric chars
-      inv = oid[0...15] # Max 15 chars, use order ID if not specified
+      oid = payment.order.number.to_s
+      inv = oid
       ttl = payment.amount.to_i.to_s # Remove decimal numbers, send integer only
       tel = (phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000").gsub(/\D/, '')[0...15] # Max 15 digits
       eml = payment.order.email.to_s[0...30] # Max 30 chars
