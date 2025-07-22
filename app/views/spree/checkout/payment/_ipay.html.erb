@@ -7,77 +7,51 @@
     <div class="alert alert-info">
       <i class="fa fa-info-circle"></i>
       You have already paid <strong><%= number_to_currency(@order.total - @order.remaining_balance) %></strong>.
-      Remaining balance: <strong><%= number_to_currency(@order.remaining_balance) %></strong>
+      Remaining balance to pay: <strong><%= number_to_currency(@order.remaining_balance) %></strong>
     </div>
   <% end %>
 
   <div class="payment-method-description mb-3">
     <p><%= Spree.t(:ipay_description) %></p>
-    <div class="payment-logos">
-      <span class="badge badge-info">M-Pesa</span>
-      <span class="badge badge-info">Airtel Money</span>
-      <span class="badge badge-info">Bank Cards</span>
-    </div>
   </div>
 
   <div class="form-group">
     <%= label_tag "order[payments_attributes][][source_attributes][phone]", Spree.t(:phone_number), class: "required" %>
-    <div class="input-group">
-      <div class="input-group-prepend">
-        <span class="input-group-text">+254</span>
-      </div>
-      <%= telephone_field_tag "order[payments_attributes][][source_attributes][phone]", 
-                            session[:ipay_phone_number]&.gsub(/^\+?254/, '') || @order.bill_address&.phone&.gsub(/^\+?254/, ''), 
-                            class: "form-control", 
-                            required: true, 
-                            id: "ipay_phone_number", 
-                            pattern: "7\\d{8}", 
-                            maxlength: 9, 
-                            minlength: 9, 
-                            autocomplete: "tel",
-                            placeholder: "700000000" %>
-    </div>
+    <%= telephone_field_tag "order[payments_attributes][][source_attributes][phone]", 
+                          session[:ipay_phone_number] || @order.bill_address&.phone, 
+                          class: "form-control", 
+                          required: true, 
+                          id: "ipay_phone_number", 
+                          pattern: "\\d{10}", 
+                          maxlength: 10, 
+                          minlength: 10, 
+                          autocomplete: "tel",
+                          placeholder: "07XXXXXXXX" %>
     <small class="form-text text-muted">
-      <%= Spree.t(:ipay_phone_help, default: "We'll send an M-Pesa/Airtel Money prompt to this number") %>
+      Enter your 10-digit mobile money number
     </small>
-    <div id="ipay-phone-error" class="text-danger" style="display:none;font-size:0.95em;margin-top:4px;"></div>
+    <div id="ipay-phone-error" class="text-danger" style="display:none;"></div>
   </div>
 
   <div class="alert alert-info mt-3">
     <i class="fa fa-info-circle"></i>
-    <%= Spree.t(:ipay_redirect_notice, default: "After clicking continue, you'll be redirected to iPay to complete your payment.") %>
-  </div>
-
-  <div class="alert alert-warning mt-3">
-    <i class="fa fa-exclamation-triangle"></i>
-    <strong>Important:</strong> 
-    <ul class="mb-0 mt-2">
-      <li>Do not close your browser window during payment processing</li>
-      <li>Ensure you have sufficient funds in your mobile money account</li>
-      <li>You'll receive a payment request on your phone</li>
-    </ul>
+    You will be charged: <strong><%= number_to_currency(@order.remaining_balance) %></strong>
   </div>
 </fieldset>
 
-<script type="text/javascript">
+<script>
   $(document).ready(function() {
     // Format phone number input
     $('#ipay_phone_number').on('input', function() {
       var value = $(this).val().replace(/\D/g, '');
       $(this).val(value);
-      
-      // Sync with billing address phone
-      if ($('#order_bill_address_attributes_phone').length) {
-        $('#order_bill_address_attributes_phone').val('+254' + value);
-      }
     });
 
-    // Disable Turbo/UJS for iPay form submission
+    // Form validation
     $('#checkout_form_payment').on('submit', function(e) {
       if ($('#payment_method_<%= payment_method.id %>').is(':checked')) {
         var phone = $('#ipay_phone_number').val();
-        var phoneError = $('#ipay-phone-error');
-        if (!/^7\d{8}$/.test(phone)) {
+        if (!/^\d{10}$/.test(phone)) {
           phoneError.text('Please enter a valid 10-digit mobile number.').show();
           $('#ipay_phone_number').focus();
           e.preventDefault();
