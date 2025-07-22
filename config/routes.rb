@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
 Spree::Core::Engine.routes.draw do
-  # iPay payment confirmation callback
+  # iPay browser redirect confirmation (GET)
   get '/ipay/confirm', to: 'gateway_callbacks#confirm'
+  # iPay server-to-server callback (POST)
+  post '/ipay/callback', to: 'gateway_callbacks#callback'
   get '/ipay/checkout/:id', to: 'ipay#interactive_checkout', as: :ipay_interactive_checkout
   
   # API endpoints
