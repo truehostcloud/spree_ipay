@@ -85,18 +85,17 @@ module Spree
       # Get values from payment method preferences
       live = ipay_method.preferred_test_mode ? '0' : '1'
       oid = payment.order.number.to_s
-      inv = oid
-      ttl = payment.amount.to_i.to_s # Remove decimal numbers, send integer only
-      tel = (phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000").gsub(/\D/, '')[0...15] # Max 15 digits
-      eml = payment.order.email.to_s[0...30] # Max 30 chars
-      vid = (ipay_method.preferred_vendor_id.presence || '').downcase[0...12] # Max 12 chars, lowercase
-      curr = (ipay_method.preferred_currency.presence || 'KES')[0...3] # Max 3 chars
-      
-      # Prepare callback URL from preferences - remove any invalid characters
-      cbk = (ipay_method.preferred_callback_url.presence).to_s.gsub(/[;~`!%^*><]/i, '')
+      inv = "#{payment.order.number}#{Time.now.to_i}"
+      ttl = (payment.amount.to_f * 100).to_i.to_s
+      tel = phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000"
+      eml = payment.order.email.to_s
+      vid = (ipay_method.preferred_vendor_id.presence || '')
+      curr = ipay_method.preferred_currency.presence || 'KES'
+
+      # Prepare callback and return URLs from preferences (no extra sanitization)
+      cbk = ipay_method.preferred_callback_url.presence || "https://#{request.base_url}/ipay/confirm"
       Rails.logger.info("[iPay FORM DEBUG] Using callback URL (cbk): #{cbk}")
-      # Prepare return URL from preferences - remove any invalid characters
-      lbk = (ipay_method.preferred_return_url.presence).to_s.gsub(/[;~`!%^*><]/i, '')
+      lbk = ipay_method.preferred_return_url.presence || cbk
       Rails.logger.info("[iPay FORM DEBUG] Using return URL (lbk): #{lbk}")
 
       # Prepare iPay parameters - must match the exact order and parameters used in hash generation
@@ -114,9 +113,9 @@ module Spree
         'p3' => '',
         'p4' => '',
         'cbk' => cbk,
-        'lbk' => lbk, # Use the actual return URL
-        'cst' => '1', # 1 = send customer email notifications
-        'crl' => '0', # 0 = HTTP/HTTPS callback
+        'lbk' => lbk,
+        'cst' => '1',
+        'crl' => '2',
         'hsh' => hsh
       }
 
