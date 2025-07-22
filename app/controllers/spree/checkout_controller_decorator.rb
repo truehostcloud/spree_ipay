@@ -20,10 +20,6 @@ module Spree
 
     def handle_ipay_redirect
       begin
-        # Clear any previous remaining amount at the start of a new payment
-        if params[:state] == "payment"
-          session.delete(:remaining_amount)
-        end
         # Get phone number and store in session during payment state
         if params[:state] == "payment"
           phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
@@ -87,15 +83,8 @@ module Spree
       live = ipay_method.preferred_test_mode ? '0' : '1'
       oid = payment.order.number
       inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      
-      # Calculate amount - use remaining amount from session if available
-      remaining_amount = session[:remaining_amount]&.to_f
-      ttl = if remaining_amount && remaining_amount > 0 && remaining_amount < payment.amount
-              remaining_amount.to_i.to_s
-            else
-              payment.amount.to_i.to_s
-            end
-              
+      # Convert to integer without multiplying by 100 since Spree already handles the amount in cents
+      ttl = payment.amount.to_i.to_s
       eml = payment.order.email
       vid = ipay_method.preferred_vendor_id.presence || ''
       curr = ipay_method.preferred_currency.presence || 'KES'
