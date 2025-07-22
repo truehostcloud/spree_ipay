@@ -303,30 +303,27 @@ module Spree
       # Set live mode (0 for test, 1 for live)
       live = test_mode? ? "0" : "1"
 
-      # Prepare values - must match exactly what will be sent in the form
-      oid = payment.order.number.to_s.gsub(/[^a-zA-Z0-9]/, '')[0...26] # Max 26 alphanumeric chars
-      inv = oid[0...15] # Max 15 chars, use order ID if not specified
-      ttl = payment.amount.to_i.to_s # Amount as integer, no decimals
-      tel = (phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000").gsub(/\D/, '')[0...15] # Max 15 digits
-      eml = payment.order.email.to_s[0...30] # Max 30 chars
-      vid = vendor_id[0...12] # Max 12 chars
-      curr = (preferred_currency.presence || 'KES')[0...3] # Max 3 chars
+      # Prepare values - revert to main branch logic for all except payment method business logic
+      oid = payment.order.number.to_s
+      inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
+      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
+      tel = phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000"
+      eml = payment.order.email.to_s
+      vid = vendor_id # retain lowercase if your business logic requires
+      curr = preferred_currency.presence || 'KES'
       p1 = ""
       p2 = ""
       p3 = ""
       p4 = ""
-      cbk = (preferred_callback_url.presence || "https://#{base_url}/ipay/confirm").gsub(/[;~`!%^*><]/i, '') # Remove only truly problematic chars
+      cbk = preferred_callback_url.presence || "https://#{base_url}/ipay/confirm"
       cst = "1"
-      crl = "0" # 0 for HTTP/HTTPS callback
+      crl = "2"
 
-      # Create datastring in the exact order required by iPay
-      # IMPORTANT: This exact order must be maintained
-      datastring = live + oid + inv + ttl + tel + eml + vid + curr + p1 + p2 + p3 + p4 + cbk + cst + crl
+      datastring = [
+        live, oid, inv, ttl, tel, eml, vid, curr,
+        p1, p2, p3, p4, cbk, cst, crl
+      ].join
 
-      
-      
-      
-      
       
       
       
