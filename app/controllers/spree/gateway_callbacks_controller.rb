@@ -41,10 +41,33 @@ module Spree
       # --- Amount Verification ---
       paid_amount = params['mc'].to_f
       required_amount = order.total.to_f
+      
       if paid_amount < required_amount
+        # Log the underpayment
         Spree::Ipay::Logger.error("Amount paid (#{paid_amount}) is less than order total (#{required_amount})", order.number)
-        render plain: "Amount paid (#{paid_amount}) is less than required (#{required_amount})",
-               status: :payment_required
+        
+        # Create a note about the partial payment
+        note = "Partial payment of #{paid_amount} received (Expected: #{required_amount}). "
+        
+        if paid_amount > 0
+          # If some amount was paid, create a payment record for the partial amount
+          payment.amount = paid_amount
+          payment.save(validate: false)
+          
+          # Update the order total to reflect the remaining amount
+          remaining_amount = (required_amount - paid_amount).round(2)
+          note += "Remaining balance: #{remaining_amount}"
+          
+          # Redirect to payment page with the remaining amount
+          flash[:error] = "Partial payment received. Please pay the remaining #{remaining_amount}"
+          redirect_to checkout_state_path(:payment)
+        else
+          # If no amount was paid, show error and redirect to payment
+          flash[:error] = "Payment failed. No amount was received. Please try again."
+          redirect_to checkout_state_path(:payment)
+        end
+        
+        order.notes.create(note: note, user: order.user) if order.respond_to?(:notes)
         return
       end
 
