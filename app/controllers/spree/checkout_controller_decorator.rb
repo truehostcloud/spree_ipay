@@ -119,13 +119,16 @@ module Spree
         'hsh' => hsh
       }
 
-      # Add channel parameters based on preferences
-      %i[
-        mpesa bonga airtel equity mobilebanking
-        creditcard unionpay mvisa vooma pesalink autopay
-      ].each do |channel|
-        ipay_params[channel.to_s] = ipay_method.preferences["#{channel}"] ? '1' : '0'
-      end
+      # Add channel parameters based on preferences from the payment method
+      %w[mpesa bonga airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay].each do |channel|
+        preference_method = "preferred_#{channel}"
+        is_enabled = if ipay_method.respond_to?(preference_method, true)
+                      ipay_method.send(preference_method)
+                    else
+                      # Fallback to default (mpesa enabled, others disabled)
+                      channel == 'mpesa'
+                    end
+        ipay_params[channel] = is_enabled ? '1' : '0'
 
       # Generate the form HTML with full-page flexible layout and improved button positioning
       <<~HTML
