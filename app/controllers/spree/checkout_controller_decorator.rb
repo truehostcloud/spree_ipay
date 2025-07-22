@@ -34,28 +34,28 @@ module Spree
 
           raise 'Phone number is required' if phone.blank?
 
+          # Calculate remaining amount
+          remaining_amount = @order.remaining_balance
+          payment.amount = remaining_amount
+          payment.save(validate: false) if payment.amount_changed?
+
           respond_to do |format|
             format.html do
-              # Generate and render the iPay form immediately
-              render html: generate_ipay_form_html(payment, phone, ipay_method).html_safe, layout: 'spree/layouts/checkout'
+              render html: generate_ipay_form_html(payment, phone, ipay_method, remaining_amount).html_safe,
+                     layout: 'spree/layouts/checkout'
             end
             format.json do
               render json: {
                 status: 'success',
                 next_step: 'confirm',
-                form_html: generate_ipay_form_html(payment, phone, ipay_method)
+                form_html: generate_ipay_form_html(payment, phone, ipay_method, remaining_amount)
               }
             end
           end
-          return false # Prevent further processing
+          return false
         end
       rescue => e
-        if Rails.env.development?
-          Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}\n#{e.backtrace.take(5).join("\n")}")
-        else
-          Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}")
-        end
-        
+        Rails.logger.error("iPay Redirect Error: #{e.message}")
         error_message = Rails.env.development? ? e.message : 'Unable to process payment. Please try again.'
         
         respond_to do |format|
@@ -78,13 +78,13 @@ module Spree
       end
     end
 
-    def generate_ipay_form_html(payment, phone, ipay_method)
+    def generate_ipay_form_html(payment, phone, ipay_method, amount = nil)
+      amount ||= payment.amount
       # Get required values from payment method preferences
       live = ipay_method.preferred_test_mode ? '0' : '1'
       oid = payment.order.number
       inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      # Convert to integer without multiplying by 100 since Spree already handles the amount in cents
-      ttl = payment.amount.to_i.to_s
+      ttl = amount.to_i.to_s  # Use the provided amount
       eml = payment.order.email
       vid = ipay_method.preferred_vendor_id.presence || ''
       curr = ipay_method.preferred_currency.presence || 'KES'

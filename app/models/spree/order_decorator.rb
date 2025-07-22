@@ -22,6 +22,11 @@ module Spree
         order.allow_complete_with_ipay_payment?
       end
     end
+    
+    def remaining_balance
+      total_paid = payments.completed.sum(:amount)
+      [total - total_paid, 0].max
+    end
 
     # Override to skip payment requirement for iPay payments
     def payment_required?
