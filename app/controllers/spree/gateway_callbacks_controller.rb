@@ -8,7 +8,6 @@ module Spree
 
     def confirm
       Rails.logger.info("[iPay CALLBACK PARAMS] #{params.to_unsafe_h}")
-      Rails.logger.info("[iPay CALLBACK PARAMS] order_id: #{params[:order_id]}, id: #{params[:id]}, ivm: #{params[:ivm]}, oid: #{params[:oid]}")
       txn_id = params[:txnid]
       status = params[:status]
       order_number = params[:order_id] || params[:id] || params[:ivm] || params[:oid]
@@ -37,7 +36,6 @@ module Spree
             paid_amount = params['mc'].to_f
             required_amount = order.total.to_f
             if paid_amount < required_amount
-              Spree::Ipay::Logger.error("Amount paid (#{paid_amount}) is less than order total (#{required_amount})", order.number)
               @heading = 'Insufficient Payment'
               @message = "Amount paid (#{paid_amount}) is less than required (#{required_amount})"
               render 'failure', status: :payment_required
@@ -45,15 +43,15 @@ module Spree
             end
             # iPay status code handling
             status_map = {
-              'aei7p7yrx4ae34' => { label: 'Success', color: '#3bb143', icon: 'success', heading: 'Order Placed Successfully!' },
-              'fe2707etr5s4wq' => { label: 'Failed', color: '#d32f2f', icon: 'fail', heading: 'Payment Failed' },
-              'bdi6p2yy76etrs' => { label: 'Pending', color: '#fbc02d', icon: 'pending', heading: 'Payment Pending' },
-              'cr5i3pgy9867e1' => { label: 'Used', color: '#d32f2f', icon: 'fail', heading: 'Code Already Used' },
-              'dtfi4p7yty45wq' => { label: 'Less', color: '#d32f2f', icon: 'fail', heading: 'Insufficient Payment' },
-              'eq3i7p5yt7645e' => { label: 'More', color: '#1976d2', icon: 'info', heading: 'Overpayment' }
+              'aei7p7yrx4ae34' => { label: 'Success', heading: 'Order Placed Successfully!' },
+              'fe2707etr5s4wq' => { label: 'Failed', heading: 'Payment Failed' },
+              'bdi6p2yy76etrs' => { label: 'Pending', heading: 'Payment Pending' },
+              'cr5i3pgy9867e1' => { label: 'Used', heading: 'Code Already Used' },
+              'dtfi4p7yty45wq' => { label: 'Less', heading: 'Insufficient Payment' },
+              'eq3i7p5yt7645e' => { label: 'More', heading: 'Overpayment' }
             }
             code = status.to_s
-            meta = status_map[code] || { label: 'Unknown', color: '#d32f2f', icon: 'fail', heading: 'Payment Failed' }
+            meta = status_map[code] || { label: 'Unknown', heading: 'Payment Failed' }
             @heading = meta[:heading]
             @message = params[:message] || meta[:label]
             if code == 'aei7p7yrx4ae34'
