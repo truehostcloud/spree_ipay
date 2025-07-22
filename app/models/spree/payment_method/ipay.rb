@@ -25,22 +25,23 @@ module Spree
 
     # Payment channels (in display order)
     preference :mpesa, :boolean, default: true
-    preference :airtel, :boolean, default: false
-    preference :equity, :boolean, default: false
-    preference :mobilebanking, :boolean, default: false
-    preference :creditcard, :boolean, default: false
-    preference :unionpay, :boolean, default: false
-    preference :mvisa, :boolean, default: false
-    preference :vooma, :boolean, default: false
-    preference :pesalink, :boolean, default: false
-    preference :autopay, :boolean, default: false
+    preference :bonga, :boolean, default: true
+    preference :airtel, :boolean, default: true
+    preference :equity, :boolean, default: true
+    preference :mobilebanking, :boolean, default: true
+    preference :creditcard, :boolean, default: true
+    preference :unionpay, :boolean, default: true
+    preference :mvisa, :boolean, default: true
+    preference :vooma, :boolean, default: true
+    preference :pesalink, :boolean, default: true
+    preference :autopay, :boolean, default: true
 
     # Ensure preferences are sorted in the desired display order
     def self.preference_order
       [
         :vendor_id, :hash_key, :test_mode, :currency,
         :callback_url, :return_url,
-        :mpesa, :airtel, :equity, :mobilebanking, :creditcard, :unionpay,
+        :mpesa, :bonga, :airtel, :equity, :mobilebanking, :creditcard, :unionpay,
         :mvisa, :vooma, :pesalink, :autopay
       ]
     end
@@ -57,6 +58,7 @@ module Spree
           return_url: preferred_return_url,
           channels: {
             mpesa: preferred_mpesa,
+            bonga: preferred_bonga,
             airtel: preferred_airtel,
             equity: preferred_equity,
             mobilebanking: preferred_mobilebanking,
@@ -424,16 +426,17 @@ module Spree
         hsh: hsh
       }
 
-      # Add channel parameters based on preferences
-
-      channels = %i[
-        mpesa bonga airtel equity mobilebanking
-        creditcard unionpay mvisa vooma pesalink autopay
-      ]
-
-      channels.each do |channel|
-        channel_value = send("preferred_#{channel}") ? '1' : '0'
-        ipay_params[channel] = channel_value
+      # Add channel parameters based on preferences in the correct order
+      %w[mpesa bonga airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay].each do |channel|
+        # Use the proper preference accessor method
+        preference_method = "preferred_#{channel}"
+        is_enabled = if respond_to?(preference_method)
+                      send(preference_method)
+                    else
+                      # Fallback to default (mpesa enabled, others disabled)
+                      channel == 'mpesa'
+                    end
+        ipay_params[channel] = is_enabled ? '1' : '0'
       end
 
       # Generate form HTML
@@ -531,14 +534,13 @@ module Spree
       # Generate and add hash
       params[:hsh] = generate_hash(payment)
 
-      # Add channel parameters
-      %i[
-        mpesa bonga airtel equity mobilebanking
-        creditcard unionpay mvisa vooma pesalink autopay
-      ].each do |channel|
-        next unless respond_to?("preferred_#{channel}")
-
-        params[channel.to_s] = send("preferred_#{channel}") ? '1' : '0'
+      # Add channel parameters in the correct order
+      %w[mpesa bonga airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay].each do |channel|
+        # Use the proper preference accessor method
+        preference_method = "preferred_#{channel}"
+        if respond_to?(preference_method)
+          params[channel] = send(preference_method) ? '1' : '0'
+        end
       end
 
       # Use the class-level api_endpoint method
@@ -621,41 +623,46 @@ module Spree
     end
 
     def generate_hash(payment)
-      # Prepare all values
+      # Prepare all values - must match exactly what will be sent in the form
       live = preferred_test_mode ? '0' : '1'
       oid = payment.order.number
       inv = payment.order.number
-      ttl = payment.amount.to_f.round(2).to_s
+      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
+      tel = '' # Empty as per iPay docs when not used
       eml = payment.order.email
-      vid = preferred_vendor_id
+      vid = preferred_vendor_id.to_s.downcase
       curr = preferred_currency.presence || 'KES'
-      cbk = preferred_callback_url.presence || '/ipay/confirm'
-
+      p1 = ''
+      p2 = ''
+      p3 = ''
+      p4 = ''
+      cbk = preferred_callback_url.presence || "https://#{base_url}/ipay/confirm"
+      lbk = preferred_return_url.presence || cbk
+      cst = '1'
+      crl = '2'
 
       # Create data string in the exact order required by iPay
       data_string = [
         live,   # live
         oid,    # order ID
         inv,    # invoice number
-        ttl,    # total amount
-        '',     # tel (empty as per iPay docs)
+        ttl,    # total amount (in cents)
+        tel,    # tel (empty as per iPay docs)
         eml,    # email
-        vid,    # vendor ID
+        vid,    # vendor ID (must be lowercase)
         curr,   # currency
-        '',     # p1
-        '',     # p2
-        '',     # p3
-        '',     # p4
+        p1,     # p1
+        p2,     # p2
+        p3,     # p3
+        p4,     # p4
         cbk,    # callback URL
-        '1',    # cst
-        '2'     # crl
+        lbk,    # return URL
+        cst,    # cst
+        crl     # crl
       ].join
 
-      # Generate the hash
-      OpenSSL::HMAC.hexdigest('sha1', preferred_hash_key, data_string)
-
       # Generate and return hash using HMAC SHA1
-      OpenSSL::HMAC.hexdigest('sha1', preferred_hash_key, data_string)
+      OpenSSL::HMAC.hexdigest('sha1', preferred_hash_key, data_string).downcase
     end
 
     def generate_status_hash(transaction_id)
