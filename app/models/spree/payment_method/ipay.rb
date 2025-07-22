@@ -292,7 +292,7 @@ module Spree
     # @param phone [String] The customer's phone number
     def ipay_signature_hash(payment, phone = nil)
       # Get values from payment method preferences
-      vendor_id = preferred_vendor_id.to_s
+      vendor_id = preferred_vendor_id.to_s.downcase # Ensure vendor_id is lowercase
       hash_key = preferred_hash_key.to_s
 
       # Validate required preferences
@@ -300,7 +300,6 @@ module Spree
         raise "Missing required iPay credentials"
       end
 
-      # Set live mode (0 for test, 1 for live)
       # Always use live mode (1) as per requirements
       live = "1"
 
@@ -318,18 +317,25 @@ module Spree
       p3 = ""
       p4 = ""
       cbk = preferred_callback_url.presence || "https://#{base_url}/ipay/confirm"
+      rst = ""
       cst = "1"
       crl = "2"
 
       # Create datastring in the exact order required by iPay
+      # This must match the order of parameters in the form
       datastring = [
         live, oid, inv, ttl, tel, eml, vid, curr,
-        p1, p2, p3, p4, cbk, cst, crl
+        p1, p2, p3, p4, cbk, rst, cst, crl
       ].join
 
+      Rails.logger.info("[iPay DEBUG] Datastring for hash: #{datastring}")
+      
       # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
       digest = OpenSSL::Digest.new('sha1')
-      OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
+      hash = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring).downcase
+      
+      Rails.logger.info("[iPay DEBUG] Generated hash: #{hash}")
+      hash
     rescue StandardError => e
       raise "Error generating hash"
     end
@@ -404,7 +410,7 @@ module Spree
         raise "Error generating payment hash: #{e.message}"
       end
 
-      # Prepare iPay parameters
+      # Prepare iPay parameters - ensure this matches the checkout controller
       ipay_params = {
         live: live,
         oid: oid,
