@@ -7,8 +7,10 @@ module Spree
     skip_before_action :verify_authenticity_token, only: [:confirm]
 
     def confirm
+      Rails.logger.info("[iPay CALLBACK PARAMS] #{params.to_unsafe_h}")
       txn_id = params[:txnid]
       status = params[:status]
+      # Check which param actually contains the order number from the log above
       order_number = params[:order_id] || params[:id] || params[:ivm]
 
       order = Spree::Order.find_by(number: order_number)
