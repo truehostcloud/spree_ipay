@@ -34,7 +34,7 @@ module Spree
 
           raise 'Phone number is required' if phone.blank?
 
-          # Calculate remaining amount
+          # Calculate remaining amount and update payment amount
           remaining_amount = @order.remaining_balance
           payment.amount = remaining_amount
           payment.save(validate: false) if payment.amount_changed?
