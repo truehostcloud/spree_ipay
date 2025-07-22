@@ -335,100 +335,61 @@ module Spree
       raise "Error generating hash"
     end
 
-    def generate_ipay_form_html(payment)
-      # Get required values
-      live = test_mode? ? "0" : "1"
-      # Use numeric order ID for transaction code
-      oid = payment.order.id.to_s
-      # Use numeric order ID for invoice as well
-      inv = payment.order.id.to_s
-      # Round up the amount to the nearest integer for iPay
-      ttl = payment.amount.ceil.to_s
-      tel = payment.order.bill_address&.phone || session[:ipay_phone_number] || "0700000000"
-      eml = payment.order.email
-      vid = preferred_vendor_id
+    def generate_ipay_form_html(payment, phone = nil)
+      # Get values from payment method preferences
+      live = preferred_test_mode ? '0' : '1'
+      oid = payment.order.number.to_s
+      inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
+      ttl = (payment.amount.to_f * 100).to_i.to_s # Convert to cents
+      tel = phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000"
+      eml = payment.order.email.to_s
+      vid = preferred_vendor_id.to_s.downcase
       curr = preferred_currency.presence || 'KES'
       p1 = ""
       p2 = ""
       p3 = ""
       p4 = ""
-      # Generate proper callback and return URLs
-      # Extract host from the return_url preference
-      return_uri = URI.parse(preferred_return_url.presence || 'https://example.com')
-      default_host = return_uri.host
-      default_protocol = return_uri.scheme || 'https'
-
-      # Generate callback URL for iPay to send payment status
-      begin
-        if preferred_callback_url.present?
-          callback_uri = URI.parse(preferred_callback_url)
-          callback_uri.scheme ||= default_protocol
-          callback_uri.host ||= default_host
-          callback_uri.path = '/api/v1/ipay/callback' if callback_uri.path.blank? || callback_uri.path == '/'
-        else
-          # In test mode, ensure we're using HTTPS for security
-          protocol = test_mode? ? 'https' : default_protocol
-          callback_uri = URI.parse("#{protocol}://#{default_host}/api/v1/ipay/callback")
-        end
-
-        # Ensure the callback URL is valid
-        raise URI::InvalidURIError if callback_uri.host.blank?
-
-        # Add test parameter if in test mode
-        if test_mode?
-          params = URI.decode_www_form(callback_uri.query || '').to_h
-          params['test'] = '1'
-          callback_uri.query = URI.encode_www_form(params)
-        end
-
-        cbk = callback_uri.to_s
-      rescue URI::InvalidURIError => e
-        error_msg = "Invalid callback URL format: #{e.message}"
-        Spree::Ipay::Logger.error(StandardError.new(error_msg), payment.order.number)
-        # Fallback to a safe default in case of errors
-        cbk = "https://#{default_host}/api/v1/ipay/callback"
-        cbk += '?test=1' if test_mode?
-      end
-
-      # Generate return URL for customer redirect after payment
-      # Point to the frontend order confirmation page
-      order_number = payment.order.number
-      order_token = payment.order.guest_token
-      rst = preferred_return_url.presence || "#{default_protocol}://#{default_host}/orders/#{order_number}?order_token=#{order_token}"
-
-      cst = "1"  # Customer email notification flag
-      crl = "2"  # Customer phone notification flag
-
-      begin
-        hsh = ipay_signature_hash(payment)
-      rescue StandardError => e
-        raise "Error generating payment hash: #{e.message}"
-      end
-
-      # Prepare iPay parameters
+      
+      # Use the base URL for fallback URLs
+      default_url = "https://#{base_url}"
+      
+      # Set callback and return URLs
+      cbk = preferred_callback_url.presence || "#{default_url}/ipay/confirm"
+      lbk = preferred_return_url.presence || cbk
+      
+      # Log URLs for debugging
+      Rails.logger.info("[iPay FORM DEBUG] Using callback URL (cbk): #{cbk}")
+      Rails.logger.info("[iPay FORM DEBUG] Using return URL (lbk): #{lbk}")
+      
+      # Generate the hash with the phone number
+      hsh = ipay_signature_hash(payment, tel)
+      
+      # Prepare iPay parameters - must match the exact order and parameters used in hash generation
       ipay_params = {
-        live: live,
-        oid: oid,
-        inv: inv,
-        ttl: ttl,
-        tel: tel,
-        eml: eml,
-        vid: vid,
-        curr: curr,
-        p1: p1,
-        p2: p2,
-        p3: p3,
-        p4: p4,
-        cbk: cbk,
-        rst: rst,
-        cst: cst,
-        crl: crl,
-        hsh: hsh
+        'live' => live,
+        'oid' => oid,
+        'inv' => inv,
+        'ttl' => ttl,
+        'tel' => tel,
+        'eml' => eml,
+        'vid' => vid,
+        'curr' => curr,
+        'p1' => p1,
+        'p2' => p2,
+        'p3' => p3,
+        'p4' => p4,
+        'cbk' => cbk,
+        'lbk' => lbk,
+        'cst' => '1',  # Customer email notification flag
+        'crl' => '2',  # Customer phone notification flag
+        'hsh' => hsh
       }
-
-      # Add channel parameters based on preferences in the correct order
+      
+      # Log the parameters being sent to iPay
+      Rails.logger.info("[iPay FORM DEBUG] ipay_params: #{ipay_params.to_json}")
+      
+      # Add channel parameters based on preferences
       %w[mpesa bonga airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay].each do |channel|
-        # Use the proper preference accessor method
         preference_method = "preferred_#{channel}"
         is_enabled = if respond_to?(preference_method)
                       send(preference_method)
@@ -438,21 +399,51 @@ module Spree
                     end
         ipay_params[channel] = is_enabled ? '1' : '0'
       end
-
-      # Generate form HTML
-      form_html = "<form id='ipay_form' action='https://payments.ipayafrica.com/v3/ke' method='POST'>\n"
-
-      # Add all parameters with proper escaping
-      ipay_params.each do |key, value|
-        form_html << "  <input type='hidden' name='#{key}' value='#{ERB::Util.html_escape(value.to_s)}'>\n"
-      end
-
-      # Add submit button and auto-submit script
-      form_html << "  <input type='submit' value='Pay with iPay'>\n"
-      form_html << "</form>\n"
-      form_html << "<script>document.getElementById('ipay_form').submit();</script>\n"
-
-      form_html
+      
+      # Generate the form HTML with full-page flexible layout and improved button positioning
+      <<~HTML
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Redirecting to iPay</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <style>
+            @keyframes spin {
+              to { transform: rotate(360deg); }
+            }
+            .animate-spin {
+              animation: spin 1s linear infinite;
+            }
+          </style>
+        </head>
+        <body class="bg-gradient-to-br from-blue-100 to-gray-100 flex items-center justify-center min-h-screen w-full p-4 sm:p-6">
+          <div class="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-auto p-6 sm:p-8 flex flex-col justify-center space-y-6">
+            <div class="flex justify-center">
+              <svg class="animate-spin h-14 w-14 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+            <h2 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center">Redirecting to iPay</h2>
+            <p class="text-gray-600 text-lg sm:text-xl text-center">Please wait while we securely redirect you to the payment page.</p>
+            <p class="text-sm sm:text-base text-gray-500 text-center">If you are not redirected automatically, please click the button below.</p>
+            <form id="ipay-payment-form" action="#{api_endpoint}" method="post" class="flex justify-center">
+              #{ipay_params.map { |k, v| "<input type='hidden' name='#{k}' value='#{ERB::Util.html_escape(v)}'>" }.join("\n")}
+              <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 transition duration-300">Proceed to Payment</button>
+            </form>
+            <script>
+              document.addEventListener('DOMContentLoaded', function() {
+                setTimeout(function() {
+                  document.getElementById('ipay-payment-form').submit();
+                }, 1000);
+              });
+            </script>
+          </div>
+        </body>
+        </html>
+      HTML
     end
 
     def confirm(payment, phone: nil)
