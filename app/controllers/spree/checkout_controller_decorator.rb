@@ -83,7 +83,8 @@ module Spree
       live = ipay_method.preferred_test_mode ? '0' : '1'
       oid = payment.order.number
       inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
+      # Convert to integer without multiplying by 100 since Spree already handles the amount in cents
+      ttl = payment.amount.to_i.to_s
       eml = payment.order.email
       vid = ipay_method.preferred_vendor_id.presence || ''
       curr = ipay_method.preferred_currency.presence || 'KES'
