@@ -337,10 +337,11 @@ module Spree
       Rails.logger.info("  cst: #{cst}")
       Rails.logger.info("  crl: #{crl}")
 
+      # Create datastring with parameters in the exact order expected by iPay
       datastring = [
         live, oid, inv, ttl, tel, eml, vid, curr,
         p1, p2, p3, p4, cbk, cst, crl
-      ].join
+      ].join('|')  # iPay expects parameters separated by pipes
 
       Rails.logger.info("[iPay HASH DEBUG] datastring: #{datastring}")
       Rails.logger.info("[iPay HASH DEBUG] hash_key: #{hash_key}")
