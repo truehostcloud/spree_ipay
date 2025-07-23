@@ -294,7 +294,7 @@ module Spree
     # @param phone [String] The customer's phone number
     def ipay_signature_hash(payment, phone = nil)
       # Get values from payment method preferences
-      vendor_id = preferred_vendor_id.to_s.downcase
+      vendor_id = preferred_vendor_id.to_s
       hash_key = preferred_hash_key.to_s
 
       # Validate required preferences
@@ -308,8 +308,8 @@ module Spree
       # Prepare values - must match exactly what will be sent in the form
       oid = payment.order.number.to_s
       inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      # Convert amount to cents and round to integer
-      ttl = (payment.amount.to_f * 100).to_i.to_s
+      # Round up the amount to the nearest integer for iPay
+      ttl = payment.amount.ceil.to_s
       tel = phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000"
       eml = payment.order.email.to_s
       vid = vendor_id
@@ -318,54 +318,21 @@ module Spree
       p2 = ""
       p3 = ""
       p4 = ""
-      
-      # Use the base URL for fallback URLs
-      default_url = "https://#{base_url}"
-      
-      # Set callback and return URLs
-      cbk = preferred_callback_url.presence || "#{default_url}/ipay/confirm"
-      lbk = preferred_return_url.presence || cbk
-      
-      cst = "1"  # Customer email notification flag
-      crl = "2"  # Customer phone notification flag
-
-      # Log the parameters being used for hash generation
-      Rails.logger.info("[iPay HASH DEBUG] Generating hash with parameters: {" +
-        "live: #{live}, " +
-        "oid: #{oid}, " +
-        "inv: #{inv}, " +
-        "ttl: #{ttl}, " +
-        "tel: [FILTERED], " +
-        "eml: [FILTERED], " +
-        "vid: #{vid}, " +
-        "curr: #{curr}, " +
-        "cbk: #{cbk}, " +
-        "lbk: #{lbk}" +
-      "}")
+      cbk = preferred_callback_url.presence || "https://#{base_url}/ipay/confirm"
+      cst = "1"
+      crl = "2"
 
       # Create datastring in the exact order required by iPay
       datastring = [
         live, oid, inv, ttl, tel, eml, vid, curr,
-        p1, p2, p3, p4, cbk, lbk, cst, crl
+        p1, p2, p3, p4, cbk, cst, crl
       ].join
-
-      # Log the datastring being hashed (without sensitive data)
-      log_datastring = datastring.dup
-      log_datastring.gsub!(tel, '[FILTERED]') if tel.present?
-      log_datastring.gsub!(eml, '[FILTERED]') if eml.present?
-      Rails.logger.info("[iPay HASH DEBUG] Datastring: #{log_datastring}")
 
       # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
       digest = OpenSSL::Digest.new('sha1')
-      hash = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring).downcase
-      
-      Rails.logger.info("[iPay HASH DEBUG] Generated hash: #{hash}")
-      
-      hash
+      OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
     rescue StandardError => e
-      error_msg = "Error generating hash: #{e.message}\n#{e.backtrace.join("\n")}"
-      Rails.logger.error("[iPay ERROR] #{error_msg}")
-      raise "Error generating hash: #{e.message}"
+      raise "Error generating hash"
     end
 
     def generate_ipay_form_html(payment, phone = nil)
@@ -529,59 +496,59 @@ module Spree
     end
 
     def initiate_payment(payment, phone: nil)
-      Rails.logger.info("[iPay] Initiating payment for order #{payment.order.number}")
+      # Log the start of payment initiation
 
-      # Prepare parameters - must match exactly what's in ipay_signature_hash
+      # Prepare parameters
       params = {
-        'live' => test_mode? ? '0' : '1',
-        'oid' => payment.order.number.to_s,
-        'inv' => "#{payment.order.number}#{Time.now.to_i}",
-        'ttl' => (payment.amount.to_f * 100).to_i.to_s, # Convert to cents
-        'tel' => phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000",
-        'eml' => payment.order.email.to_s,
-        'vid' => preferred_vendor_id.to_s.downcase,
-        'curr' => preferred_currency.presence || 'KES',
-        'p1' => '',
-        'p2' => '',
-        'p3' => '',
-        'p4' => '',
-        'cbk' => preferred_callback_url.presence || "https://#{base_url}/ipay/confirm",
-        'lbk' => preferred_return_url.presence || preferred_callback_url.presence || "https://#{base_url}/ipay/confirm",
-        'cst' => '1',
-        'crl' => '2'
+        live: preferred_test_mode ? '0' : '1',
+        oid: payment.order.number,
+        inv: payment.order.number,
+        ttl: payment.amount.to_f.round(2).to_s,
+        tel: phone,
+        eml: payment.order.email,
+        vid: preferred_vendor_id,
+        curr: preferred_currency.presence || 'KES',
+        p1: '',
+        p2: '',
+        p3: '',
+        p4: '',
+        cbk: preferred_callback_url.presence || "#{Rails.application.routes.url_helpers.root_url.chomp('/')}/ipay/confirm",
+        cst: '1',
+        crl: '2'
       }
+
+      # Log all parameters except sensitive ones
+      log_params = params.dup
+      log_params[:tel] = '[FILTERED]' if log_params[:tel].present?
+      log_params[:eml] = '[FILTERED]' if log_params[:eml].present?
+
+      # Generate and add hash
+      params[:hsh] = generate_hash(payment)
 
       # Add channel parameters in the correct order
       %w[mpesa bonga airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay].each do |channel|
+        # Use the proper preference accessor method
         preference_method = "preferred_#{channel}"
         if respond_to?(preference_method)
           params[channel] = send(preference_method) ? '1' : '0'
         end
       end
 
-      # Generate and add hash - must be done after all parameters are set
-      params['hsh'] = ipay_signature_hash(payment, params['tel'])
+      # Use the class-level api_endpoint method
+      # Parameters prepared for form submission
 
-      # Log the parameters being sent (without sensitive data)
-      log_params = params.dup
-      log_params['tel'] = '[FILTERED]' if log_params['tel'].present?
-      log_params['eml'] = '[FILTERED]' if log_params['eml'].present?
-      Rails.logger.info("[iPay DEBUG] Payment parameters: #{log_params.to_json}")
-
-      # Generate form HTML with auto-submit
+      # Generate form HTML - use the proper endpoint based on test mode
       form_action = api_endpoint
-      form_html = "<form id='ipay-payment-form' action='#{form_action}' method='POST'>\n"
-      
-      # Add all parameters to the form
+
+      form_html = "<form id='ipay_form' action='#{form_action}' method='POST'>\n"
+
       params.each do |key, value|
         escaped_value = ERB::Util.html_escape(value.to_s)
         form_html += "<input type='hidden' name='#{key}' value='#{escaped_value}'>\n"
       end
-      
-      # Add submit button and auto-submit script
-      form_html += "<button type='submit' class='btn btn-primary'>Proceed to Payment</button>\n"
-      form_html += "</form>\n"
-      form_html += "<script>document.getElementById('ipay-payment-form').submit();</script>"
+
+      form_html += "</form>"
+      form_html += "<script>document.getElementById('ipay_form').submit();</script>"
 
       # Store form HTML in session
       options[:controller].session[:ipay_form_html] = form_html
@@ -720,15 +687,7 @@ module Spree
     end
 
     def base_url
-      if defined?(Rails.application.routes.url_helpers)
-        Rails.application.routes.url_helpers.root_url(host: Spree::Store.current.url, protocol: 'https').chomp('/')
-      else
-        # Fallback to environment variable or default
-        ENV['SITE_URL'] || 'http://localhost:3000'
-      end
-    rescue => e
-      Rails.logger.error("[iPay] Error generating base_url: #{e.message}")
-      ENV['SITE_URL'] || 'http://localhost:3000'
+      Rails.application.routes.url_helpers.root_url.chomp('/')
     end
 
     def test_mode?
@@ -736,7 +695,7 @@ module Spree
     end
 
     def api_endpoint
-      'https://payments.ipayafrica.com/v3/ke'
+      preferred_test_mode ? 'https://sandbox.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'
     end
 
     def success_response(message = 'Success')

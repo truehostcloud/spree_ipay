@@ -79,141 +79,101 @@ module Spree
     end
 
     def generate_ipay_form_html(payment, phone, ipay_method)
-      begin
-        # Get required values from payment method preferences
-        live = ipay_method.preferred_test_mode ? '0' : '1'
-        oid = payment.order.number
-        inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-        # Convert amount to cents and round to integer
-        ttl = (payment.amount.to_f * 100).to_i.to_s
-        eml = payment.order.email
-        vid = ipay_method.preferred_vendor_id.to_s.downcase.presence || ''
-        curr = ipay_method.preferred_currency.presence || 'KES'
-        p1 = ""
-        p2 = ""
-        p3 = ""
-        p4 = ""
-        
-        # Get base URL for fallbacks
-        default_url = ipay_method.base_url
-        
-        # Set callback and return URLs
-        cbk = ipay_method.preferred_callback_url.presence || "#{default_url}/ipay/confirm"
-        lbk = ipay_method.preferred_return_url.presence || cbk
-        
-        cst = "1"  # Customer email notification flag
-        crl = "2"  # Customer phone notification flag
+      # Get required values from payment method preferences
+      live = ipay_method.preferred_test_mode ? '0' : '1'
+      oid = payment.order.number
+      inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
+      # Round up the amount to the nearest integer for iPay
+      ttl = payment.amount.ceil.to_s
+      eml = payment.order.email
+      vid = ipay_method.preferred_vendor_id.presence || ''
+      curr = ipay_method.preferred_currency.presence || 'KES'
+      p1 = ""
+      p2 = ""
+      p3 = ""
+      p4 = ""
+      cbk = ipay_method.preferred_callback_url.presence || "https://example.com/ipay/callback"
+      cst = "1"
+      crl = "2"
 
-        # Log the parameters being used
-        Rails.logger.info("[iPay] Generating form with parameters: {" +
-          "live: #{live}, " +
-          "oid: #{oid}, " +
-          "inv: #{inv}, " +
-          "ttl: #{ttl}, " +
-          "vid: #{vid}, " +
-          "curr: #{curr}, " +
-          "cbk: #{cbk}, " +
-          "lbk: #{lbk}" +
-        "}")
+      # Generate the hash with the phone number
+      hsh = ipay_method.ipay_signature_hash(payment, phone)
 
-        # Generate the hash with the phone number
-        hsh = ipay_method.ipay_signature_hash(payment, phone)
+      # Prepare iPay parameters - must match the exact order and parameters used in hash generation
+      ipay_params = {
+        'live' => live,
+        'oid' => oid,
+        'inv' => inv,
+        'ttl' => ttl,
+        'tel' => phone || '0700000000',
+        'eml' => eml,
+        'vid' => vid,
+        'curr' => curr,
+        'p1' => p1,
+        'p2' => p2,
+        'p3' => p3,
+        'p4' => p4,
+        'cbk' => cbk,
+        'cst' => cst,
+        'crl' => crl,
+        'hsh' => hsh
+      }
 
-        # Prepare iPay parameters - must match the exact order and parameters used in hash generation
-        ipay_params = {
-          'live' => live,
-          'oid' => oid,
-          'inv' => inv,
-          'ttl' => ttl,
-          'tel' => phone.presence || '0700000000',
-          'eml' => eml,
-          'vid' => vid,
-          'curr' => curr,
-          'p1' => p1,
-          'p2' => p2,
-          'p3' => p3,
-          'p4' => p4,
-          'cbk' => cbk,
-          'lbk' => lbk,
-          'cst' => cst,
-          'crl' => crl,
-          'hsh' => hsh
-        }
-
-        # Add channel parameters based on preferences
-        %i[
-          mpesa bonga airtel equity mobilebanking
-          creditcard unionpay mvisa vooma pesalink autopay
-        ].each do |channel|
-          # Use the proper preference accessor method
-          preference_method = "preferred_#{channel}"
-          if ipay_method.respond_to?(preference_method)
-            ipay_params[channel.to_s] = ipay_method.send(preference_method) ? '1' : '0'
-          end
-        end
-
-        # Generate the form HTML with auto-submit
-        form_action = ipay_method.api_endpoint
-        form_id = 'ipay-payment-form'
-
-        # Log the final parameters being sent to iPay (without sensitive data)
-        log_params = ipay_params.dup
-        log_params['tel'] = '[FILTERED]' if log_params['tel'].present?
-        log_params['eml'] = '[FILTERED]' if log_params['eml'].present?
-        log_params['hsh'] = '[FILTERED]' if log_params['hsh'].present?
-        Rails.logger.info("[iPay] Final payment parameters: #{log_params.to_json}")
-
-        # Generate the form HTML with full-page flexible layout and improved button positioning
-        <<~HTML
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Redirecting to iPay</title>
-            <script src="https://cdn.tailwindcss.com"></script>
-            <style>
-              @keyframes spin {
-                to { transform: rotate(360deg); }
-              }
-              .animate-spin {
-                animation: spin 1s linear infinite;
-              }
-            </style>
-          </head>
-          <body class="bg-gradient-to-br from-blue-100 to-gray-100 flex items-center justify-center min-h-screen w-full p-4 sm:p-6">
-            <div class="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-auto p-6 sm:p-8 flex flex-col justify-center space-y-6">
-              <div class="flex justify-center">
-                <svg class="animate-spin h-14 w-14 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              </div>
-              <h2 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center">Redirecting to iPay</h2>
-              <p class="text-gray-600 text-lg sm:text-xl text-center">Please wait while we securely redirect you to the payment page.</p>
-              <p class="text-sm sm:text-base text-gray-500 text-center">If you are not redirected automatically, please click the button below.</p>
-              <form id="ipay-payment-form" action="#{form_action}" method="post" class="flex justify-center">
-                #{ipay_params.map { |k, v| "<input type='hidden' name='#{k}' value='#{ERB::Util.html_escape(v.to_s)}'>" }.join("\n")}
-                <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 transition duration-300">Proceed to Payment</button>
-              </form>
-              <script>
-                document.addEventListener('DOMContentLoaded', function() {
-                  setTimeout(function() {
-                    document.getElementById('ipay-payment-form').submit();
-                  }, 1000);
-                });
-              </script>
-            </div>
-          </body>
-          </html>
-        HTML
-      rescue => e
-        error_msg = "Error generating iPay form: #{e.message}\n#{e.backtrace.join("\n")}"
-        Rails.logger.error("[iPay ERROR] #{error_msg}")
-        raise "Error generating iPay form: #{e.message}"
+      # Add channel parameters based on preferences
+      %i[
+        mpesa bonga airtel equity mobilebanking
+        creditcard unionpay mvisa vooma pesalink autopay
+      ].each do |channel|
+        ipay_params[channel.to_s] = ipay_method.preferences["#{channel}"] ? '1' : '0'
       end
+
+      # Generate the form HTML with full-page flexible layout and improved button positioning
+      <<~HTML
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Redirecting to iPay</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <style>
+            @keyframes spin {
+              to { transform: rotate(360deg); }
+            }
+            .animate-spin {
+              animation: spin 1s linear infinite;
+            }
+          </style>
+        </head>
+        <body class="bg-gradient-to-br from-blue-100 to-gray-100 flex items-center justify-center min-h-screen w-full p-4 sm:p-6">
+          <div class="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-auto p-6 sm:p-8 flex flex-col justify-center space-y-6">
+            <div class="flex justify-center">
+              <svg class="animate-spin h-14 w-14 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+            <h2 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center">Redirecting to iPay</h2>
+            <p class="text-gray-600 text-lg sm:text-xl text-center">Please wait while we securely redirect you to the payment page.</p>
+            <p class="text-sm sm:text-base text-gray-500 text-center">If you are not redirected automatically, please click the button below.</p>
+            <form id="ipay-payment-form" action="#{ipay_method.preferred_test_mode ? 'https://payments.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'}" method="post" class="flex justify-center">
+              #{ipay_params.map { |k, v| "<input type='hidden' name='#{k}' value='#{ERB::Util.html_escape(v)}'>" }.join("\n")}
+              <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 transition duration-300">Proceed to Payment</button>
+            </form>
+            <script>
+              document.addEventListener('DOMContentLoaded', function() {
+                setTimeout(function() {
+                  document.getElementById('ipay-payment-form').submit();
+                }, 1000);
+              });
+            </script>
+          </div>
+        </body>
+        </html>
+      HTML
+    rescue StandardError => e
+      raise "Error generating payment form: #{e.message}"
     end
-    
     # Override update action to handle JSON responses
     def update
       if @order.update_from_params(params, permitted_checkout_attributes, request.headers.env)
