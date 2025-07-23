@@ -273,40 +273,61 @@ module Spree
           if received_hash.blank?
             Rails.logger.warn("[iPay Callback] No hash provided, skipping verification")
             return true 
-          end
-
-          # Only require hash verification for real iPay payment methods
-          if payment_method.class.name.demodulize.downcase.include?("ipay") && payment_method.respond_to?(:generate_status_hash)
-            if @payment.response_code.blank?
-              Rails.logger.error("[iPay Callback] No response code available for payment")
-              return false
-            end
-
             begin
-              # Log the transaction ID being used for verification
-              Rails.logger.info("[iPay Callback] Verifying hash for transaction: #{@payment.response_code}")
+              raw_body = request.raw_post
+              Rails.logger.info("[iPay Callback] Raw POST body: #{raw_body}")
               
-              # Generate the expected hash
-              expected_hash = payment_method.send(:generate_status_hash, @payment.response_code)
-              
-              # Log both hashes for comparison
-              Rails.logger.info("[iPay Callback] Expected hash: #{expected_hash}")
-              Rails.logger.info("[iPay Callback] Received hash: #{received_hash}")
-              
-              # Compare hashes in a timing-safe way
-              ActiveSupport::SecurityUtils.secure_compare(
-                ::Digest::SHA1.hexdigest(expected_hash.to_s),
-                ::Digest::SHA1.hexdigest(received_hash.to_s)
-              )
-            rescue StandardError => e
-              Rails.logger.error("[iPay Callback] Error verifying hash: #{e.message}\n#{e.backtrace.join("\n")}")
-              false
+              # Try to parse as JSON if content-type is application/json
+              if request.content_type&.include?('application/json')
+                json_params = JSON.parse(raw_body) rescue {}
+                Rails.logger.info("[iPay Callback] Parsed JSON params: #{json_params}")
+                params.merge!(json_params)
+              end
+            rescue => e
+              Rails.logger.error("[iPay Callback] Error parsing request body: #{e.message}")
             end
-          else
-            # Skip verification for non-iPay payment methods
-            Rails.logger.warn("[iPay Callback] Skipping verification for non-iPay payment method")
-            true
           end
+          
+          received_hash = params[:hash] || params[:hsh]
+          
+          if received_hash.blank?
+            Rails.logger.error("[iPay Callback] No hash parameter received")
+            return false
+          end
+          
+          # Get the payment method and order
+          payment_method = Spree::PaymentMethod.find_by(type: 'Spree::PaymentMethod::Ipay')
+          unless payment_method
+            Rails.logger.error("[iPay Callback] iPay payment method not found")
+            return false
+          end
+          
+          # Log the parameters that will be used for hash generation
+          Rails.logger.info("[iPay Callback] Parameters for hash generation:")
+          %w[live oid inv ttl tel eml vid curr p1 p2 p3 p4 cbk cst crl].each do |param|
+            Rails.logger.info("  #{param}: #{params[param]}")
+          end
+          
+          # Generate the expected hash
+          expected_hash = payment_method.ipay_signature_hash(nil, params[:tel])
+          
+          # Log the hashes for debugging
+          Rails.logger.info("[iPay Callback] Received hash: #{received_hash}")
+          Rails.logger.info("[iPay Callback] Expected hash: #{expected_hash}")
+          
+          # Compare hashes using timing-safe comparison
+          result = ActiveSupport::SecurityUtils.secure_compare(
+            ::Digest::SHA1.hexdigest(expected_hash.to_s),
+            ::Digest::SHA1.hexdigest(received_hash.to_s)
+          )
+          
+          Rails.logger.info("[iPay Callback] Hash verification #{result ? 'SUCCEEDED' : 'FAILED'}")
+          Rails.logger.info("[iPay Callback] ===== END OF VERIFICATION =====\n")
+          
+          result
+        rescue => e
+          Rails.logger.error("[iPay Callback] Error verifying hash: #{e.message}\n#{e.backtrace.join("\n")}")
+          false
         end
       end
     end

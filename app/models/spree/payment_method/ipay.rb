@@ -319,22 +319,35 @@ module Spree
       cst = "1"
       crl = "2"
 
+      # Log all parameters being used in the hash
+      Rails.logger.info("[iPay HASH DEBUG] Parameters for hash generation:")
+      Rails.logger.info("  live: #{live}")
+      Rails.logger.info("  oid: #{oid}")
+      Rails.logger.info("  inv: #{inv}")
+      Rails.logger.info("  ttl: #{ttl}")
+      Rails.logger.info("  tel: #{tel}")
+      Rails.logger.info("  eml: #{eml}")
+      Rails.logger.info("  vid: #{vid}")
+      Rails.logger.info("  curr: #{curr}")
+      Rails.logger.info("  p1: #{p1}")
+      Rails.logger.info("  p2: #{p2}")
+      Rails.logger.info("  p3: #{p3}")
+      Rails.logger.info("  p4: #{p4}")
+      Rails.logger.info("  cbk: #{cbk}")
+      Rails.logger.info("  cst: #{cst}")
+      Rails.logger.info("  crl: #{crl}")
+
       datastring = [
         live, oid, inv, ttl, tel, eml, vid, curr,
         p1, p2, p3, p4, cbk, cst, crl
       ].join
 
-      
-      
-      
-      
-      
-      
-      
+      Rails.logger.info("[iPay HASH DEBUG] datastring: #{datastring}")
+      Rails.logger.info("[iPay HASH DEBUG] hash_key: #{hash_key}")
       
       digest = OpenSSL::Digest.new('sha1')
       hash = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
-      Rails.logger.info("[iPay HASH DEBUG] hash: #{hash.downcase}")
+      Rails.logger.info("[iPay HASH DEBUG] Generated hash: #{hash.downcase}")
       # Ensure the hash is lowercase to match PHP's output
       hash.downcase
     rescue StandardError => e
