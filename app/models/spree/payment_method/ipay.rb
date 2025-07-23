@@ -720,7 +720,15 @@ module Spree
     end
 
     def base_url
-      Rails.application.routes.url_helpers.root_url.chomp('/')
+      if defined?(Rails.application.routes.url_helpers)
+        Rails.application.routes.url_helpers.root_url(host: Spree::Store.current.url, protocol: 'https').chomp('/')
+      else
+        # Fallback to environment variable or default
+        ENV['SITE_URL'] || 'http://localhost:3000'
+      end
+    rescue => e
+      Rails.logger.error("[iPay] Error generating base_url: #{e.message}")
+      ENV['SITE_URL'] || 'http://localhost:3000'
     end
 
     def test_mode?
