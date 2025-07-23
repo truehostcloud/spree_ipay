@@ -405,14 +405,15 @@ module Spree
       rescue StandardError => e
         error_msg = "Error generating callback URL: #{e.message}"
         Spree::Ipay::Logger.error(StandardError.new(error_msg), payment.order.number)
-        # Prepare callback URL - must match exactly what's in the form
-        protocol = request.ssl? ? 'https' : 'http'
-        host = request.host_with_port
-        cbk = "#{protocol}://#{host}/api/v1/ipay/callback"
+        
+        # Fallback to ngrok URL in case of errors
+        protocol = test_mode? ? 'https' : 'http'
+        default_host = '9b81b81c06d0.ngrok-free.app' # Your ngrok host
+        cbk = "#{protocol}://#{default_host}/api/v1/ipay/callback"
         
         # Add test parameter if in test mode
-        if preferred_test_mode
-          cbk += "?test=1"
+        if test_mode?
+          cbk += '?test=1'
         end
       end
 
