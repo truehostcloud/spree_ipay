@@ -20,18 +20,33 @@ module Spree
 
     def handle_ipay_redirect
       begin
-        # Get phone number and store in session during payment state
+        # Get payment method and phone number during payment state
         if params[:state] == "payment"
-          phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
-          session[:ipay_phone_number] = phone if phone.present?
+          payment_params = params.dig(:order, :payments_attributes, 0) || {}
+          
+          # Store payment method ID if present
+          if payment_method_id = payment_params[:payment_method_id]
+            session[:selected_payment_method_id] = payment_method_id
+          end
+          
+          # Store phone number if present
+          if phone = payment_params.dig(:source_attributes, :phone)
+            session[:ipay_phone_number] = phone
+          end
         end
 
-        # Generate form and redirect during confirm state
-        if params[:state] == "confirm" && @order.payments.last&.payment_method&.is_a?(Spree::PaymentMethod::Ipay)
+        # Process iPay payment during confirm state
+        if params[:state] == "confirm" && @order.payments.any?
           payment = @order.payments.last
           ipay_method = payment.payment_method
+          
+          # Skip if not an iPay payment method
+          return unless ipay_method.is_a?(Spree::PaymentMethod::Ipay)
+          
+          # Get phone from session or order
           phone = session[:ipay_phone_number] || @order.bill_address&.phone
-
+          
+          # Validate required fields
           raise 'Phone number is required' if phone.blank?
 
           respond_to do |format|
