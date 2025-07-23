@@ -7,10 +7,34 @@ module Spree
     skip_before_action :verify_authenticity_token, only: [:confirm]
 
     def confirm
-      Rails.logger.info("[iPay CALLBACK PARAMS] #{params.to_unsafe_h}")
-      txn_id = params[:txnid]
+      # Log all request details
+      Rails.logger.info("\n[iPay CALLBACK] ===== START OF REQUEST =====")
+      Rails.logger.info("[iPay CALLBACK] Request Method: #{request.method}")
+      Rails.logger.info("[iPay CALLBACK] Headers: #{request.headers.env.select { |k,v| k.to_s.start_with?('HTTP_') }.to_h}")
+      Rails.logger.info("[iPay CALLBACK] Raw Params: #{params.to_unsafe_h}")
+      
+      # Log raw body for POST requests
+      if request.post?
+        begin
+          raw_body = request.raw_post
+          Rails.logger.info("[iPay CALLBACK] Raw POST body: #{raw_body}")
+          
+          # Try to parse as JSON if content-type is application/json
+          if request.content_type&.include?('application/json')
+            json_params = JSON.parse(raw_body) rescue {}
+            Rails.logger.info("[iPay CALLBACK] Parsed JSON params: #{json_params}")
+            params.merge!(json_params)
+          end
+        rescue => e
+          Rails.logger.error("[iPay CALLBACK] Error parsing request body: #{e.message}")
+        end
+      end
+      
+      Rails.logger.info("[iPay CALLBACK] Processed Params: #{params.to_unsafe_h}")
+      
+      txn_id = params[:txnid] || params[:txn_id] || params[:transaction_id]
       status = params[:status]
-      order_number = params[:order_id] || params[:id] || params[:ivm] || params[:oid]
+      order_number = params[:order_id] || params[:id] || params[:ivm] || params[:oid] || params[:inv]
 
       if order_number.present?
         order = Spree::Order.find_by(number: order_number)
