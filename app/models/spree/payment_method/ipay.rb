@@ -429,7 +429,7 @@ module Spree
             <h2 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center">Redirecting to iPay</h2>
             <p class="text-gray-600 text-lg sm:text-xl text-center">Please wait while we securely redirect you to the payment page.</p>
             <p class="text-sm sm:text-base text-gray-500 text-center">If you are not redirected automatically, please click the button below.</p>
-            <form id="ipay-payment-form" action="#{api_endpoint}" method="post" class="flex justify-center">
+            <form id="ipay-payment-form" action="https://sandbox.ipayafrica.com/v3/ke" method="post" class="flex justify-center">
               #{ipay_params.map { |k, v| "<input type='hidden' name='#{k}' value='#{ERB::Util.html_escape(v)}'>" }.join("\n")}
               <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 transition duration-300">Proceed to Payment</button>
             </form>
