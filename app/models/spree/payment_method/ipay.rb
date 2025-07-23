@@ -292,57 +292,83 @@ module Spree
     # @param payment [Spree::Payment] The payment object
     # @param phone [String] The customer's phone number
     def ipay_signature_hash(payment, phone = nil)
-      # Get values from payment method preferences
-      vendor_id = preferred_vendor_id.to_s
-      hash_key = preferred_hash_key.to_s
-
-      # Validate required preferences
-      if vendor_id.blank? || hash_key.blank?
-        raise "Missing required iPay credentials"
-      end
-
-      # Set live mode (0 for test, 1 for live)
-      live = test_mode? ? "0" : "1"
-
-      # Get values from payment and order
-      oid = payment.order.number
-      inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      ttl = payment.amount.ceil.to_s # Round up to nearest integer
-      tel = phone || payment.order.bill_address&.phone || ''
-      eml = payment.order.email
-      vid = vendor_id
-      curr = preferred_currency.presence || 'KES'
-      p1 = ""
-      p2 = ""
-      p3 = ""
-      p4 = ""
-      cbk = preferred_callback_url.presence || "https://#{base_url}/ipay/confirm"
-      cst = "1"
-      crl = "2"
-
-      # Create datastring in the exact order required by iPay
-      # Note: The order of these parameters is critical and must match iPay's requirements
-      datastring = [
-        live, oid, inv, ttl, tel, eml, vid, curr,
-        p1, p2, p3, p4, cbk, cst, crl
-      ].join
-
-      # Log the datastring and hash key for debugging (remove in production)
-      Rails.logger.info "[IPAY_DEBUG] Datastring: #{datastring}"
-      Rails.logger.info "[IPAY_DEBUG] Hash key: #{hash_key}"
-
-      # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
-      digest = OpenSSL::Digest.new('sha1')
-      hmac = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
-      
-      Rails.logger.info "[IPAY_DEBUG] Generated HMAC: #{hmac}"
-      
-      hmac
-    rescue StandardError => e
-      Rails.logger.error "[IPAY_ERROR] Error generating hash: #{e.message}"
-      Rails.logger.error e.backtrace.join("\n")
-      raise "Error generating hash: #{e.message}"
+  log_prefix = '[IPAY_HASH_DEBUG]'
+  
+  begin
+    Rails.logger.info "#{log_prefix} ===== START HASH GENERATION ====="
+    
+    # Get values from payment method preferences
+    vendor_id = preferred_vendor_id.to_s
+    hash_key = preferred_hash_key.to_s
+    
+    # Log basic info
+    Rails.logger.info "#{log_prefix} Order: #{payment.order.number}"
+    Rails.logger.info "#{log_prefix} Vendor ID: #{vendor_id}"
+    Rails.logger.info "#{log_prefix} Test Mode: #{test_mode?}"
+    
+    # Validate required preferences
+    if vendor_id.blank? || hash_key.blank?
+      error_msg = "Missing required iPay credentials - Vendor ID: #{vendor_id.present? ? 'present' : 'missing'}, Hash Key: #{hash_key.present? ? 'present' : 'missing'}"
+      Rails.logger.error "#{log_prefix} #{error_msg}"
+      raise error_msg
     end
+    
+    # Set live mode (0 for test, 1 for live)
+    live = test_mode? ? "0" : "1"
+    
+    # Get values from payment and order
+    oid = payment.order.number
+    inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
+    ttl = payment.amount.ceil.to_s # Round up to nearest integer
+    tel = phone || payment.order.bill_address&.phone || ''
+    eml = payment.order.email
+    vid = vendor_id
+    curr = preferred_currency.presence || 'KES'
+    p1 = ""
+    p2 = ""
+    p3 = ""
+    p4 = ""
+    cbk = preferred_callback_url.presence || "https://#{base_url}/ipay/confirm"
+    cst = "1"
+    crl = "2"
+    
+    # Log all values that will be used in the hash
+    Rails.logger.info "#{log_prefix} Hash Input Values:"
+    Rails.logger.info "#{log_prefix}   - live: #{live}"
+    Rails.logger.info "#{log_prefix}   - oid: #{oid}"
+    Rails.logger.info "#{log_prefix}   - inv: #{inv}"
+    Rails.logger.info "#{log_prefix}   - ttl: #{ttl}"
+    Rails.logger.info "#{log_prefix}   - tel: #{tel}"
+    Rails.logger.info "#{log_prefix}   - eml: #{eml}"
+    Rails.logger.info "#{log_prefix}   - vid: #{vid}"
+    Rails.logger.info "#{log_prefix}   - curr: #{curr}"
+    Rails.logger.info "#{log_prefix}   - cbk: #{cbk}"
+    Rails.logger.info "#{log_prefix}   - cst: #{cst}"
+    Rails.logger.info "#{log_prefix}   - crl: #{crl}"
+    
+    # Create datastring in the exact order required by iPay
+    datastring = [
+      live, oid, inv, ttl, tel, eml, vid, curr,
+      p1, p2, p3, p4, cbk, cst, crl
+    ].join
+    
+    Rails.logger.info "#{log_prefix} Datastring before hashing: #{datastring}"
+    Rails.logger.info "#{log_prefix} Hash key (first 4 chars): #{hash_key[0..3]}..."
+    
+    # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
+    digest = OpenSSL::Digest.new('sha1')
+    hmac = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
+    
+    Rails.logger.info "#{log_prefix} Generated HMAC: #{hmac}"
+    Rails.logger.info "#{log_prefix} ===== END HASH GENERATION ====="
+    
+    hmac
+  rescue StandardError => e
+    Rails.logger.error "#{log_prefix} Error in ipay_signature_hash: #{e.class} - #{e.message}"
+    Rails.logger.error "#{log_prefix} Backtrace:\n#{e.backtrace.join("\n")}"
+    raise "Error generating hash: #{e.message}"
+  end
+end
 
     def generate_ipay_form_html(payment, phone = nil)
       # Get values from payment method preferences

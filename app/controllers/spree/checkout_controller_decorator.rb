@@ -20,7 +20,22 @@ module Spree
 
     def handle_ipay_redirect
       log_prefix = '[IPAY_CHECKOUT_DEBUG] [REDIRECT_HANDLER]'
-      Rails.logger.info "#{log_prefix} Starting handler for state: #{params[:state]}"
+  
+      # Log all parameters for debugging
+      Rails.logger.info "#{log_prefix} ===== START HANDLE_IPAY_REDIRECT ====="
+      Rails.logger.info "#{log_prefix} Current state: #{params[:state]}"
+      Rails.logger.info "#{log_prefix} Params: #{params.to_unsafe_h.except(:controller, :action, :order).inspect}"
+      Rails.logger.info "#{log_prefix} Session: #{session.to_hash.slice(:order_id, :access_token, :guest_token, :ipay_phone_number).inspect}"
+  
+      # Log current order state
+      if @order
+        Rails.logger.info "#{log_prefix} Order state: #{@order.state}"
+        Rails.logger.info "#{log_prefix} Order number: #{@order.number}"
+        Rails.logger.info "#{log_prefix} Order total: #{@order.total}"
+        Rails.logger.info "#{log_prefix} Order payments: #{@order.payments.map { |p| "#{p.id}:#{p.state}:#{p.amount}" }.join(', ')}"
+      else
+        Rails.logger.error "#{log_prefix} NO ORDER FOUND IN SESSION"
+      end
       
       begin
         # Get payment method and phone number during payment state
@@ -133,7 +148,26 @@ module Spree
 
     def generate_ipay_form_html(payment, phone, ipay_method)
       log_prefix = '[IPAY_CHECKOUT_DEBUG] [FORM_GENERATION]'
-      Rails.logger.info "#{log_prefix} Starting form generation for order #{payment.order.number}"
+  
+      # Log method entry with parameters
+      Rails.logger.info "#{log_prefix} ===== START FORM GENERATION ====="
+      Rails.logger.info "#{log_prefix} Order: #{payment.order.number}"
+      Rails.logger.info "#{log_prefix} Payment ID: #{payment.id}, State: #{payment.state}"
+      Rails.logger.info "#{log_prefix} Phone: #{phone}"
+      Rails.logger.info "#{log_prefix} iPay Method ID: #{ipay_method.id}"
+  
+      # Log payment method details
+      begin
+        Rails.logger.info "#{log_prefix} Payment Method Details:"
+        Rails.logger.info "#{log_prefix}   - Type: #{ipay_method.class.name}"
+        Rails.logger.info "#{log_prefix}   - ID: #{ipay_method.id}"
+        Rails.logger.info "#{log_prefix}   - Test Mode: #{ipay_method.preferred_test_mode}"
+        Rails.logger.info "#{log_prefix}   - Vendor ID: #{ipay_method.preferred_vendor_id}"
+        Rails.logger.info "#{log_prefix}   - Callback URL: #{ipay_method.preferred_callback_url}"
+        Rails.logger.info "#{log_prefix}   - Return URL: #{ipay_method.preferred_return_url}"
+      rescue => e
+        Rails.logger.error "#{log_prefix} Error logging payment method details: #{e.message}"
+      end
       
       begin
         # Get required values from payment method preferences
