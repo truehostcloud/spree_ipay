@@ -316,11 +316,12 @@ module Spree
       p3 = ""
       p4 = ""
       
-      # Generate callback URL to match the form submission
-      protocol = payment.order.respond_to?(:ssl?) && payment.order.ssl? ? 'https' : 'http'
-      host = base_url
-      cbk = "#{protocol}://#{host}/api/v1/ipay/callback"
-      cbk += "?test=1" if test_mode?
+      # Generate callback URL - must match exactly what's in the form
+      # Use the same approach as in the callback_url method
+      default_protocol = test_mode? ? 'https' : 'http'
+      default_host = '9b81b81c06d0.ngrok-free.app' # Match the ngrok host from callback_url
+      cbk = "#{default_protocol}://#{default_host}/api/v1/ipay/callback"
+      cbk += '?test=1' if test_mode?
       
       cst = "1"
       crl = "2"
@@ -714,8 +715,9 @@ module Spree
     end
 
     def base_url
-      Rails.application.routes.url_helpers.root_url.chomp('/')
-    end
+    # Use the same ngrok URL as in callback_url for consistency
+    '9b81b81c06d0.ngrok-free.app'
+  end
 
     def test_mode?
       preferred_test_mode == true || preferred_test_mode == '1' || preferred_test_mode == 'true'
