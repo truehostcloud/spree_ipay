@@ -19,35 +19,59 @@ module Spree
     end
 
     def handle_ipay_redirect
+      log_prefix = '[IPAY_CHECKOUT_DEBUG] [REDIRECT_HANDLER]'
+      Rails.logger.info "#{log_prefix} Starting handler for state: #{params[:state]}"
+      
       begin
         # Get payment method and phone number during payment state
         if params[:state] == "payment"
+          Rails.logger.info "#{log_prefix} Processing payment state"
           payment_params = params.dig(:order, :payments_attributes, 0) || {}
+          Rails.logger.debug "#{log_prefix} Raw payment params: #{payment_params.inspect}"
           
           # Store payment method ID if present
           if payment_method_id = payment_params[:payment_method_id]
+            Rails.logger.info "#{log_prefix} Storing payment method ID in session: #{payment_method_id}"
             session[:selected_payment_method_id] = payment_method_id
           end
           
           # Store phone number if present
           if phone = payment_params.dig(:source_attributes, :phone)
+            Rails.logger.info "#{log_prefix} Storing phone number in session: #{phone}"
             session[:ipay_phone_number] = phone
           end
+          
+          # Log the current session state (debug level to avoid log spam)
+          Rails.logger.debug "#{log_prefix} Session state: #{session.to_hash.except('session_id', '_csrf_token').inspect}"
+          return # Return early for payment state
         end
 
         # Process iPay payment during confirm state
         if params[:state] == "confirm" && @order.payments.any?
+          Rails.logger.info "#{log_prefix} Processing confirm state for order #{@order.number}"
           payment = @order.payments.last
           ipay_method = payment.payment_method
           
+          Rails.logger.debug "#{log_prefix} Payment method details - Type: #{ipay_method.class.name}, ID: #{ipay_method.id}"
+          
           # Skip if not an iPay payment method
-          return unless ipay_method.is_a?(Spree::PaymentMethod::Ipay)
+          unless ipay_method.is_a?(Spree::PaymentMethod::Ipay)
+            error_msg = "Payment method is not an iPay method (got: #{ipay_method.class.name})"
+            Rails.logger.warn "#{log_prefix} #{error_msg}"
+            return 
+          end
           
           # Get phone from session or order
           phone = session[:ipay_phone_number] || @order.bill_address&.phone
           
+          Rails.logger.info "#{log_prefix} Using phone number: #{phone.present? ? phone[0..3] + '******' + phone[-2..-1] : 'NONE'}"
+          
           # Validate required fields
-          raise 'Phone number is required' if phone.blank?
+          if phone.blank?
+            error_msg = 'Phone number is required for iPay payment'
+            Rails.logger.error "#{log_prefix} #{error_msg}"
+            raise error_msg 
+          end
 
           respond_to do |format|
             format.html do
@@ -65,13 +89,14 @@ module Spree
           return false # Prevent further processing
         end
       rescue => e
-        if Rails.env.development?
-          Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}\n#{e.backtrace.take(5).join("\n")}")
-        else
-          Rails.logger.error("iPay Redirect Error: #{e.class}: #{e.message}")
-        end
+        Rails.log.error("[IPAY_CHECKOUT_ERROR] [REDIRECT_HANDLER] Error in handle_ipay_redirect: #{e.class} - #{e.message}")
+        Rails.log.debug("[IPAY_CHECKOUT_DEBUG] [REDIRECT_HANDLER] Backtrace: #{e.backtrace.first(5).join("\n")}")
         
-        error_message = Rails.env.development? ? e.message : 'Unable to process payment. Please try again.'
+        error_message = if Rails.env.development?
+          "#{e.class}: #{e.message}"
+        else
+          'Unable to process payment. Please try again.'
+        end
         
         respond_to do |format|
           format.html { redirect_to checkout_state_path(@order.state), error: error_message }
@@ -94,25 +119,33 @@ module Spree
     end
 
     def generate_ipay_form_html(payment, phone, ipay_method)
-      # Get required values from payment method preferences
-      live = ipay_method.preferred_test_mode ? '0' : '1'
-      oid = payment.order.number
-      inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      # Round up the amount to the nearest integer for iPay
-      ttl = payment.amount.ceil.to_s
-      eml = payment.order.email
-      vid = ipay_method.preferred_vendor_id.presence || ''
-      curr = ipay_method.preferred_currency.presence || 'KES'
-      p1 = ""
-      p2 = ""
-      p3 = ""
-      p4 = ""
-      cbk = ipay_method.preferred_callback_url.presence || "https://example.com/ipay/callback"
-      cst = "1"
-      crl = "2"
+      log_prefix = '[IPAY_CHECKOUT_DEBUG] [FORM_GENERATION]'
+      Rails.logger.info "#{log_prefix} Starting form generation for order #{payment.order.number}"
+      
+      begin
+        # Get required values from payment method preferences
+        live = ipay_method.preferred_test_mode ? '0' : '1'
+        oid = payment.order.number
+        inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
+        # Round up the amount to the nearest integer for iPay
+        ttl = payment.amount.ceil.to_s
+        eml = payment.order.email
+        vid = ipay_method.preferred_vendor_id.presence || ''
+        curr = ipay_method.preferred_currency.presence || 'KES'
+        p1 = ""
+        p2 = ""
+        p3 = ""
+        p4 = ""
+        cbk = ipay_method.preferred_callback_url.presence || "https://example.com/ipay/callback"
+        cst = "1"
+        crl = "2"
 
-      # Generate the hash with the phone number
-      hsh = ipay_method.ipay_signature_hash(payment, phone)
+        Rails.logger.info "#{log_prefix} Form parameters - live: #{live}, oid: #{oid}, ttl: #{ttl}, vid: #{vid}, curr: #{curr}"
+
+        # Generate the hash with the phone number
+        Rails.logger.info "#{log_prefix} Generating signature hash"
+        hsh = ipay_method.ipay_signature_hash(payment, phone)
+        Rails.logger.info "#{log_prefix} Generated hash: #{hsh}"
 
       # Prepare iPay parameters - must match the exact order and parameters used in hash generation
       ipay_params = {
@@ -186,8 +219,11 @@ module Spree
         </body>
         </html>
       HTML
-    rescue StandardError => e
-      raise "Error generating payment form: #{e.message}"
+      rescue StandardError => e
+        Rails.logger.error "[IPAY_CHECKOUT_ERROR] [FORM_GENERATION] Error: #{e.class} - #{e.message}"
+        Rails.logger.error e.backtrace.join("\n") if Rails.env.development?
+        raise "Error generating payment form: #{e.message}"
+      end
     end
     # Override update action to handle JSON responses
     def update
