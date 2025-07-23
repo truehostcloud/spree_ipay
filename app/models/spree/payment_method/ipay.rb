@@ -96,7 +96,9 @@ module Spree
     preference :callback_url, :string, default: '/ipay/confirm'
     preference :return_url, :string, default: '/ipay/confirm'
 
-    # Channel preferences (duplicates removed)
+    # Payment channel configurations with proper defaults
+    # These will be shown in the payment method selection
+    preference :mpesa, :boolean, default: true
     preference :bonga, :boolean, default: true
     preference :airtel, :boolean, default: true
     preference :equity, :boolean, default: true

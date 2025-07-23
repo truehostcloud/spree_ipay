@@ -214,33 +214,42 @@ module Spree
         'hsh' => hsh
       }
 
-      # Add channel parameters based on preferences
+      # Get enabled channels from payment method preferences
+      enabled_channels = []
       channels = {
-        mpesa: true,          # Enable MPESA by default
-        airtel: true,         # Enable Airtel Money by default
-        equity: true,         # Enable Equity by default
-        mobilebanking: true,  # Enable Mobile Banking by default
-        creditcard: true,     # Enable Credit Card by default
-        pesalink: true,       # Enable PesaLink by default
-        # Other channels can be enabled as needed
-        bonga: false,
-        unionpay: false,
-        mvisa: false,
-        vooma: false,
-        autopay: false
+        mpesa: ipay_method.preferred_mpesa,
+        bonga: ipay_method.preferred_bonga,
+        airtel: ipay_method.preferred_airtel,
+        equity: ipay_method.preferred_equity,
+        mobilebanking: ipay_method.preferred_mobilebanking,
+        creditcard: ipay_method.preferred_creditcard,
+        unionpay: ipay_method.preferred_unionpay,
+        mvisa: ipay_method.preferred_mvisa,
+        vooma: ipay_method.preferred_vooma,
+        pesalink: ipay_method.preferred_pesalink,
+        autopay: ipay_method.preferred_autopay
       }
-      
-      # Log enabled channels
-      enabled_channels = channels.select { |_, enabled| enabled }.keys
-      Rails.logger.info "[IPAY_CHECKOUT_DEBUG] [FORM_GENERATION] Enabling payment channels: #{enabled_channels.join(', ')}"
-      
-      # Set channel parameters
+
+      # Log channel status
       channels.each do |channel, enabled|
         ipay_params[channel.to_s] = enabled ? '1' : '0'
+        enabled_channels << channel.to_s if enabled
+      end
+
+      # Log enabled channels for debugging
+      if enabled_channels.any?
+        Rails.logger.info "[IPAY_CHECKOUT_DEBUG] [FORM_GENERATION] Enabled payment channels: #{enabled_channels.join(', ')}"
+      else
+        Rails.logger.warn "[IPAY_CHECKOUT_DEBUG] [FORM_GENERATION] No payment channels enabled! Using default channels."
+        # Fallback to default channels if none enabled
+        %w[mpesa airtel equity mobilebanking creditcard].each do |ch|
+          ipay_params[ch] = '1'
+        end
       end
 
       # Generate the form HTML with full-page flexible layout and improved button positioning
-      <<~HTML
+      begin
+        form_html = <<~HTML
         <!DOCTYPE html>
         <html>
         <head>
@@ -356,6 +365,47 @@ module Spree
         </body>
         </html>
       HTML
+      
+        # Log form generation success
+        Rails.logger.info "[IPAY_CHECKOUT_DEBUG] [FORM_GENERATION] Form generated successfully"
+        return form_html
+        
+      rescue StandardError => e
+        error_msg = "Error generating iPay form: #{e.message}"
+        Rails.logger.error "[IPAY_CHECKOUT_ERROR] #{error_msg}"
+        Rails.logger.error e.backtrace.join("\n")
+        
+        # Return error page
+        return <<~HTML
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Payment Error</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+          </head>
+          <body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+              <div class="text-center">
+                <div class="text-red-500 text-5xl mb-4">⚠️</div>
+                <h1 class="text-2xl font-bold text-gray-800 mb-2">Payment Error</h1>
+                <p class="text-gray-600 mb-6">We encountered an error while processing your payment request.</p>
+                #{Rails.env.development? ? "<p class="text-red-500 text-sm font-mono mb-4 bg-gray-100 p-3 rounded">#{CGI.escapeHTML(error_msg)}</p>" : ''}
+                <div class="space-y-3">
+                  <a href="/checkout/payment" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md text-center transition duration-200">
+                    Return to Payment
+                  </a>
+                  <a href="/cart" class="block text-blue-600 hover:text-blue-800 text-sm font-medium text-center">
+                    Back to Cart
+                  </a>
+                </div>
+              </div>
+            </div>
+          </body>
+          </html>
+        HTML
+      end
       rescue StandardError => e
         Rails.logger.error "[IPAY_CHECKOUT_ERROR] [FORM_GENERATION] Error: #{e.class} - #{e.message}"
         Rails.logger.error e.backtrace.join("\n") if Rails.env.development?
