@@ -221,28 +221,101 @@ module Spree
             .animate-spin {
               animation: spin 1s linear infinite;
             }
+            #error-message {
+              display: none;
+              color: #dc2626;
+              background-color: #fee2e2;
+              padding: 1rem;
+              border-radius: 0.5rem;
+              margin-top: 1rem;
+              font-family: monospace;
+              white-space: pre-wrap;
+              text-align: left;
+            }
           </style>
         </head>
         <body class="bg-gradient-to-br from-blue-100 to-gray-100 flex items-center justify-center min-h-screen w-full p-4 sm:p-6">
           <div class="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-auto p-6 sm:p-8 flex flex-col justify-center space-y-6">
-            <div class="flex justify-center">
-              <svg class="animate-spin h-14 w-14 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+            <div id="loading" class="flex flex-col items-center space-y-4">
+              <div class="flex justify-center">
+                <svg class="animate-spin h-14 w-14 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+              <h2 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center">Redirecting to iPay</h2>
+              <p class="text-gray-600 text-lg sm:text-xl text-center">Please wait while we securely redirect you to the payment page.</p>
+              <p class="text-sm sm:text-base text-gray-500 text-center">If you are not redirected automatically, please click the button below.</p>
             </div>
-            <h2 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center">Redirecting to iPay</h2>
-            <p class="text-gray-600 text-lg sm:text-xl text-center">Please wait while we securely redirect you to the payment page.</p>
-            <p class="text-sm sm:text-base text-gray-500 text-center">If you are not redirected automatically, please click the button below.</p>
-            <form id="ipay-payment-form" action="#{ipay_method.preferred_test_mode ? 'https://payments.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'}" method="post" class="flex justify-center">
+            
+            <div id="debug-info" class="hidden bg-gray-100 p-4 rounded-lg text-sm text-gray-700 font-mono">
+              <h3 class="font-bold mb-2">Debug Information:</h3>
+              <pre>#{JSON.pretty_generate(ipay_params)}</pre>
+            </div>
+            
+            <form id="ipay-payment-form" action="https://payments.ipayafrica.com/v3/ke" method="post" class="flex flex-col items-center space-y-4">
               #{ipay_params.map { |k, v| "<input type='hidden' name='#{k}' value='#{ERB::Util.html_escape(v)}'>" }.join("\n")}
-              <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 transition duration-300">Proceed to Payment</button>
+              
+              <div class="flex space-x-4">
+                <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-6 rounded-md hover:bg-blue-700 transition duration-300">
+                  Proceed to Payment
+                </button>
+                <button type="button" onclick="toggleDebug()" class="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-md hover:bg-gray-300 transition duration-300">
+                  Debug Info
+                </button>
+              </div>
+              
+              <div id="form-status" class="text-sm text-gray-500"></div>
             </form>
+            
+            <div id="error-message" class="hidden"></div>
+            
             <script>
+              function toggleDebug() {
+                const debugInfo = document.getElementById('debug-info');
+                debugInfo.classList.toggle('hidden');
+              }
+              
+              function showError(message) {
+                const errorDiv = document.getElementById('error-message');
+                const statusDiv = document.getElementById('form-status');
+                const loadingDiv = document.getElementById('loading');
+                
+                statusDiv.textContent = 'Error: ' + message;
+                statusDiv.className = 'text-sm text-red-600';
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+                loadingDiv.style.display = 'none';
+                
+                console.error('iPay Form Error:', message);
+              }
+              
               document.addEventListener('DOMContentLoaded', function() {
+                const form = document.getElementById('ipay-payment-form');
+                const statusDiv = document.getElementById('form-status');
+                
+                // Try to submit the form automatically
                 setTimeout(function() {
-                  document.getElementById('ipay-payment-form').submit();
+                  try {
+                    statusDiv.textContent = 'Submitting form...';
+                    form.submit();
+                  } catch (error) {
+                    showError('Auto-submit failed: ' + error.message);
+                  }
                 }, 1000);
+                
+                // Manual form submission handler
+                form.addEventListener('submit', function(e) {
+                  e.preventDefault();
+                  try {
+                    statusDiv.textContent = 'Processing...';
+                    setTimeout(function() {
+                      form.submit();
+                    }, 300);
+                  } catch (error) {
+                    showError('Form submission failed: ' + error.message);
+                  }
+                });
               });
             </script>
           </div>
