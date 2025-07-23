@@ -391,7 +391,7 @@ module Spree
                 <div class="text-red-500 text-5xl mb-4">⚠️</div>
                 <h1 class="text-2xl font-bold text-gray-800 mb-2">Payment Error</h1>
                 <p class="text-gray-600 mb-6">We encountered an error while processing your payment request.</p>
-                #{Rails.env.development? ? "<p class="text-red-500 text-sm font-mono mb-4 bg-gray-100 p-3 rounded">#{CGI.escapeHTML(error_msg)}</p>" : ''}
+                #{Rails.env.development? ? "<p class=\"text-red-500 text-sm font-mono mb-4 bg-gray-100 p-3 rounded\">#{CGI.escapeHTML(error_msg)}</p>" : ''}
                 <div class="space-y-3">
                   <a href="/checkout/payment" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md text-center transition duration-200">
                     Return to Payment
