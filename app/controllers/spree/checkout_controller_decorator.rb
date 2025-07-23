@@ -76,7 +76,9 @@ module Spree
           respond_to do |format|
             format.html do
               # Generate and render the iPay form immediately
-              render html: generate_ipay_form_html(payment, phone, ipay_method).html_safe, layout: 'spree/layouts/checkout'
+              form_html = generate_ipay_form_html(payment, phone, ipay_method)
+              Rails.logger.debug "[IPAY_CHECKOUT_DEBUG] [FORM_HTML] Generated form HTML: #{form_html}"
+              render html: form_html.html_safe, layout: 'spree/layouts/checkout'
             end
             format.json do
               render json: {
