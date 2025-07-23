@@ -1,13 +1,125 @@
-<%= form_tag @payment_url, method: :post, id: 'ipay-payment-form' do %>
-  <% @form_fields.each do |name, value| %>
-    <%= hidden_field_tag name, value, id: "ipay_#{name}" %>
-  <% end %>
-  <%= submit_tag 'Submit Payment', class: 'btn btn-primary' %>
-<% end %>
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body p-4">
+          <div class="text-center mb-4">
+            <h2 class="h4 mb-3">Processing Your Payment</h2>
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3 mb-0">Redirecting to iPay secure payment page...</p>
+          </div>
+
+          <!-- Hidden form that will be auto-submitted -->
+          <%= form_tag @payment_url, method: :post, id: 'ipay-payment-form', class: 'd-none' do %>
+            <% @form_fields.each do |name, value| %>
+              <%= hidden_field_tag name, value, id: "ipay_#{name}" %>
+            <% end %>
+            <%= submit_tag 'Submit Payment', id: 'submit-button' %>
+          <% end %>
+
+          <!-- Debug Information (initially hidden) -->
+          <div class="mt-4">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-debug">
+              <i class="bi bi-bug"></i> Show Debug Info
+            </button>
+            <div id="debug-info" class="mt-3 p-3 bg-light rounded d-none">
+              <h5 class="h6 mb-3">Debug Information</h5>
+              <div class="mb-2">
+                <strong>Endpoint:</strong>
+                <code class="d-block mt-1"><%= @payment_url %></code>
+              </div>
+              <div class="mb-2">
+                <strong>Form Fields:</strong>
+                <pre class="bg-white p-2 rounded border mt-1"><%= JSON.pretty_generate(@form_fields.to_h) %></pre>
+              </div>
+              <div class="alert alert-warning small mb-0">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                This information is for debugging purposes only. Do not share this information.
+              </div>
+            </div>
+          </div>
+
+          <!-- Error message container -->
+          <div id="error-message" class="alert alert-danger mt-4 d-none" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <span id="error-text"></span>
+            <div class="mt-2">
+              <button class="btn btn-sm btn-outline-danger" onclick="window.location.reload()">
+                <i class="bi bi-arrow-clockwise"></i> Try Again
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
-  // Auto-submit the form when the page loads
-  document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('ipay-payment-form').submit();
+document.addEventListener('DOMContentLoaded', function() {
+  const form = document.getElementById('ipay-payment-form');
+  const debugInfo = document.getElementById('debug-info');
+  const toggleDebug = document.getElementById('toggle-debug');
+  const errorMessage = document.getElementById('error-message');
+  const errorText = document.getElementById('error-text');
+  
+  // Toggle debug info
+  if (toggleDebug) {
+    toggleDebug.addEventListener('click', function() {
+      debugInfo.classList.toggle('d-none');
+      this.innerHTML = debugInfo.classList.contains('d-none') ? 
+        '<i class="bi bi-bug"></i> Show Debug Info' : 
+        '<i class="bi bi-eye-slash"></i> Hide Debug Info';
+    });
+  }
+
+  // Log form data for debugging
+  console.log('iPay Form Data:', <%= raw @form_fields.to_json %>);
+  
+  // Auto-submit form with error handling
+  try {
+    // Small delay to ensure all resources are loaded
+    setTimeout(function() {
+      console.log('Submitting iPay form...');
+      form.submit();
+      
+      // Show error if form doesn't submit within 5 seconds
+      setTimeout(function() {
+        if (!formSubmitted) {
+          showError('The payment form is taking longer than expected. Please try again.');
+        }
+      }, 5000);
+    }, 500);
+  } catch (error) {
+    console.error('Error submitting iPay form:', error);
+    showError('An error occurred while processing your payment. Please try again.');
+  }
+  
+  let formSubmitted = false;
+  
+  // Track form submission
+  form.addEventListener('submit', function() {
+    formSubmitted = true;
+    console.log('Form submission initiated');
   });
+  
+  // Show error message
+  function showError(message) {
+    console.error('Payment Error:', message);
+    errorText.textContent = message;
+    errorMessage.classList.remove('d-none');
+    
+    // Hide loading spinner
+    const spinner = document.querySelector('.spinner-border');
+    if (spinner) spinner.style.display = 'none';
+  }
+  
+  // Handle cases where the form might be in an error state
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('error')) {
+    showError(decodeURIComponent(urlParams.get('error')));
+  }
+});
 </script>

@@ -304,13 +304,12 @@ module Spree
       # Set live mode (0 for test, 1 for live)
       live = test_mode? ? "0" : "1"
 
-      # Prepare values - must match exactly what will be sent in the form
-      oid = payment.order.number.to_s
+      # Get values from payment and order
+      oid = payment.order.number
       inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
-      # Round up the amount to the nearest integer for iPay
-      ttl = payment.amount.ceil.to_s
-      tel = phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000"
-      eml = payment.order.email.to_s
+      ttl = payment.amount.ceil.to_s # Round up to nearest integer
+      tel = phone || payment.order.bill_address&.phone || ''
+      eml = payment.order.email
       vid = vendor_id
       curr = preferred_currency.presence || 'KES'
       p1 = ""
@@ -322,16 +321,27 @@ module Spree
       crl = "2"
 
       # Create datastring in the exact order required by iPay
+      # Note: The order of these parameters is critical and must match iPay's requirements
       datastring = [
         live, oid, inv, ttl, tel, eml, vid, curr,
         p1, p2, p3, p4, cbk, cst, crl
       ].join
 
+      # Log the datastring and hash key for debugging (remove in production)
+      Rails.logger.info "[IPAY_DEBUG] Datastring: #{datastring}"
+      Rails.logger.info "[IPAY_DEBUG] Hash key: #{hash_key}"
+
       # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
       digest = OpenSSL::Digest.new('sha1')
-      OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
+      hmac = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
+      
+      Rails.logger.info "[IPAY_DEBUG] Generated HMAC: #{hmac}"
+      
+      hmac
     rescue StandardError => e
-      raise "Error generating hash"
+      Rails.logger.error "[IPAY_ERROR] Error generating hash: #{e.message}"
+      Rails.logger.error e.backtrace.join("\n")
+      raise "Error generating hash: #{e.message}"
     end
 
     def generate_ipay_form_html(payment, phone = nil)
