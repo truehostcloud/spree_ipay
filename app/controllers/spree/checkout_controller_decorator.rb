@@ -181,11 +181,28 @@ module Spree
       }
 
       # Add channel parameters based on preferences
-      %i[
-        mpesa bonga airtel equity mobilebanking
-        creditcard unionpay mvisa vooma pesalink autopay
-      ].each do |channel|
-        ipay_params[channel.to_s] = ipay_method.preferences["#{channel}"] ? '1' : '0'
+      channels = {
+        mpesa: true,          # Enable MPESA by default
+        airtel: true,         # Enable Airtel Money by default
+        equity: true,         # Enable Equity by default
+        mobilebanking: true,  # Enable Mobile Banking by default
+        creditcard: true,     # Enable Credit Card by default
+        pesalink: true,       # Enable PesaLink by default
+        # Other channels can be enabled as needed
+        bonga: false,
+        unionpay: false,
+        mvisa: false,
+        vooma: false,
+        autopay: false
+      }
+      
+      # Log enabled channels
+      enabled_channels = channels.select { |_, enabled| enabled }.keys
+      Rails.logger.info "[IPAY_CHECKOUT_DEBUG] [FORM_GENERATION] Enabling payment channels: #{enabled_channels.join(', ')}"
+      
+      # Set channel parameters
+      channels.each do |channel, enabled|
+        ipay_params[channel.to_s] = enabled ? '1' : '0'
       end
 
       # Generate the form HTML with full-page flexible layout and improved button positioning
