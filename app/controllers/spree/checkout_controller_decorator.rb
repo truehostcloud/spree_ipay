@@ -92,10 +92,23 @@ module Spree
       vid = (ipay_method.preferred_vendor_id.presence || '')
       curr = ipay_method.preferred_currency.presence || 'KES'
 
-      # Prepare callback and return URLs from preferences (no extra sanitization)
-      cbk = ipay_method.preferred_callback_url.presence || "https://#{request.base_url}/ipay/confirm"
+      # Prepare callback and return URLs
+      protocol = request.ssl? ? 'https' : 'http'
+      host = request.host_with_port
+      
+      # Use API endpoint for callback (server-to-server)
+      cbk = "#{protocol}://#{host}/api/v1/ipay/callback"
+      
+      # Use confirm page for return URL (browser redirect)
+      lbk = ipay_method.preferred_return_url.presence || "#{protocol}://#{host}/ipay/confirm"
+      
+      # Add test parameter if in test mode
+      if ipay_method.preferred_test_mode
+        cbk += "?test=1"
+        lbk += lbk.include?('?') ? '&test=1' : '?test=1'
+      end
+      
       Rails.logger.info("[iPay FORM DEBUG] Using callback URL (cbk): #{cbk}")
-      lbk = ipay_method.preferred_return_url.presence || cbk
       Rails.logger.info("[iPay FORM DEBUG] Using return URL (lbk): #{lbk}")
 
       # Prepare iPay parameters - must match the exact order and parameters used in hash generation
