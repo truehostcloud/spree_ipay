@@ -77,7 +77,18 @@ module Spree
             format.html do
               # Generate and render the iPay form immediately
               form_html = generate_ipay_form_html(payment, phone, ipay_method)
-              Rails.logger.debug "[IPAY_CHECKOUT_DEBUG] [FORM_HTML] Generated form HTML: #{form_html}"
+              
+              # Log form details for debugging
+              form_preview = form_html.length > 200 ? form_html[0..200] + '...' : form_html
+              Rails.logger.debug "[IPAY_CHECKOUT_DEBUG] [FORM_HTML] Form preview (first 200 chars): #{form_preview}"
+              
+              # Log full form to a separate file for detailed debugging
+              File.open(Rails.root.join('log', 'ipay_form_debug.html'), 'w') do |f|
+                f.puts "<!-- Form generated at: #{Time.current} -->"
+                f.puts form_html
+              end
+              Rails.logger.debug "[IPAY_CHECKOUT_DEBUG] [FORM_HTML] Full form written to: log/ipay_form_debug.html"
+              
               render html: form_html.html_safe, layout: 'spree/layouts/checkout'
             end
             format.json do
