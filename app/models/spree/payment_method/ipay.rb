@@ -365,30 +365,19 @@ module Spree
 
       # Generate callback URL for iPay to send payment status
       begin
-        if preferred_callback_url.present?
-          callback_uri = URI.parse(preferred_callback_url)
-          callback_uri.scheme ||= default_protocol
-          callback_uri.host ||= default_host
-          callback_uri.path = '/api/v1/ipay/callback' if callback_uri.path.blank? || callback_uri.path == '/'
-        else
-          # In test mode, ensure we're using HTTPS for security
-          protocol = test_mode? ? 'https' : default_protocol
-          callback_uri = URI.parse("#{protocol}://#{default_host}/api/v1/ipay/callback")
-        end
-
-        # Ensure the callback URL is valid
-        raise URI::InvalidURIError if callback_uri.host.blank?
-
+        # Always use the API endpoint directly
+        protocol = test_mode? ? 'https' : default_protocol
+        cbk = "#{protocol}://#{default_host}/api/v1/ipay/callback"
+        
         # Add test parameter if in test mode
         if test_mode?
-          params = URI.decode_www_form(callback_uri.query || '').to_h
-          params['test'] = '1'
-          callback_uri.query = URI.encode_www_form(params)
+          cbk += '?test=1'
         end
-
-        cbk = callback_uri.to_s
-      rescue URI::InvalidURIError => e
-        error_msg = "Invalid callback URL format: #{e.message}"
+        
+        # Log the callback URL for debugging
+        Rails.logger.info("[iPay] Generated callback URL: #{cbk}")
+      rescue StandardError => e
+        error_msg = "Error generating callback URL: #{e.message}"
         Spree::Ipay::Logger.error(StandardError.new(error_msg), payment.order.number)
         # Fallback to a safe default in case of errors
         cbk = "https://#{default_host}/api/v1/ipay/callback"
