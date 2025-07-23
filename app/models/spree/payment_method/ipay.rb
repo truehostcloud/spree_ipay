@@ -365,8 +365,15 @@ module Spree
 
       # Generate callback URL for iPay to send payment status
       begin
-        # Always use the API endpoint directly
+        # Always use the API endpoint directly with the full URL
         protocol = test_mode? ? 'https' : default_protocol
+        
+        # Ensure we have a valid host (ngrok URL)
+        if default_host.blank? || default_host == 'example.com'
+          default_host = '9b81b81c06d0.ngrok-free.app' # Your ngrok host
+        end
+        
+        # Build the callback URL
         cbk = "#{protocol}://#{default_host}/api/v1/ipay/callback"
         
         # Add test parameter if in test mode
@@ -380,7 +387,7 @@ module Spree
         error_msg = "Error generating callback URL: #{e.message}"
         Spree::Ipay::Logger.error(StandardError.new(error_msg), payment.order.number)
         # Fallback to a safe default in case of errors
-        cbk = "https://#{default_host}/api/v1/ipay/callback"
+        cbk = "https://#{default_host || '9b81b81c06d0.ngrok-free.app'}/api/v1/ipay/callback"
         cbk += '?test=1' if test_mode?
       end
 
