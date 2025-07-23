@@ -736,7 +736,7 @@ module Spree
     end
 
     def api_endpoint
-      preferred_test_mode ? 'https://sandbox.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'
+      'https://payments.ipayafrica.com/v3/ke'
     end
 
     def success_response(message = 'Success')
