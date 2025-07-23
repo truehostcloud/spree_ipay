@@ -315,7 +315,13 @@ module Spree
       p2 = ""
       p3 = ""
       p4 = ""
-      cbk = preferred_callback_url.presence || "https://#{base_url}/ipay/confirm"
+      
+      # Generate callback URL to match the form submission
+      protocol = payment.order.respond_to?(:ssl?) && payment.order.ssl? ? 'https' : 'http'
+      host = base_url
+      cbk = "#{protocol}://#{host}/api/v1/ipay/callback"
+      cbk += "?test=1" if test_mode?
+      
       cst = "1"
       crl = "2"
 
@@ -337,11 +343,10 @@ module Spree
       Rails.logger.info("  cst: #{cst}")
       Rails.logger.info("  crl: #{crl}")
 
-      # Create datastring with parameters in the exact order expected by iPay
       datastring = [
         live, oid, inv, ttl, tel, eml, vid, curr,
         p1, p2, p3, p4, cbk, cst, crl
-      ].join('|')  # iPay expects parameters separated by pipes
+      ].join
 
       Rails.logger.info("[iPay HASH DEBUG] datastring: #{datastring}")
       Rails.logger.info("[iPay HASH DEBUG] hash_key: #{hash_key}")
@@ -400,9 +405,15 @@ module Spree
       rescue StandardError => e
         error_msg = "Error generating callback URL: #{e.message}"
         Spree::Ipay::Logger.error(StandardError.new(error_msg), payment.order.number)
-        # Fallback to a safe default in case of errors
-        cbk = "https://#{default_host || '9b81b81c06d0.ngrok-free.app'}/api/v1/ipay/callback"
-        cbk += '?test=1' if test_mode?
+        # Prepare callback URL - must match exactly what's in the form
+        protocol = request.ssl? ? 'https' : 'http'
+        host = request.host_with_port
+        cbk = "#{protocol}://#{host}/api/v1/ipay/callback"
+        
+        # Add test parameter if in test mode
+        if preferred_test_mode
+          cbk += "?test=1"
+        end
       end
 
       # Generate return URL for customer redirect after payment
