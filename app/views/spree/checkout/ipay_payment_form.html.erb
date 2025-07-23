@@ -58,68 +58,104 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  const form = document.getElementById('ipay-payment-form');
-  const debugInfo = document.getElementById('debug-info');
-  const toggleDebug = document.getElementById('toggle-debug');
-  const errorMessage = document.getElementById('error-message');
-  const errorText = document.getElementById('error-text');
-  
-  // Toggle debug info
-  if (toggleDebug) {
-    toggleDebug.addEventListener('click', function() {
+  // Simple debug toggle
+  function toggleDebug() {
+    const debugInfo = document.getElementById('debug-info');
+    if (debugInfo) {
       debugInfo.classList.toggle('d-none');
-      this.innerHTML = debugInfo.classList.contains('d-none') ? 
-        '<i class="bi bi-bug"></i> Show Debug Info' : 
-        '<i class="bi bi-eye-slash"></i> Hide Debug Info';
-    });
-  }
-
-  // Log form data for debugging
-  console.log('iPay Form Data:', <%= raw @form_fields.to_json %>);
-  
-  // Auto-submit form with error handling
-  try {
-    // Small delay to ensure all resources are loaded
-    setTimeout(function() {
-      console.log('Submitting iPay form...');
-      form.submit();
-      
-      // Show error if form doesn't submit within 5 seconds
-      setTimeout(function() {
-        if (!formSubmitted) {
-          showError('The payment form is taking longer than expected. Please try again.');
-        }
-      }, 5000);
-    }, 500);
-  } catch (error) {
-    console.error('Error submitting iPay form:', error);
-    showError('An error occurred while processing your payment. Please try again.');
+    }
   }
   
-  let formSubmitted = false;
-  
-  // Track form submission
-  form.addEventListener('submit', function() {
-    formSubmitted = true;
-    console.log('Form submission initiated');
-  });
-  
-  // Show error message
+  // Show error message to user
   function showError(message) {
-    console.error('Payment Error:', message);
-    errorText.textContent = message;
-    errorMessage.classList.remove('d-none');
+    console.error('iPay Error:', message);
     
-    // Hide loading spinner
+    const errorText = document.getElementById('error-text');
+    const errorMessage = document.getElementById('error-message');
     const spinner = document.querySelector('.spinner-border');
+    
+    if (errorText) errorText.textContent = message;
+    if (errorMessage) errorMessage.classList.remove('d-none');
     if (spinner) spinner.style.display = 'none';
   }
   
-  // Handle cases where the form might be in an error state
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.has('error')) {
-    showError(decodeURIComponent(urlParams.get('error')));
-  }
-});
+  // Main form submission handler
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('iPay payment form loaded');
+    const form = document.getElementById('ipay-payment-form');
+    const toggleDebugBtn = document.getElementById('toggle-debug');
+    
+    // Toggle debug info
+    if (toggleDebugBtn) {
+      toggleDebugBtn.addEventListener('click', function() {
+        const debugInfo = document.getElementById('debug-info');
+        if (debugInfo) {
+          const isHidden = debugInfo.classList.toggle('d-none');
+          this.innerHTML = isHidden ? 
+            '<i class="bi bi-bug"></i> Show Debug Info' : 
+            '<i class="bi bi-eye-slash"></i> Hide Debug Info';
+        }
+      });
+    }
+    
+    // Handle URL error parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('error')) {
+      showError(decodeURIComponent(urlParams.get('error')));
+    }
+    
+    // Auto-submit the form
+    if (form) {
+      console.log('iPay form found, preparing to submit...');
+      
+      // Show loading state
+      const statusDiv = document.createElement('div');
+      statusDiv.id = 'form-status';
+      statusDiv.className = 'text-sm text-blue-600 mt-2';
+      statusDiv.textContent = 'Preparing secure connection...';
+      form.parentNode.insertBefore(statusDiv, form.nextSibling);
+      
+      // Submit after a short delay
+      setTimeout(function() {
+        try {
+          console.log('Submitting iPay form to:', form.action);
+          statusDiv.textContent = 'Connecting to iPay...';
+          form.submit();
+          
+          // If we're still here after 3 seconds, show a message
+          setTimeout(function() {
+            statusDiv.textContent = 'Still connecting to iPay... Please wait';
+            statusDiv.className = 'text-sm text-warning mt-2';
+          }, 3000);
+          
+        } catch (error) {
+          console.error('Form submission error:', error);
+          showError('Failed to submit payment form. ' + error.message);
+        }
+      }, 500); // Short delay to ensure everything is loaded
+      
+      // Manual submission handler
+      form.addEventListener('submit', function(e) {
+        console.log('Form submit event triggered');
+        // Don't prevent default - let the form submit normally
+        statusDiv.textContent = 'Processing payment...';
+      });
+      
+      // Add a manual submit button as fallback
+      const manualSubmit = document.createElement('div');
+      manualSubmit.className = 'mt-3 text-center';
+      manualSubmit.innerHTML = `
+        <p class="text-muted small mb-2">If you're not redirected automatically:</p>
+        <button type="button" onclick="document.getElementById('ipay-payment-form').submit()" 
+                class="btn btn-primary">
+          Proceed to iPay
+        </button>
+      `;
+      form.parentNode.insertBefore(manualSubmit, form.nextSibling);
+      
+    } else {
+      console.error('iPay form not found!');
+      showError('Payment system error: Could not initialize payment form.');
+    }
+  });
 </script>
