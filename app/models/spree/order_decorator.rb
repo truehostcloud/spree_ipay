@@ -3,21 +3,11 @@
 module Spree
   module OrderDecorator
     def self.prepended(base)
-      base.state_machine.before_transition(
-        to: :confirm,
-        do: :log_before_confirm
-      )
-      
-      base.state_machine.after_transition(
-        to: :confirm,
-        do: :log_after_confirm
-      )
-      
-      base.state_machine.after_transition(
-        to: :complete,
-        do: :log_complete_transition
-      )
+      base.state_machine.before_transition(to: :complete) do |order|
+        order.allow_complete_with_ipay_payment?
+      end
     end
+    
 
     def payment_required?
       ipay_payment = payments.valid.any? { |p| p.payment_method.is_a?(Spree::PaymentMethod::Ipay) }
@@ -39,6 +29,19 @@ module Spree
     
     def log_complete_transition
       # No logging needed
+    end
+    def payment_required?
+      ipay_payment_completed = payments.valid.any? do |p|
+        p.payment_method.is_a?(Spree::PaymentMethod::Ipay) && p.completed?
+      end
+      ipay_payment_completed ? false : super
+    end
+
+    # Only allow order completion if there is a completed iPay payment
+    def allow_complete_with_ipay_payment?
+      payments.valid.any? do |payment|
+        payment.payment_method.is_a?(Spree::PaymentMethod::Ipay) && payment.completed?
+      end
     end
   end
 end

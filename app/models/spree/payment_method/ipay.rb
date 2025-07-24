@@ -16,7 +16,7 @@ module Spree
     # Core settings (in display order)
     preference :vendor_id, :string
     preference :hash_key, :string
-    preference :test_mode, :boolean, default: true
+    preference :test_mode, :boolean, default: false # Live mode is default
     preference :currency, :string, default: 'KES'
     preference :callback_url, :string, default: '/ipay/confirm'
     preference :return_url, :string, default: -> {
@@ -25,14 +25,14 @@ module Spree
 
     # Payment channels (in display order)
     preference :mpesa, :boolean, default: true
-    preference :airtel, :boolean, default: false
-    preference :equity, :boolean, default: false
+    preference :airtel, :boolean, default: true
+    preference :equity, :boolean, default: true
+    preference :creditcard, :boolean, default: true
+    preference :pesalink, :boolean, default: true
     preference :mobilebanking, :boolean, default: false
-    preference :creditcard, :boolean, default: false
     preference :unionpay, :boolean, default: false
     preference :mvisa, :boolean, default: false
     preference :vooma, :boolean, default: false
-    preference :pesalink, :boolean, default: false
     preference :autopay, :boolean, default: false
 
     # Ensure preferences are sorted in the desired display order
@@ -292,7 +292,7 @@ module Spree
     # @param phone [String] The customer's phone number
     def ipay_signature_hash(payment, phone = nil)
       # Get values from payment method preferences
-      vendor_id = preferred_vendor_id.to_s
+      vendor_id = preferred_vendor_id.to_s.downcase # Must be lowercase
       hash_key = preferred_hash_key.to_s
 
       # Validate required preferences
@@ -303,13 +303,13 @@ module Spree
       # Set live mode (0 for test, 1 for live)
       live = test_mode? ? "0" : "1"
 
-      # Prepare values - must match exactly what will be sent in the form
+      # Prepare values - revert to main branch logic for all except payment method business logic
       oid = payment.order.number.to_s
       inv = "#{payment.order.number}#{Time.now.to_i}" # unique invoice
       ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
       tel = phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000"
       eml = payment.order.email.to_s
-      vid = vendor_id
+      vid = vendor_id # retain lowercase if your business logic requires
       curr = preferred_currency.presence || 'KES'
       p1 = ""
       p2 = ""
@@ -319,17 +319,26 @@ module Spree
       cst = "1"
       crl = "2"
 
-      # Create datastring in the exact order required by iPay
       datastring = [
         live, oid, inv, ttl, tel, eml, vid, curr,
         p1, p2, p3, p4, cbk, cst, crl
       ].join
 
-      # Generate hash using OpenSSL to match PHP's hash_hmac('sha1', ...)
+      
+      
+      
+      
+      
+      
+      
+      
       digest = OpenSSL::Digest.new('sha1')
-      OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
+      hash = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
+      Rails.logger.info("[iPay HASH DEBUG] hash: #{hash.downcase}")
+      # Ensure the hash is lowercase to match PHP's output
+      hash.downcase
     rescue StandardError => e
-      raise "Error generating hash"
+      raise "Error generating hash: #{e.message}"
     end
 
     def generate_ipay_form_html(payment)
@@ -423,19 +432,15 @@ module Spree
       }
 
       # Add channel parameters based on preferences
-
-      channels = %i[
-        mpesa bonga airtel equity mobilebanking
-        creditcard unionpay mvisa vooma pesalink autopay
-      ]
-
+      channels = %i[mpesa airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay]
+      
+      # Add channel parameters with string keys for the API
       channels.each do |channel|
-        channel_value = send("preferred_#{channel}") ? '1' : '0'
-        ipay_params[channel] = channel_value
+        ipay_params[channel.to_s] = send("preferred_#{channel}") ? '1' : '0'
       end
 
       # Generate form HTML
-      form_html = "<form id='ipay_form' action='https://payments.ipayafrica.com/v3/ke' method='POST'>\n"
+      form_html = "<form id='ipay_form' action='#{api_endpoint}' method='POST'>\n"
 
       # Add all parameters with proper escaping
       ipay_params.each do |key, value|
@@ -507,7 +512,7 @@ module Spree
         live: preferred_test_mode ? '0' : '1',
         oid: payment.order.number,
         inv: payment.order.number,
-        ttl: payment.amount.to_f.round(2).to_s,
+        ttl: payment.amount.to_i.to_s,
         tel: phone,
         eml: payment.order.email,
         vid: preferred_vendor_id,
@@ -623,7 +628,7 @@ module Spree
       live = preferred_test_mode ? '0' : '1'
       oid = payment.order.number
       inv = payment.order.number
-      ttl = payment.amount.to_f.round(2).to_s
+      ttl = payment.amount.to_i.to_s
       eml = payment.order.email
       vid = preferred_vendor_id
       curr = preferred_currency.presence || 'KES'
@@ -695,7 +700,7 @@ module Spree
     end
 
     def api_endpoint
-      preferred_test_mode ? 'https://sandbox.ipayafrica.com/v3/ke' : 'https://payments.ipayafrica.com/v3/ke'
+      'https://payments.ipayafrica.com/v3/ke' # Always use live endpoint
     end
 
     def success_response(message = 'Success')
