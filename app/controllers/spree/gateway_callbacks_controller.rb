@@ -8,12 +8,24 @@ module Spree
 
     def confirm
       # Log all incoming parameters for debugging
-      Rails.logger.info("===== iPay CALLBACK RECEIVED =====")
-      Rails.logger.info("Request method: #{request.method}")
-      Rails.logger.info("Content-Type: #{request.content_type}")
-      Rails.logger.info("Raw parameters: #{params.to_unsafe_h}")
-      Rails.logger.info("Request body: #{request.body.read}")
+      request_id = SecureRandom.hex(4)
+      Rails.logger.info("\n===== iPay CALLBACK RECEIVED [Request ID: #{request_id}] =====")
+      Rails.logger.info("[#{request_id}] Request method: #{request.method}")
+      Rails.logger.info("[#{request_id}] Headers: #{request.headers.to_h.select { |k,v| k.match(/^HTTP_/) }.inspect}")
+      Rails.logger.info("[#{request_id}] Content-Type: #{request.content_type}")
+      Rails.logger.info("[#{request_id}] Raw parameters: #{params.to_unsafe_h}")
+      
+      # Log raw body if present
+      raw_body = request.body.read
+      Rails.logger.info("[#{request_id}] Request body: #{raw_body}")
       request.body.rewind # Reset the body for potential future reads
+      
+      # Log IP and other request details
+      Rails.logger.info("[#{request_id}] Remote IP: #{request.remote_ip}")
+      Rails.logger.info("[#{request_id}] User Agent: #{request.user_agent}")
+      
+      # Store request ID in instance variable for use in error responses
+      @request_id = request_id
       
       # Extract parameters from both query string and form data
       txn_id = params[:txnid] || params['txnid']
@@ -26,10 +38,16 @@ module Spree
       Rails.logger.info("Extracted - Txn ID: #{txn_id}, Status: #{status}, Order: #{order_number}")
 
       if order_number.present?
+        Rails.logger.info("[#{@request_id}] Looking up order: #{order_number}")
         order = Spree::Order.find_by(number: order_number)
+        
         if order
+          Rails.logger.info("[#{@request_id}] Found order #{order.number}, state: #{order.state}")
           payment = order.payments.last
+          
           if payment
+            Rails.logger.info("[#{@request_id}] Found payment #{payment.number}, state: #{payment.state}, amount: #{payment.amount}")
+            Rails.logger.info("[#{@request_id}] Payment method: #{payment.payment_method&.type}")
             # --- iPay C2B SHA1 HMAC Signature Verification ---
             required_keys = %w[live oid inv ttl tel eml vid curr p1 p2 p3 p4 cbk cst crl]
             param_values = required_keys.map { |k| params[k] || params[k.to_sym] }
@@ -39,10 +57,14 @@ module Spree
               received_signature = params[:hsh] || params[:hash]
               generated_signature = OpenSSL::HMAC.hexdigest('sha1', hash_key, datastring)
               unless ActiveSupport::SecurityUtils.secure_compare(generated_signature, received_signature.to_s)
+                error_msg = "[#{@request_id}] Invalid signature. Expected: #{generated_signature}, Received: #{received_signature}"
+                Rails.logger.error(error_msg)
                 @heading = 'Invalid Signature'
                 @message = 'The payment signature could not be verified. Please contact support.'
                 render 'failure', status: :unauthorized
                 return
+              else
+                Rails.logger.info("[#{@request_id}] Signature verification successful")
               end
             end
             # --- Amount Verification ---
@@ -55,6 +77,7 @@ module Spree
               return
             end
             # iPay status code handling
+            Rails.logger.info("[#{@request_id}] Processing iPay status: #{status}")
             status_map = {
               'aei7p7yrx4ae34' => { label: 'Success', heading: 'Order Placed Successfully!' },
               'fe2707etr5s4wq' => { label: 'Failed', heading: 'Payment Failed' },

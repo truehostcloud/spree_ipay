@@ -10,7 +10,9 @@ module Spree
     end
     
     def log_checkout_state
-      # No logging needed
+      Rails.logger.info "[iPay Checkout] State transition to: #{params[:state]}"
+      Rails.logger.info "[iPay Checkout] Order: #{@order&.number}, State: #{@order&.state}"
+      Rails.logger.debug "[iPay Checkout] Params: #{params.except(:authenticity_token, :utf8, :_method, :commit).inspect}"
     end
 
     # Set request variant based on format
@@ -20,10 +22,17 @@ module Spree
 
     def handle_ipay_redirect
       begin
+        Rails.logger.info "[iPay Checkout] Handling redirect in state: #{params[:state]}"
+        
         # Get phone number and store in session during payment state
         if params[:state] == "payment"
           phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
-          session[:ipay_phone_number] = phone if phone.present?
+          if phone.present?
+            session[:ipay_phone_number] = phone
+            Rails.logger.info "[iPay Checkout] Stored phone number in session: #{phone}"
+          else
+            Rails.logger.warn "[iPay Checkout] No phone number provided in payment attributes"
+          end
         end
 
         # Generate form and redirect during confirm state
@@ -31,8 +40,15 @@ module Spree
           payment = @order.payments.last
           ipay_method = payment.payment_method
           phone = session[:ipay_phone_number] || @order.bill_address&.phone
+          
+          Rails.logger.info "[iPay Checkout] Processing iPay payment for order: #{@order.number}"
+          Rails.logger.info "[iPay Checkout] Payment ID: #{payment.number}, Amount: #{payment.amount}"
+          Rails.logger.info "[iPay Checkout] Using phone: #{phone}"
 
-          raise 'Phone number is required' if phone.blank?
+          if phone.blank?
+            Rails.logger.error "[iPay Checkout] Phone number is required for iPay payment"
+            raise 'Phone number is required'
+          end
 
           respond_to do |format|
             format.html do

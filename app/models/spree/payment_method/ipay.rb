@@ -506,6 +506,7 @@ module Spree
 
     def initiate_payment(payment, phone: nil)
       # Log the start of payment initiation
+      Rails.logger.info "[iPay] Starting payment initiation for order: #{payment.order.number}"
 
       # Prepare parameters
       params = {
@@ -700,10 +701,13 @@ module Spree
     end
 
     def api_endpoint
-      'https://payments.ipayafrica.com/v3/ke' # Always use live endpoint
+      endpoint = 'https://payments.ipayafrica.com/v3/ke' # Always use live endpoint
+      Rails.logger.info("[iPay] Using API endpoint: #{endpoint}")
+      endpoint
     end
 
     def success_response(message = 'Success')
+      Rails.logger.info("[iPay] Success response: #{message}")
       ActiveMerchant::Billing::Response.new(
         true,
         message,
@@ -713,6 +717,7 @@ module Spree
     end
 
     def failure_response(message = 'Failed')
+      Rails.logger.error("[iPay] Failure response: #{message}")
       ActiveMerchant::Billing::Response.new(
         false,
         message,
