@@ -11,18 +11,59 @@ module Spree
       request_id = SecureRandom.hex(4)
       Rails.logger.info("\n===== iPay CALLBACK RECEIVED [Request ID: #{request_id}] =====")
       Rails.logger.info("[#{request_id}] Request method: #{request.method}")
-      Rails.logger.info("[#{request_id}] Headers: #{request.headers.to_h.select { |k,v| k.match(/^HTTP_/) }.inspect}")
-      Rails.logger.info("[#{request_id}] Content-Type: #{request.content_type}")
-      Rails.logger.info("[#{request_id}] Raw parameters: #{params.to_unsafe_h}")
+      Rails.logger.info("[#{request_id}] Request URL: #{request.url}")
+      Rails.logger.info("[#{request_id}] Request format: #{request.format}")
+      
+      # Log all headers
+      Rails.logger.info("[#{request_id}] === Headers ===")
+      request.headers.each do |key, value|
+        Rails.logger.info("[#{request_id}] #{key}: #{value}") if key.to_s.downcase.include?('http') || key.to_s.downcase.include?('content')
+      end
+      
+      # Log all parameters
+      Rails.logger.info("[#{request_id}] === Parameters ===")
+      params.each do |key, value|
+        Rails.logger.info("[#{request_id}] #{key}: #{value}")
+      end
       
       # Log raw body if present
       raw_body = request.body.read
-      Rails.logger.info("[#{request_id}] Request body: #{raw_body}")
       request.body.rewind # Reset the body for potential future reads
       
+      if raw_body.present?
+        Rails.logger.info("[#{request_id}] === Raw Body ===")
+        Rails.logger.info("[#{request_id}] #{raw_body}")
+        
+        # Try to parse JSON if content-type is JSON
+        if request.content_type&.include?('application/json')
+          begin
+            json_body = JSON.parse(raw_body)
+            Rails.logger.info("[#{request_id}] === Parsed JSON ===")
+            json_body.each { |k,v| Rails.logger.info("[#{request_id}] #{k}: #{v}") }
+          rescue JSON::ParserError => e
+            Rails.logger.error("[#{request_id}] Failed to parse JSON: #{e.message}")
+          end
+        end
+      end
+      
+      # Log form data if present
+      if request.form_data?
+        Rails.logger.info("[#{request_id}] === Form Data ===")
+        request.request_parameters.each { |k,v| Rails.logger.info("[#{request_id}] #{k}: #{v}") }
+      end
+      
+      # Log query string parameters
+      if request.query_string.present?
+        Rails.logger.info("[#{request_id}] === Query String ===")
+        Rails.logger.info("[#{request_id}] #{request.query_string}")
+      end
+      
       # Log IP and other request details
+      Rails.logger.info("[#{request_id}] === Request Details ===")
       Rails.logger.info("[#{request_id}] Remote IP: #{request.remote_ip}")
       Rails.logger.info("[#{request_id}] User Agent: #{request.user_agent}")
+      Rails.logger.info("[#{request_id}] SSL: #{request.ssl?}")
+      Rails.logger.info("[#{request_id}] XHR: #{request.xhr?}")
       
       # Store request ID in instance variable for use in error responses
       @request_id = request_id
