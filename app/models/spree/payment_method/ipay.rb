@@ -398,9 +398,9 @@ module Spree
       # Get required values
       live = test_mode? ? "0" : "1"
       # Use numeric order ID for transaction code
-      oid = payment.order.id.to_s
+      oid = payment.number.to_s
       # Use numeric order ID for invoice as well
-      inv = payment.order.id.to_s
+      inv = payment.number.to_s
       ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents
       tel = payment.order.bill_address&.phone || session[:ipay_phone_number] || "0700000000"
       eml = payment.order.email
@@ -410,43 +410,13 @@ module Spree
       p2 = ""
       p3 = ""
       p4 = ""
-      # Generate proper callback and return URLs
-      # Extract host from the return_url preference
-      return_uri = URI.parse(preferred_return_url.presence || 'https://example.com')
-      default_host = return_uri.host
-      default_protocol = return_uri.scheme || 'https'
-
-      # Generate callback URL for iPay to send payment status
-      begin
-        if preferred_callback_url.present?
-          callback_uri = URI.parse(preferred_callback_url)
-          callback_uri.scheme ||= default_protocol
-          callback_uri.host ||= default_host
-          callback_uri.path = '/api/v1/ipay/callback' if callback_uri.path.blank? || callback_uri.path == '/'
-        else
-          # In test mode, ensure we're using HTTPS for security
-          protocol = test_mode? ? 'https' : default_protocol
-          callback_uri = URI.parse("#{protocol}://#{default_host}/api/v1/ipay/callback")
-        end
-
-        # Ensure the callback URL is valid
-        raise URI::InvalidURIError if callback_uri.host.blank?
-
-        # Add test parameter if in test mode
-        if test_mode?
-          params = URI.decode_www_form(callback_uri.query || '').to_h
-          params['test'] = '1'
-          callback_uri.query = URI.encode_www_form(params)
-        end
-
-        cbk = callback_uri.to_s
-      rescue URI::InvalidURIError => e
-        error_msg = "Invalid callback URL format: #{e.message}"
-        Spree::Ipay::Logger.error(StandardError.new(error_msg), payment.order.number)
-        # Fallback to a safe default in case of errors
-        cbk = "https://#{default_host}/api/v1/ipay/callback"
-        cbk += '?test=1' if test_mode?
-      end
+      
+      # Use the new URL generation method
+      urls = generate_ipay_urls(payment)
+      cbk = urls[:cbk]
+      lbk = urls[:rst]
+      cst = urls[:cst]
+      crl = urls[:crl]
 
       # Generate return URL for customer redirect after payment
       # Point to the frontend order confirmation page
