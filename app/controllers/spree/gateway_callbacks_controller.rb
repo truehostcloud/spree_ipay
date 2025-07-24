@@ -68,13 +68,21 @@ module Spree
       # Store request ID in instance variable for use in error responses
       @request_id = request_id
       
-      # Extract parameters from both query string and form data
-      txn_id = params[:txnid] || params['txnid']
-      status = params[:status] || params['status']
-      order_number = params[:order_id] || params['order_id'] || 
-                    params[:id] || params['id'] || 
-                    params[:ivm] || params['ivm'] || 
-                    params[:oid] || params['oid']
+      # Extract parameters from both query string (GET) and form data (POST)
+      # For GET requests, parameters come in the query string
+      # For POST requests, they come in the request body
+      params_source = request.get? ? request.query_parameters : request.request_parameters
+      
+      # Log the source of the parameters
+      Rails.logger.info("[#{@request_id}] Parameters source: #{request.get? ? 'GET (query string)' : 'POST (form data)'}")
+      
+      # Extract parameters with case-insensitive matching
+      txn_id = params[:txnid] || params['txnid'] || params_source[:txnid] || params_source['txnid']
+      status = params[:status] || params['status'] || params_source[:status] || params_source['status']
+      order_number = params[:order_id] || params['order_id'] || params_source[:order_id] || params_source['order_id'] ||
+                    params[:id] || params['id'] || params_source[:id] || params_source['id'] ||
+                    params[:ivm] || params['ivm'] || params_source[:ivm] || params_source['ivm'] ||
+                    params[:oid] || params['oid'] || params_source[:oid] || params_source['oid']
                     
       Rails.logger.info("Extracted - Txn ID: #{txn_id}, Status: #{status}, Order: #{order_number}")
 
