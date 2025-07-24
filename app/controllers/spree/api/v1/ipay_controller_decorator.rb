@@ -101,8 +101,14 @@ module Spree
           case status.to_s.downcase
           when 'success', 'completed'
             payment.complete! unless payment.completed?
-            order.next if order.can_complete?
-            render json: { status: 'success', message: 'Payment processed successfully' }
+            
+            # Update order state if needed
+            if order.payment_state == 'paid' || order.payment_state == 'credit_owed'
+              order.next if order.respond_to?(:next) && order.respond_to?(:can_complete?) && order.can_complete?
+              order.update_columns(completed_at: Time.current, state: 'complete') if order.respond_to?(:completed_at)
+            end
+            
+            render json: { status: 'success', message: 'Payment processed successfully', order_number: order.number, payment_state: order.payment_state }
           when 'failed', 'cancelled'
             payment.failure! unless payment.failed?
             render json: { status: 'failed', message: 'Payment failed or was cancelled' }

@@ -35,6 +35,59 @@ module Spree
     preference :vooma, :boolean, default: false
     preference :autopay, :boolean, default: false
 
+    # Generate callback and return URLs for iPay
+    def generate_ipay_urls(payment)
+      # Extract host from the return_url preference
+      return_uri = URI.parse(preferred_return_url.presence || 'https://example.com')
+      default_host = return_uri.host
+      default_protocol = return_uri.scheme || 'https'
+
+      # Generate callback URL for iPay to send payment status
+      begin
+        if preferred_callback_url.present?
+          callback_uri = URI.parse(preferred_callback_url)
+          callback_uri.scheme ||= default_protocol
+          callback_uri.host ||= default_host
+          callback_uri.path = '/api/v1/ipay/callback' if callback_uri.path.blank? || callback_uri.path == '/'
+        else
+          # In test mode, ensure we're using HTTPS for security
+          protocol = test_mode? ? 'https' : default_protocol
+          callback_uri = URI.parse("#{protocol}://#{default_host}/api/v1/ipay/callback")
+        end
+
+        # Ensure the callback URL is valid
+        raise URI::InvalidURIError if callback_uri.host.blank?
+
+        # Add test parameter if in test mode
+        if test_mode?
+          params = URI.decode_www_form(callback_uri.query || '').to_h
+          params['test'] = '1'
+          callback_uri.query = URI.encode_www_form(params)
+        end
+
+        cbk = callback_uri.to_s
+      rescue URI::InvalidURIError => e
+        error_msg = "Invalid callback URL format: #{e.message}"
+        Rails.logger.error(error_msg)
+        # Fallback to a safe default in case of errors
+        cbk = "https://#{default_host}/api/v1/ipay/callback"
+        cbk += '?test=1' if test_mode?
+      end
+
+      # Generate return URL for customer redirect after payment
+      # Point to the frontend order confirmation page
+      order_number = payment.order.number
+      order_token = payment.order.guest_token
+      rst = preferred_return_url.presence || "#{default_protocol}://#{default_host}/orders/#{order_number}?order_token=#{order_token}"
+
+      {
+        cbk: cbk,
+        rst: rst,
+        cst: "1",  # Customer email notification flag
+        crl: "2"   # Customer phone notification flag
+      }
+    end
+
     # Ensure preferences are sorted in the desired display order
     def self.preference_order
       [
