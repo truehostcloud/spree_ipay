@@ -390,29 +390,29 @@ module Spree
       live = test_mode? ? "0" : "1"
 
       # Prepare values in the exact order required by iPay
-      oid = payment.number.to_s  # Use payment number for consistency
-      inv = "#{payment.order.number}#{Time.now.to_i}" # Unique invoice number (no hyphen)
-      ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents (no decimals)
+      oid = payment.number.to_s  # Order ID
+      inv = payment.order.number.to_s # Invoice number (same as order number)
+      ttl = payment.amount.to_s # Amount in KES (no commas, no decimal places)
       tel = phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000"
       eml = payment.order.email.to_s
       vid = vendor_id
-      curr = preferred_currency.presence || 'KES'
+      curr = (preferred_currency.presence || 'KES').upcase
       
-      # Custom parameters (must match what's in the form)
-      p1 = ""  # Custom parameter 1 (empty in form)
-      p2 = ""  # Custom parameter 2 (empty in form)
-      p3 = ""  # Custom parameter 3 (empty in form)
-      p4 = ""  # Custom parameter 4 (empty in form)
+      # Custom parameters (must be alphanumeric, no special chars)
+      p1 = ""  # p1: Custom parameter 1
+      p2 = ""  # p2: Custom parameter 2
+      p3 = ""  # p3: Custom parameter 3
+      p4 = ""  # p4: Custom parameter 4
       
-      # Get callback URL (must match exactly what's in the form)
+      # Get callback URL (must be a valid URL)
       cbk = generate_ipay_urls(payment)[:cbk]
       
-      # Control flags (must match form values)
-      cst = "1"  # Enable callback (1 = yes)
-      crl = "2"  # Redirect flag (2 = redirect)
+      # Control flags
+      cst = "1"  # cst: Customer email notification (1 = on)
+      crl = "2"  # crl: Callback response type (2 = JSON)
 
       # Create datastring in the exact order required by iPay
-      # The order of these parameters is critical for the hash to be valid
+      # IMPORTANT: The order must be exactly as specified by iPay
       datastring = [
         live,  # live
         oid,   # oid
@@ -429,7 +429,7 @@ module Spree
         cbk,   # cbk
         cst,   # cst
         crl    # crl
-      ].join
+      ].map { |param| param.to_s.gsub(/[;:~`!%^*><&_\-]/i, '') }.join
 
       # Log the datastring for debugging (without sensitive data)
       log_datastring = datastring.dup
@@ -453,87 +453,108 @@ module Spree
     end
 
     def generate_ipay_form_html(payment)
-      # Get required values
-      live = test_mode? ? "0" : "1"
-      
-      # Use payment number for transaction code
-      oid = payment.number.to_s
-      # Generate a unique invoice number
-      inv = "#{payment.order.number}-#{Time.now.to_i}"
-      
-      # Amount in cents (no decimals)
-      ttl = (payment.amount.to_f * 100).to_i.to_s
-      
-      # Get customer contact info
-      tel = payment.order.bill_address&.phone || "0700000000"
-      eml = payment.order.email
-      
-      # Get merchant info
-      vid = preferred_vendor_id
-      curr = preferred_currency.presence || 'KES'
-      
-      # Custom parameters (can be used for tracking)
-      p1 = "order_#{payment.order.number}"  # Order reference
-      p2 = payment.payment_method.id.to_s   # Payment method ID
-      p3 = ""  # Additional custom parameter
-      p4 = ""  # Additional custom parameter
-      
-      # Generate URLs and get required flags
-      urls = generate_ipay_urls(payment)
-      cbk = urls[:cbk]  # Callback URL
-      lbk = urls[:rst]  # Return URL
-      
-      # Set flags
-      cst = "1"  # Enable callback
-      crl = "0"  # Disable automatic redirect (let our callback handle it)
-      
-      # Generate the HMAC signature
-      begin
-        hsh = ipay_signature_hash(payment, tel)
-      rescue StandardError => e
-        Rails.logger.error("[iPay] Error generating payment hash: #{e.message}")
-        raise "Error generating payment hash: #{e.message}"
-      end
+      # Get order and amount details
+      order = payment.order
+      amount = payment.amount.to_f
 
-      # Prepare all iPay parameters with proper data types and consistent string values
-      ipay_params = ActiveSupport::OrderedHash.new.tap do |params|
-        # Required parameters
-        params['live'] = live.to_s
-        params['oid'] = oid.to_s
-        params['inv'] = inv.to_s
-        params['ttl'] = ttl.to_s
-        params['tel'] = tel.to_s
-        params['eml'] = eml.to_s
-        params['vid'] = vid.to_s
-        params['curr'] = curr.to_s
-        
-        # Custom parameters (p1-p4)
-        params['p1'] = p1.to_s
-        params['p2'] = p2.to_s
-        params['p3'] = p3.to_s
-        params['p4'] = p4.to_s
-        
-        # URL parameters
-        params['cbk'] = cbk.to_s
-        params['lbk'] = lbk.to_s
-        
-        # Control flags
-        params['cst'] = cst.to_s
-        params['crl'] = crl.to_s
-        
-        # Security
-        params['hsh'] = hsh.to_s
-        
-        # Payment channels (must be in this specific order for hash generation)
-        %w[mpesa airtel equity mobilebanking creditcard unionpay mvisa vooma pesalink autopay].each do |channel|
-          params[channel] = send("preferred_#{channel}") ? '1' : '0'
-        end
+      # Get customer details - clean phone number (digits only)
+      email = order.email.presence || 'customer@example.com'
+      tel = (order.bill_address&.phone || '').gsub(/\D/, '') # Remove non-digit characters
+      tel = '0700000000' if tel.blank? || tel.length < 10
+
+      # Generate URLs and hash
+      urls = generate_ipay_urls(payment)
+      hsh = ipay_signature_hash(payment, tel)
+
+      # Prepare base parameters in the exact order required by iPay
+      ipay_params = ActiveSupport::OrderedHash.new
+      
+      # Required parameters (in specific order as per iPay docs)
+      ipay_params['live'] = test_mode? ? '0' : '1'
+      ipay_params['oid'] = payment.number.to_s        # Order ID (payment number)
+      ipay_params['inv'] = order.number.to_s          # Invoice number (order number)
+      ipay_params['ttl'] = '%.2f' % amount           # Amount with 2 decimal places
+      ipay_params['tel'] = tel                       # Customer phone (digits only)
+      ipay_params['eml'] = email                     # Customer email
+      ipay_params['vid'] = preferred_vendor_id.to_s.downcase  # Must be lowercase
+      ipay_params['curr'] = (preferred_currency.presence || 'KES').upcase
+      
+      # Custom parameters (must be alphanumeric, no special chars)
+      ipay_params['p1'] = ''  # p1: Custom parameter 1
+      ipay_params['p2'] = ''  # p2: Custom parameter 2
+      ipay_params['p3'] = ''  # p3: Custom parameter 3
+      ipay_params['p4'] = ''  # p4: Custom parameter 4
+      
+      # Callback and control parameters
+      ipay_params['cbk'] = urls[:cbk]    # Callback URL
+      ipay_params['lbk'] = urls[:rst]    # Return URL
+      ipay_params['cst'] = '1'           # Enable callback (1 = yes)
+      ipay_params['crl'] = '2'           # JSON response format
+      ipay_params['hsh'] = hsh           # Generated hash
+      
+      # Add payment channels based on preferences (must be 0 or 1)
+      channels = {
+        'mpesa' => preferred_mpesa,
+        'airtel' => preferred_airtel,
+        'equity' => preferred_equity,
+        'mobilebanking' => preferred_mobilebanking,
+        'creditcard' => preferred_creditcard,
+        'unionpay' => preferred_unionpay,
+        'mvisa' => preferred_mvisa,
+        'vooma' => preferred_vooma,
+        'pesalink' => preferred_pesalink,
+        'autopay' => preferred_autopay
+      }
+      
+      # Add channel parameters to form
+      channels.each do |channel, enabled|
+        ipay_params[channel] = enabled ? '1' : '0'
       end
 
       # Log the parameters being sent (without sensitive data)
       log_params = ipay_params.dup
       log_params['hsh'] = '[FILTERED]' if log_params['hsh']
       Rails.logger.info "[iPay] Generated form with params: #{log_params.inspect}"
+      
+      # Generate the form HTML
+      form_id = "ipay_form_#{SecureRandom.hex(4)}"
+      form_html = ""
+      
+      # Add form with proper attributes
+      form_html << "<form id='#{form_id}' action='#{CGI.escape_html(api_endpoint)}' method='POST' accept-charset='UTF-8'>\n"
+      
+      # Add all parameters with proper escaping
+      ipay_params.each do |key, value|
+        form_html << "  <input type='hidden' name='#{CGI.escape_html(key)}' value='#{CGI.escape_html(value.to_s)}'>\n"
+      end
+      
+      # Add submit button with fallback
+      form_html << "  <div class='ipay-button-container'>\n"
+      form_html << "    <button type='submit' class='ipay-button'>Complete Payment</button>\n"
+      form_html << "  </div>\n"
+      form_html << "</form>\n"
+      
+      # Add auto-submit JavaScript
+      form_html << "<script>\n"
+      form_html << "  document.addEventListener('DOMContentLoaded', function() {\n"
+      form_html << "    var form = document.getElementById('#{form_id}');\n"
+      form_html << "    if (form) {\n"
+      form_html << "      try {\n"
+      form_html << "        form.submit();\n"
+      form_html << "      } catch (e) {\n"
+      form_html << "        console.error('Error submitting iPay form:', e);\n"
+      form_html << "      }\n"
+      form_html << "    }\n"
+      form_html << "  });\n"
+      form_html << "</script>\n"
+      
+      form_html.html_safe
+    rescue StandardError => e
+      error_msg = "Error generating iPay form: #{e.message}"
+      Rails.logger.error("[iPay] #{error_msg}")
+      Rails.logger.error("[iPay] Backtrace: #{e.backtrace.join("\n")}")
+      raise error_msg
+    end
 
       # Generate form HTML with proper encoding and security
       form_id = "ipay_form_#{SecureRandom.hex(4)}"
