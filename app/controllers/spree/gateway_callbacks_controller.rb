@@ -83,6 +83,13 @@ module Spree
                     params[:id] || params['id'] || params_source[:id] || params_source['id'] ||
                     params[:ivm] || params['ivm'] || params_source[:ivm] || params_source['ivm'] ||
                     params[:oid] || params['oid'] || params_source[:oid] || params_source['oid']
+      
+      # If no parameters are present in the URL, try to get the order from the session
+      if order_number.blank? && session[:order_id].present?
+        Rails.logger.info("[#{@request_id}] No order number in parameters, checking session for order_id: #{session[:order_id]}")
+        order = Spree::Order.find_by(id: session[:order_id])
+        order_number = order.number if order
+      end
                     
       Rails.logger.info("Extracted - Txn ID: #{txn_id}, Status: #{status}, Order: #{order_number}")
 
