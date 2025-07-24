@@ -63,18 +63,30 @@ module Spree
           Rails.logger.info("[#{request_id}] Request method: #{request.method}")
           Rails.logger.info("[#{request_id}] Request parameters: #{params.to_unsafe_h}")
           
-          # Extract parameters
-          order_number = params[:id] || params['id'] || params[:order_id] || params['order_id']
+          # Extract parameters - iPay uses 'oid' for order number
+          order_number = params[:oid] || params['oid'] || params[:id] || params['id'] || params[:order_id] || params['order_id']
           status = params[:status] || params['status']
           
           Rails.logger.info("[#{request_id}] Processing callback for order: #{order_number}, status: #{status}")
           
+          unless order_number.present?
+            Rails.logger.error("[#{request_id}] No order number provided in callback")
+            render json: { status: 'error', message: 'No order number provided' }, status: :unprocessable_entity
+            return
+          end
+          
           # Find the order
           order = Spree::Order.find_by(number: order_number)
           unless order
-            Rails.logger.error("[#{request_id}] Order not found: #{order_number}")
-            render json: { status: 'error', message: 'Order not found' }, status: :not_found
-            return
+            # Try to find by payment number if order number not found
+            payment = Spree::Payment.find_by(number: order_number)
+            order = payment.order if payment
+            
+            unless order
+              Rails.logger.error("[#{request_id}] Order not found for number: #{order_number}")
+              render json: { status: 'error', message: 'Order not found' }, status: :not_found
+              return
+            end
           end
           
           # Find or create payment
