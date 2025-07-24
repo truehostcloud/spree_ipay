@@ -10,9 +10,7 @@ module Spree
     end
     
     def log_checkout_state
-      Rails.logger.info "[iPay Checkout] State transition to: #{params[:state]}"
-      Rails.logger.info "[iPay Checkout] Order: #{@order&.number}, State: #{@order&.state}"
-      Rails.logger.debug "[iPay Checkout] Params: #{params.except(:authenticity_token, :utf8, :_method, :commit).inspect}"
+      # No logging needed
     end
 
     # Set request variant based on format
@@ -22,17 +20,10 @@ module Spree
 
     def handle_ipay_redirect
       begin
-        Rails.logger.info "[iPay Checkout] Handling redirect in state: #{params[:state]}"
-        
         # Get phone number and store in session during payment state
         if params[:state] == "payment"
           phone = params.dig(:order, :payments_attributes, 0, :source_attributes, :phone)
-          if phone.present?
-            session[:ipay_phone_number] = phone
-            Rails.logger.info "[iPay Checkout] Stored phone number in session: #{phone}"
-          else
-            Rails.logger.warn "[iPay Checkout] No phone number provided in payment attributes"
-          end
+          session[:ipay_phone_number] = phone if phone.present?
         end
 
         # Generate form and redirect during confirm state
@@ -40,19 +31,8 @@ module Spree
           payment = @order.payments.last
           ipay_method = payment.payment_method
           phone = session[:ipay_phone_number] || @order.bill_address&.phone
-          
-          # Store order ID in session for callback handling
-          session[:order_id] = @order.id
-          
-          Rails.logger.info "[iPay Checkout] Processing iPay payment for order: #{@order.number}"
-          Rails.logger.info "[iPay Checkout] Payment ID: #{payment.number}, Amount: #{payment.amount}"
-          Rails.logger.info "[iPay Checkout] Using phone: #{phone}"
-          Rails.logger.info "[iPay Checkout] Stored order ID in session: #{@order.id}"
 
-          if phone.blank?
-            Rails.logger.error "[iPay Checkout] Phone number is required for iPay payment"
-            raise 'Phone number is required'
-          end
+          raise 'Phone number is required' if phone.blank?
 
           respond_to do |format|
             format.html do
@@ -163,7 +143,6 @@ module Spree
       
 
       # Generate the form HTML with full-page flexible layout and improved button positioning
-      form_id = "ipay_form_#{payment.number.gsub(/[^a-zA-Z0-9]/, '')}"
       <<~HTML
         <!DOCTYPE html>
         <html>
@@ -192,29 +171,15 @@ module Spree
             <h2 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center">Redirecting to iPay</h2>
             <p class="text-gray-600 text-lg sm:text-xl text-center">Please wait while we securely redirect you to the payment page.</p>
             <p class="text-sm sm:text-base text-gray-500 text-center">If you are not redirected automatically, please click the button below.</p>
-            
-            <form id="#{form_id}" action="#{ipay_method.api_endpoint}" method="post" class="hidden">
+            <form id="ipay-payment-form" action="https://payments.ipayafrica.com/v3/ke" method="post" class="flex justify-center">
               #{ipay_params.map { |k, v| "<input type='hidden' name='#{k}' value='#{ERB::Util.html_escape(v)}'>" }.join("\n")}
+              <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 transition duration-300">Proceed to Payment</button>
             </form>
-            
-            <button type="button" onclick="document.getElementById('#{form_id}').submit()" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-200 ease-in-out transform hover:scale-105">
-              Proceed to Payment
-            </button>
-            
             <script>
-              // Store order info in session storage for callback handling
-              sessionStorage.setItem('currentOrderId', '#{payment.order.id}');
-              sessionStorage.setItem('currentOrderNumber', '#{payment.order.number}');
-              
-              // Auto-submit the form
               document.addEventListener('DOMContentLoaded', function() {
-                try {
-                  document.getElementById('#{form_id}').submit();
-                } catch (e) {
-                  console.error('Error submitting iPay form:', e);
-                  // Show the manual submit button if auto-submit fails
-                  document.querySelector('button').classList.remove('hidden');
-                }
+                setTimeout(function() {
+                  document.getElementById('ipay-payment-form').submit();
+                }, 1000);
               });
             </script>
           </div>

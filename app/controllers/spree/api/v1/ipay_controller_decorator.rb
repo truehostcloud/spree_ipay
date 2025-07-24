@@ -9,7 +9,7 @@ module Spree
           # Only skip authentication for callbacks and return URLs which need to be publicly accessible
           base.skip_before_action :authenticate_user, only: [:callback, :return]
           base.before_action :set_headers
-          base.before_action :set_payment_method, only: [:status, :callback]
+          base.before_action :set_payment_method, only: [:status]
           base.before_action :authenticate_for_status, only: [:status]
         end
 
@@ -53,75 +53,6 @@ module Spree
           end
         end
 
-        # Handle iPay callback
-        # This is called by iPay after payment processing
-        def callback
-          request_id = SecureRandom.hex(4)
-          Rails.logger.info("\n===== iPay API CALLBACK RECEIVED [Request ID: #{request_id}] =====")
-          
-          # Log all parameters for debugging
-          Rails.logger.info("[#{request_id}] Request method: #{request.method}")
-          Rails.logger.info("[#{request_id}] Request parameters: #{params.to_unsafe_h}")
-          
-          # Extract parameters - iPay uses 'oid' for order number
-          order_number = params[:oid] || params['oid'] || params[:id] || params['id'] || params[:order_id] || params['order_id']
-          status = params[:status] || params['status']
-          
-          Rails.logger.info("[#{request_id}] Processing callback for order: #{order_number}, status: #{status}")
-          
-          unless order_number.present?
-            Rails.logger.error("[#{request_id}] No order number provided in callback")
-            render json: { status: 'error', message: 'No order number provided' }, status: :unprocessable_entity
-            return
-          end
-          
-          # Find the order
-          order = Spree::Order.find_by(number: order_number)
-          unless order
-            # Try to find by payment number if order number not found
-            payment = Spree::Payment.find_by(number: order_number)
-            order = payment.order if payment
-            
-            unless order
-              Rails.logger.error("[#{request_id}] Order not found for number: #{order_number}")
-              render json: { status: 'error', message: 'Order not found' }, status: :not_found
-              return
-            end
-          end
-          
-          # Find or create payment
-          payment = order.payments.valid.where(payment_method: @payment_method).last
-          unless payment
-            Rails.logger.error("[#{request_id}] No valid payment found for order: #{order_number}")
-            render json: { status: 'error', message: 'No valid payment found' }, status: :not_found
-            return
-          end
-          
-          # Process the payment status
-          case status.to_s.downcase
-          when 'success', 'completed'
-            payment.complete! unless payment.completed?
-            
-            # Update order state if needed
-            if order.payment_state == 'paid' || order.payment_state == 'credit_owed'
-              order.next if order.respond_to?(:next) && order.respond_to?(:can_complete?) && order.can_complete?
-              order.update_columns(completed_at: Time.current, state: 'complete') if order.respond_to?(:completed_at)
-            end
-            
-            render json: { status: 'success', message: 'Payment processed successfully', order_number: order.number, payment_state: order.payment_state }
-          when 'failed', 'cancelled'
-            payment.failure! unless payment.failed?
-            render json: { status: 'failed', message: 'Payment failed or was cancelled' }
-          else
-            render json: { status: 'pending', message: 'Payment is pending' }
-          end
-          
-        rescue => e
-          Rails.logger.error("[#{request_id}] Error processing callback: #{e.message}")
-          Rails.logger.error(e.backtrace.join("\n")) if e.backtrace
-          render json: { status: 'error', message: 'Error processing callback' }, status: :internal_server_error
-        end
-        
         private
 
         def set_payment_method
