@@ -37,66 +37,89 @@ module Spree
 
     # Generate callback and return URLs for iPay
     def generate_ipay_urls(payment)
+      order = payment.order
+      
       # Extract host and protocol from the return URL preference
-      return_uri = URI.parse(preferred_return_url.presence || 'https://example.com')
-      default_host = return_uri.host
-      default_protocol = return_uri.scheme || 'https'
+      default_host = 'example.com'
+      default_protocol = 'https'
+      
+      begin
+        if preferred_return_url.present?
+          return_uri = URI.parse(preferred_return_url)
+          default_host = return_uri.host if return_uri.host.present?
+          default_protocol = return_uri.scheme if return_uri.scheme.present?
+        end
+      rescue URI::InvalidURIError => e
+        Spree::Ipay::Logger.error(e, "Invalid return URL format: #{e.message}")
+      end
 
       # Generate callback URL for iPay to send payment status
       begin
+        callback_path = '/api/v1/ipay/callback'
+        
         if preferred_callback_url.present?
           callback_uri = URI.parse(preferred_callback_url)
           callback_uri.scheme ||= default_protocol
           callback_uri.host ||= default_host
-          callback_uri.path = '/api/v1/ipay/callback' if callback_uri.path.blank? || callback_uri.path == '/'
+          callback_uri.path = callback_path if callback_uri.path.blank? || callback_uri.path == '/'
         else
-          # In test mode, ensure we're using HTTPS for security
           protocol = test_mode? ? 'https' : default_protocol
-          callback_uri = URI.parse("#{protocol}://#{default_host}/api/v1/ipay/callback")
+          callback_uri = URI.parse("#{protocol}://#{default_host}#{callback_path}")
         end
-
-        # Ensure the callback URL is valid
-        raise URI::InvalidURIError if callback_uri.host.blank?
 
         # Add test parameter if in test mode
         if test_mode?
           params = URI.decode_www_form(callback_uri.query || '').to_h
           params['test'] = '1'
-          callback_uri.query = URI.encode_www_form(params)
+          callback_uri.query = URI.encode_www_form(params) if params.any?
         end
 
         cbk = callback_uri.to_s
       rescue URI::InvalidURIError => e
         error_msg = "Invalid callback URL format: #{e.message}"
-        Spree::Ipay::Logger.error(StandardError.new(error_msg), payment.order.number)
+        Spree::Ipay::Logger.error(StandardError.new(error_msg), order.number)
         # Fallback to a safe default in case of errors
-        cbk = "https://#{default_host}/api/v1/ipay/callback"
+        cbk = "#{default_protocol}://#{default_host}#{callback_path}"
         cbk += '?test=1' if test_mode?
       end
 
       # Generate return URL for customer redirect
       begin
+        return_path = "/orders/#{order.number}"
+        
         if preferred_return_url.present?
           return_uri = URI.parse(preferred_return_url)
           return_uri.scheme ||= default_protocol
           return_uri.host ||= default_host
-          return_uri.path = "/orders/#{payment.order.number}" if return_uri.path.blank? || return_uri.path == '/'
+          return_uri.path = return_path if return_uri.path.blank? || return_uri.path == '/'
         else
           protocol = test_mode? ? 'https' : default_protocol
-          return_uri = URI.parse("#{protocol}://#{default_host}/orders/#{payment.order.number}")
+          return_uri = URI.parse("#{protocol}://#{default_host}#{return_path}")
         end
 
-        # Add order token for guest access
+        # Add order token for guest access if available
         params = URI.decode_www_form(return_uri.query || '').to_h
-        params[:token] = payment.order.guest_token
-        return_uri.query = URI.encode_www_form(params)
+        
+        # Safely get guest token - handle both Spree 3.x and 4.x
+        guest_token = if order.respond_to?(:guest_token)
+                       order.guest_token
+                     elsif order.respond_to?(:token)
+                       order.token
+                     elsif order.respond_to?(:guest_token=) && order.instance_variable_defined?(:@guest_token)
+                       order.instance_variable_get(:@guest_token)
+                     else
+                       SecureRandom.hex(10) # Generate a random token as fallback
+                     end
+        
+        params[:token] = guest_token if guest_token.present?
+        return_uri.query = URI.encode_www_form(params) if params.any?
 
         lbk = return_uri.to_s
       rescue URI::InvalidURIError => e
         error_msg = "Invalid return URL format: #{e.message}"
-        Spree::Ipay::Logger.error(StandardError.new(error_msg), payment.order.number)
+        Spree::Ipay::Logger.error(StandardError.new(error_msg), order.number)
         # Fallback to a safe default in case of errors
-        lbk = "https://#{default_host}/orders/#{payment.order.number}?token=#{payment.order.guest_token}"
+        lbk = "#{default_protocol}://#{default_host}#{return_path}?token=#{guest_token}"
       end
 
       {
