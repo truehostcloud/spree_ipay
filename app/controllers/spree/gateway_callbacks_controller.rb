@@ -104,6 +104,13 @@ module Spree
           if payment
             Rails.logger.info("[#{@request_id}] Found payment #{payment.number}, state: #{payment.state}, amount: #{payment.amount}")
             Rails.logger.info("[#{@request_id}] Payment method: #{payment.payment_method&.type}")
+            
+            # If payment is already completed, don't process it again
+            if payment.completed?
+              Rails.logger.info("[#{@request_id}] Payment is already completed. Redirecting to order page.")
+              redirect_to spree.order_path(order, token: order.guest_token) and return
+            end
+            
             # --- iPay C2B SHA1 HMAC Signature Verification ---
             required_keys = %w[live oid inv ttl tel eml vid curr p1 p2 p3 p4 cbk cst crl]
             param_values = required_keys.map { |k| params[k] || params[k.to_sym] }
@@ -112,7 +119,8 @@ module Spree
               hash_key = payment.payment_method.preferred_hash_key if payment.payment_method.respond_to?(:preferred_hash_key)
               received_signature = params[:hsh] || params[:hash]
               generated_signature = OpenSSL::HMAC.hexdigest('sha1', hash_key, datastring)
-              unless ActiveSupport::SecurityUtils.secure_compare(generated_signature, received_signature.to_s)
+              hmac_verified = ActiveSupport::SecurityUtils.secure_compare(generated_signature, received_signature.to_s)
+              unless hmac_verified
                 error_msg = "[#{@request_id}] Invalid signature. Expected: #{generated_signature}, Received: #{received_signature}"
                 Rails.logger.error(error_msg)
                 @heading = 'Invalid Signature'
@@ -123,43 +131,65 @@ module Spree
                 Rails.logger.info("[#{@request_id}] Signature verification successful")
               end
             end
-            # --- Amount Verification ---
-            paid_amount = params['mc'].to_f
-            required_amount = order.total.to_f
-            if paid_amount < required_amount
-              @heading = 'Insufficient Payment'
-              @message = "Amount paid (#{paid_amount}) is less than required (#{required_amount})"
-              render 'failure', status: :payment_required
-              return
-            end
-            # iPay status code handling
-            Rails.logger.info("[#{@request_id}] Processing iPay status: #{status}")
-            status_map = {
-              'aei7p7yrx4ae34' => { label: 'Success', heading: 'Order Placed Successfully!' },
-              'fe2707etr5s4wq' => { label: 'Failed', heading: 'Payment Failed' },
-              'bdi6p2yy76etrs' => { label: 'Pending', heading: 'Payment Pending' },
-              'cr5i3pgy9867e1' => { label: 'Used', heading: 'Code Already Used' },
-              'dtfi4p7yty45wq' => { label: 'Less', heading: 'Insufficient Payment' },
-              'eq3i7p5yt7645e' => { label: 'More', heading: 'Overpayment' }
-            }
-            code = status.to_s
-            meta = status_map[code] || { label: 'Unknown', heading: 'Payment Failed' }
-            @heading = meta[:heading]
-            @message = params[:message] || meta[:label]
-            if code == 'aei7p7yrx4ae34'
-              payment.update(response_code: txn_id) if txn_id.present?
-              payment.complete! if payment.respond_to?(:can_complete?) ? payment.can_complete? : !payment.completed?
-              order.next! until order.completed? rescue nil
-              render 'success', status: :ok
-            elsif code == 'bdi6p2yy76etrs'
-              render 'pending', status: :ok
-            else
-              if payment.respond_to?(:can_failure?) && payment.can_failure?
-                payment.failure!
+            
+            # Process the payment status
+            case status&.downcase
+            when 'success', 'aei7p7yrx4afh8d97hd97', 'aei7p7yrx4ae34'
+              begin
+                # Only process if payment isn't already completed
+                unless payment.completed?
+                  # Update payment with transaction ID
+                  payment.update(response_code: txn_id) if txn_id.present?
+                  
+                  # Capture the payment amount
+                  payment.capture! if payment.can_capture?
+                  
+                  # Complete the payment
+                  payment.complete! if payment.can_complete?
+                  
+                  # Update order state
+                  order.next! if order.payment_required? && !order.completed?
+                  order.update_with_updater!
+                  
+                  Rails.logger.info("[#{@request_id}] Payment #{payment.number} completed successfully")
+                end
+                
+                # Redirect to order confirmation page
+                redirect_to spree.order_path(order, token: order.guest_token) and return
+                
+              rescue StandardError => e
+                Rails.logger.error("[#{@request_id}] Error processing payment: #{e.message}")
+                payment.failure! if payment.can_fail?
+                redirect_to spree.checkout_state_path(:payment, error: 'Error processing payment') and return
               end
+              
+            when 'pending', 'bdi6p2yy76etrs'
+              unless payment.pending?
+                payment.pend! if payment.can_pend?
+                order.update_with_updater!
+              end
+              
+              @heading = 'Payment Pending'
+              @message = 'Your payment is being processed. Please check back later for updates.'
+              render 'pending', status: :ok
+              
+            when 'failed', 'bdi6p2yy76atrsf91sww'
+              payment.failure! if payment.can_fail?
+              order.update_with_updater!
+              
+              @heading = 'Payment Failed'
+              @message = 'The payment was declined. Please try again or use a different payment method.'
+              render 'failure', status: :payment_required
+              
+            else
+              # Unknown status code
+              payment.failure! if payment.can_fail?
+              order.update_with_updater!
+              
+              @heading = 'Payment Error'
+              @message = 'There was an error processing your payment. Please contact support.'
               render 'failure', status: :payment_required
             end
-            return
           else
             @heading = 'Payment Not Found'
             @message = 'No payment record found for this order.'
