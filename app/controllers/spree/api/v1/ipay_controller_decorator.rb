@@ -9,7 +9,7 @@ module Spree
           # Only skip authentication for callbacks and return URLs which need to be publicly accessible
           base.skip_before_action :authenticate_user, only: [:callback, :return]
           base.before_action :set_headers
-          base.before_action :set_payment_method, only: [:status]
+          base.before_action :set_payment_method, only: [:status, :callback]
           base.before_action :authenticate_for_status, only: [:status]
         end
 
@@ -53,6 +53,57 @@ module Spree
           end
         end
 
+        # Handle iPay callback
+        # This is called by iPay after payment processing
+        def callback
+          request_id = SecureRandom.hex(4)
+          Rails.logger.info("\n===== iPay API CALLBACK RECEIVED [Request ID: #{request_id}] =====")
+          
+          # Log all parameters for debugging
+          Rails.logger.info("[#{request_id}] Request method: #{request.method}")
+          Rails.logger.info("[#{request_id}] Request parameters: #{params.to_unsafe_h}")
+          
+          # Extract parameters
+          order_number = params[:id] || params['id'] || params[:order_id] || params['order_id']
+          status = params[:status] || params['status']
+          
+          Rails.logger.info("[#{request_id}] Processing callback for order: #{order_number}, status: #{status}")
+          
+          # Find the order
+          order = Spree::Order.find_by(number: order_number)
+          unless order
+            Rails.logger.error("[#{request_id}] Order not found: #{order_number}")
+            render json: { status: 'error', message: 'Order not found' }, status: :not_found
+            return
+          end
+          
+          # Find or create payment
+          payment = order.payments.valid.where(payment_method: @payment_method).last
+          unless payment
+            Rails.logger.error("[#{request_id}] No valid payment found for order: #{order_number}")
+            render json: { status: 'error', message: 'No valid payment found' }, status: :not_found
+            return
+          end
+          
+          # Process the payment status
+          case status.to_s.downcase
+          when 'success', 'completed'
+            payment.complete! unless payment.completed?
+            order.next if order.can_complete?
+            render json: { status: 'success', message: 'Payment processed successfully' }
+          when 'failed', 'cancelled'
+            payment.failure! unless payment.failed?
+            render json: { status: 'failed', message: 'Payment failed or was cancelled' }
+          else
+            render json: { status: 'pending', message: 'Payment is pending' }
+          end
+          
+        rescue => e
+          Rails.logger.error("[#{request_id}] Error processing callback: #{e.message}")
+          Rails.logger.error(e.backtrace.join("\n")) if e.backtrace
+          render json: { status: 'error', message: 'Error processing callback' }, status: :internal_server_error
+        end
+        
         private
 
         def set_payment_method
