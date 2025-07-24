@@ -315,46 +315,26 @@ module Spree
       p2 = ""
       p3 = ""
       p4 = ""
-      
-      # Generate callback URL - must match exactly what's in the form
-      # Use the same approach as in the callback_url method
-      default_protocol = test_mode? ? 'https' : 'http'
-      default_host = '9b81b81c06d0.ngrok-free.app' # Match the ngrok host from callback_url
-      cbk = "#{default_protocol}://#{default_host}/api/v1/ipay/callback"
-      cbk += '?test=1' if test_mode?
-      
+      cbk = preferred_callback_url.presence || "https://#{base_url}/ipay/confirm"
       cst = "1"
       crl = "2"
-
-      # Log all parameters being used in the hash
-      Rails.logger.info("[iPay HASH DEBUG] Parameters for hash generation:")
-      Rails.logger.info("  live: #{live}")
-      Rails.logger.info("  oid: #{oid}")
-      Rails.logger.info("  inv: #{inv}")
-      Rails.logger.info("  ttl: #{ttl}")
-      Rails.logger.info("  tel: #{tel}")
-      Rails.logger.info("  eml: #{eml}")
-      Rails.logger.info("  vid: #{vid}")
-      Rails.logger.info("  curr: #{curr}")
-      Rails.logger.info("  p1: #{p1}")
-      Rails.logger.info("  p2: #{p2}")
-      Rails.logger.info("  p3: #{p3}")
-      Rails.logger.info("  p4: #{p4}")
-      Rails.logger.info("  cbk: #{cbk}")
-      Rails.logger.info("  cst: #{cst}")
-      Rails.logger.info("  crl: #{crl}")
 
       datastring = [
         live, oid, inv, ttl, tel, eml, vid, curr,
         p1, p2, p3, p4, cbk, cst, crl
       ].join
 
-      Rails.logger.info("[iPay HASH DEBUG] datastring: #{datastring}")
-      Rails.logger.info("[iPay HASH DEBUG] hash_key: #{hash_key}")
+      
+      
+      
+      
+      
+      
+      
       
       digest = OpenSSL::Digest.new('sha1')
       hash = OpenSSL::HMAC.hexdigest(digest, hash_key, datastring)
-      Rails.logger.info("[iPay HASH DEBUG] Generated hash: #{hash.downcase}")
+      Rails.logger.info("[iPay HASH DEBUG] hash: #{hash.downcase}")
       # Ensure the hash is lowercase to match PHP's output
       hash.downcase
     rescue StandardError => e
@@ -385,37 +365,34 @@ module Spree
 
       # Generate callback URL for iPay to send payment status
       begin
-        # Always use the API endpoint directly with the full URL
-        protocol = test_mode? ? 'https' : default_protocol
-        
-        # Ensure we have a valid host (ngrok URL)
-        if default_host.blank? || default_host == 'example.com'
-          default_host = '9b81b81c06d0.ngrok-free.app' # Your ngrok host
+        if preferred_callback_url.present?
+          callback_uri = URI.parse(preferred_callback_url)
+          callback_uri.scheme ||= default_protocol
+          callback_uri.host ||= default_host
+          callback_uri.path = '/api/v1/ipay/callback' if callback_uri.path.blank? || callback_uri.path == '/'
+        else
+          # In test mode, ensure we're using HTTPS for security
+          protocol = test_mode? ? 'https' : default_protocol
+          callback_uri = URI.parse("#{protocol}://#{default_host}/api/v1/ipay/callback")
         end
-        
-        # Build the callback URL
-        cbk = "#{protocol}://#{default_host}/api/v1/ipay/callback"
-        
+
+        # Ensure the callback URL is valid
+        raise URI::InvalidURIError if callback_uri.host.blank?
+
         # Add test parameter if in test mode
         if test_mode?
-          cbk += '?test=1'
+          params = URI.decode_www_form(callback_uri.query || '').to_h
+          params['test'] = '1'
+          callback_uri.query = URI.encode_www_form(params)
         end
-        
-        # Log the callback URL for debugging
-        Rails.logger.info("[iPay] Generated callback URL: #{cbk}")
-      rescue StandardError => e
-        error_msg = "Error generating callback URL: #{e.message}"
+
+        cbk = callback_uri.to_s
+      rescue URI::InvalidURIError => e
+        error_msg = "Invalid callback URL format: #{e.message}"
         Spree::Ipay::Logger.error(StandardError.new(error_msg), payment.order.number)
-        
-        # Fallback to ngrok URL in case of errors
-        protocol = test_mode? ? 'https' : 'http'
-        default_host = '9b81b81c06d0.ngrok-free.app' # Your ngrok host
-        cbk = "#{protocol}://#{default_host}/api/v1/ipay/callback"
-        
-        # Add test parameter if in test mode
-        if test_mode?
-          cbk += '?test=1'
-        end
+        # Fallback to a safe default in case of errors
+        cbk = "https://#{default_host}/api/v1/ipay/callback"
+        cbk += '?test=1' if test_mode?
       end
 
       # Generate return URL for customer redirect after payment
@@ -715,9 +692,8 @@ module Spree
     end
 
     def base_url
-    # Use the same ngrok URL as in callback_url for consistency
-    '9b81b81c06d0.ngrok-free.app'
-  end
+      Rails.application.routes.url_helpers.root_url.chomp('/')
+    end
 
     def test_mode?
       preferred_test_mode == true || preferred_test_mode == '1' || preferred_test_mode == 'true'

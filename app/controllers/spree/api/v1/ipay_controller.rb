@@ -19,38 +19,11 @@ module Spree
 
         # iPay callback endpoint
         def callback
-          # Log the raw request parameters and body for debugging
-          Rails.logger.info("[iPay Callback] Raw request parameters: #{params.to_unsafe_h}")
-          Rails.logger.info("[iPay Callback] Request method: #{request.method}")
-          
-          # For POST requests, log the raw body
-          if request.post?
-            begin
-              raw_body = request.raw_post
-              Rails.logger.info("[iPay Callback] Raw POST body: #{raw_body}")
-              
-              # Try to parse as JSON if content-type is application/json
-              if request.content_type == 'application/json'
-                json_params = JSON.parse(raw_body) rescue {}
-                params.merge!(json_params)
-                Rails.logger.info("[iPay Callback] Parsed JSON params: #{json_params}")
-              end
-            rescue => e
-              Rails.logger.error("[iPay Callback] Error parsing request body: #{e.message}")
-            end
-          end
-          
-          # Extract order reference from various possible parameters
-          order_reference = params[:id] || params[:oid] || params[:order_id] || params[:order_number]
-          
+          # Extract order reference from params (could be in id or oid parameter)
+          order_reference = params[:id] || params[:oid]
+
           if order_reference.blank?
-            error_msg = 'Order reference is required. Available params: ' + params.to_unsafe_h.inspect
-            Rails.logger.error("[iPay Callback] #{error_msg}")
-            render json: { 
-              status: 'error', 
-              message: 'Order reference is required',
-              received_params: params.to_unsafe_h
-            }, status: :bad_request
+            render json: { status: 'error', message: 'Order reference is required' }, status: :bad_request
             return
           end
 
@@ -259,75 +232,28 @@ module Spree
         end
 
         def verify_callback_hash
-          # Log all received parameters for debugging
-          Rails.logger.info("[iPay Callback] Received parameters: #{params.to_unsafe_h}")
-          
-          received_hash = params[:hash] || params[:hsh] # Check both hash and hsh parameters
+          received_hash = params[:hash]
           payment_method = @payment.payment_method
 
-          # Log the payment method being used
-          Rails.logger.info("[iPay Callback] Payment method: #{payment_method&.class&.name}")
-          Rails.logger.info("[iPay Callback] Received hash: #{received_hash}")
+          # Verify callback hash for payment
 
           # Skip verification if no hash is provided (for testing)
-          if received_hash.blank?
-            Rails.logger.warn("[iPay Callback] No hash provided, skipping verification")
-            return true 
+          return true if received_hash.blank?
+
+          # Only require hash verification for real iPay payment methods
+          if payment_method.class.name.demodulize.downcase.include?("ipay") && payment_method.respond_to?(:generate_status_hash)
+            return false if @payment.response_code.blank?
+
             begin
-              raw_body = request.raw_post
-              Rails.logger.info("[iPay Callback] Raw POST body: #{raw_body}")
-              
-              # Try to parse as JSON if content-type is application/json
-              if request.content_type&.include?('application/json')
-                json_params = JSON.parse(raw_body) rescue {}
-                Rails.logger.info("[iPay Callback] Parsed JSON params: #{json_params}")
-                params.merge!(json_params)
-              end
-            rescue => e
-              Rails.logger.error("[iPay Callback] Error parsing request body: #{e.message}")
+              expected_hash = payment_method.send(:generate_status_hash, @payment.response_code)
+              received_hash == expected_hash
+            rescue StandardError
+              false
             end
+          else
+            # Skip verification for non-iPay payment methods
+            true
           end
-          
-          received_hash = params[:hash] || params[:hsh]
-          
-          if received_hash.blank?
-            Rails.logger.error("[iPay Callback] No hash parameter received")
-            return false
-          end
-          
-          # Get the payment method and order
-          payment_method = Spree::PaymentMethod.find_by(type: 'Spree::PaymentMethod::Ipay')
-          unless payment_method
-            Rails.logger.error("[iPay Callback] iPay payment method not found")
-            return false
-          end
-          
-          # Log the parameters that will be used for hash generation
-          Rails.logger.info("[iPay Callback] Parameters for hash generation:")
-          %w[live oid inv ttl tel eml vid curr p1 p2 p3 p4 cbk cst crl].each do |param|
-            Rails.logger.info("  #{param}: #{params[param]}")
-          end
-          
-          # Generate the expected hash
-          expected_hash = payment_method.ipay_signature_hash(nil, params[:tel])
-          
-          # Log the hashes for debugging
-          Rails.logger.info("[iPay Callback] Received hash: #{received_hash}")
-          Rails.logger.info("[iPay Callback] Expected hash: #{expected_hash}")
-          
-          # Compare hashes using timing-safe comparison
-          result = ActiveSupport::SecurityUtils.secure_compare(
-            ::Digest::SHA1.hexdigest(expected_hash.to_s),
-            ::Digest::SHA1.hexdigest(received_hash.to_s)
-          )
-          
-          Rails.logger.info("[iPay Callback] Hash verification #{result ? 'SUCCEEDED' : 'FAILED'}")
-          Rails.logger.info("[iPay Callback] ===== END OF VERIFICATION =====\n")
-          
-          result
-        rescue => e
-          Rails.logger.error("[iPay Callback] Error verifying hash: #{e.message}\n#{e.backtrace.join("\n")}")
-          false
         end
       end
     end
