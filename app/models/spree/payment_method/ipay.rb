@@ -391,45 +391,44 @@ module Spree
 
       # Prepare values in the exact order required by iPay
       oid = payment.number.to_s  # Use payment number for consistency
-      inv = "#{payment.order.number}-#{Time.now.to_i}" # Unique invoice number
+      inv = "#{payment.order.number}#{Time.now.to_i}" # Unique invoice number (no hyphen)
       ttl = (payment.amount.to_f * 100).to_i.to_s # Amount in cents (no decimals)
       tel = phone.presence || payment.order.bill_address&.phone.to_s.presence || "0700000000"
       eml = payment.order.email.to_s
       vid = vendor_id
       curr = preferred_currency.presence || 'KES'
       
-      # Custom parameters (same as in form generation)
-      p1 = "order_#{payment.order.number}"  # Order reference
-      p2 = payment.payment_method.id.to_s   # Payment method ID
-      p3 = ""  # Additional custom parameter
-      p4 = ""  # Additional custom parameter
+      # Custom parameters (must match what's in the form)
+      p1 = ""  # Custom parameter 1 (empty in form)
+      p2 = ""  # Custom parameter 2 (empty in form)
+      p3 = ""  # Custom parameter 3 (empty in form)
+      p4 = ""  # Custom parameter 4 (empty in form)
       
-      # Generate callback URL (must match exactly what's in the form)
-      urls = generate_ipay_urls(payment)
-      cbk = urls[:cbk]
+      # Get callback URL (must match exactly what's in the form)
+      cbk = generate_ipay_urls(payment)[:cbk]
       
-      # Control flags
-      cst = "1"  # Enable callback
-      crl = "0"  # Disable automatic redirect
+      # Control flags (must match form values)
+      cst = "1"  # Enable callback (1 = yes)
+      crl = "2"  # Redirect flag (2 = redirect)
 
       # Create datastring in the exact order required by iPay
-      # Note: The order of these parameters is critical for the hash to be valid
+      # The order of these parameters is critical for the hash to be valid
       datastring = [
-        live,   # live
-        oid,    # oid
-        inv,    # inv
-        ttl,    # ttl
-        tel,    # tel
-        eml,    # eml
-        vid,    # vid
-        curr,   # curr
-        p1,     # p1
-        p2,     # p2
-        p3,     # p3
-        p4,     # p4
-        cbk,    # cbk
-        cst,    # cst
-        crl     # crl
+        live,  # live
+        oid,   # oid
+        inv,   # inv
+        ttl,   # ttl
+        tel,   # tel
+        eml,   # eml
+        vid,   # vid
+        curr,  # curr
+        p1,    # p1
+        p2,    # p2
+        p3,    # p3
+        p4,    # p4
+        cbk,   # cbk
+        cst,   # cst
+        crl    # crl
       ].join
 
       # Log the datastring for debugging (without sensitive data)
