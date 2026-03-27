@@ -6,16 +6,16 @@ module Spree
       # Handles API endpoints for iPay payment processing.
       # Provides endpoints for callbacks from iPay and payment status checks.
       # Skips authentication for callback endpoints to allow external access.
-      class IpayController < Spree::Api::V1::BaseController
+      class IpayController < (defined?(Spree::Api::V1::BaseController) ? Spree::Api::V1::BaseController : Spree::StoreController)
         # Only load payment for :return, not for :callback (GET/POST)
         before_action :load_payment, only: [:return]
         skip_before_action :load_payment, only: [:callback]
 
         # SKIP ALL USER-RELATED AUTH FOR CALLBACK (SECURITY BY HASH ONLY)
-        skip_before_action :authenticate_user, only: %i[callback return]
+        skip_before_action :authenticate_user, only: %i[callback return], raise: false
         # skip_before_action :authenticate_spree_user, only: [:callback, :return]
-        skip_before_action :load_user, only: %i[callback return] # If present in base
-        skip_before_action :set_locale, only: %i[callback return] # Avoids user-locale issues
+        skip_before_action :load_user, only: %i[callback return], raise: false # If present in base
+        skip_before_action :set_locale, only: %i[callback return], raise: false # Avoids user-locale issues
 
         # iPay callback endpoint
         def callback
