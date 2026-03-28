@@ -1,15 +1,15 @@
 # frozen_string_literal: true
 
-# Configure iPay payment method serialization for Spree 4.10.1+
-Rails.application.config.after_initialize do |app|
-  # For Spree 4.10.1, we'll use the class_eval approach to add the serializer
-  Spree::Api::V2::Platform::PaymentMethodSerializer.class_eval do
-    def self.serializer_for(model, *args)
-      if model.is_a?(Spree::PaymentMethod) && model.type == 'Spree::PaymentMethod::Ipay'
-        Spree::Api::V2::Platform::IpaySourceSerializer
-      else
-        super
-      end
-    end
-  end
-end
+# Spree 5 loads the extension classes directly via Zeitwerk and the engine.
+# This file intentionally stays minimal so older serializer monkey-patches do not
+# interfere with payment method serialization in the host application.
+
+Spree::PermittedAttributes.source_attributes.push(
+	:phone,
+	:status,
+	:transaction_id,
+	:transaction_reference,
+	:transaction_amount,
+	:transaction_timestamp,
+	:metadata
+).uniq!

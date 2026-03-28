@@ -42,7 +42,7 @@ module Spree
       paid_amount = params['mc'].to_f
       required_amount = order.total.to_f
       if paid_amount < required_amount
-        Spree::Ipay::Logger.error("Amount paid (#{paid_amount}) is less than order total (#{required_amount})", order.number)
+        Rails.logger.warn("iPay amount mismatch for order #{order.number}") if defined?(Rails.logger)
         render plain: "Amount paid (#{paid_amount}) is less than required (#{required_amount})",
                status: :payment_required
         return

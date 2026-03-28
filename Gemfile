@@ -1,16 +1,11 @@
 source 'https://rubygems.org'
 
-# Use local gemspec
 gemspec
 
-# Ruby version requirement
-ruby "~> 3.3.8"
+ruby "~> 3.3.6"
 
-# Spree core dependencies
-gem 'deface', '~> 1.9.0'
-gem 'spree', '>= 4.5.0', '< 5.0.0'
-gem 'spree_backend', '>= 4.5.0', '< 5.0.0'
-gem 'spree_extension', '~> 0.1.0'
+gem 'spree', '>= 5.0', '< 6.0'
+gem 'rails', '~> 7.2.0'
 
 group :development, :test do
   gem 'rubocop', '~> 1.58', require: false

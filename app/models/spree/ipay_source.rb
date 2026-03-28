@@ -1,14 +1,21 @@
 module Spree
   class IpaySource < Spree::Base
-    # Associations
+    attribute :user_id, :integer
+
     belongs_to :payment_method, class_name: 'Spree::PaymentMethod::Ipay', optional: true
+    belongs_to :user, class_name: Spree.user_class.to_s, optional: true
     has_many :payments, as: :source, class_name: 'Spree::Payment', dependent: :destroy
 
     # Validations
     validates :phone, presence: true
 
+    def user_id=(value)
+      super(value.presence)
+      self.user = Spree.user_class.find_by(id: self[:user_id]) if self[:user_id].present?
+    end
+
     # Callbacks
-    before_validation :normalize_phone, if: :phone_changed?
+    before_validation :normalize_phone, if: :will_save_change_to_phone?
 
     private
 

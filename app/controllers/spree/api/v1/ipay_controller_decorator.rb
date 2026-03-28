@@ -7,7 +7,7 @@ module Spree
         def self.prepended(base)
           base.respond_to :json
           # Only skip authentication for callbacks and return URLs which need to be publicly accessible
-          base.skip_before_action :authenticate_user, only: [:callback, :return]
+          base.skip_before_action :authenticate_user, only: [:callback, :return], raise: false
           base.before_action :set_headers
           base.before_action :set_payment_method, only: [:status]
           base.before_action :authenticate_for_status, only: [:status]
