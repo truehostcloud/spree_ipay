@@ -6,7 +6,7 @@ PATH
       httparty (~> 0.16.0)
       rack-attack (~> 6.7)
       rails (~> 7.2.0)
-      spree (>= 5.3, < 6.0)
+      spree (>= 5.0, < 6.0)
 
 GEM
   remote: https://rubygems.org/
@@ -542,7 +542,7 @@ DEPENDENCIES
   rubocop-performance (~> 1.19)
   rubocop-rails (~> 2.20)
   rubocop-rspec (~> 2.25)
-  spree (>= 5.3, < 6.0)
+  spree (>= 5.0, < 6.0)
   spree_ipay!
   sqlite3 (~> 1.4.0)
   webmock (~> 3.18)
