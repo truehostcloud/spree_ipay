@@ -2,10 +2,10 @@ source 'https://rubygems.org'
 
 gemspec
 
-# Ruby version requirement
-ruby "~> 3.3.8"
+ruby "~> 3.3.6"
 
 gem 'spree', '>= 5.0', '< 6.0'
+gem 'rails', '~> 7.2.0'
 
 group :development, :test do
   gem 'rubocop', '~> 1.58', require: false
