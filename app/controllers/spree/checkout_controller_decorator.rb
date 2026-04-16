@@ -59,14 +59,14 @@ module Spree
         error_message = Rails.env.development? ? e.message : 'Unable to process payment. Please try again.'
         
         respond_to do |format|
-          format.html { redirect_to checkout_state_path(@order.state), error: error_message }
+          format.html { redirect_to checkout_state_path_for(@order), error: error_message }
           format.json { render json: { status: 'error', message: error_message }, status: :unprocessable_entity }
         end
       end
     rescue StandardError => e
       respond_to do |format|
         format.html do
-          redirect_to checkout_state_path(:payment), error: "Payment processing failed: #{e.message}"
+          redirect_to checkout_state_path_for(@order, 'payment'), error: "Payment processing failed: #{e.message}"
         end
         format.json do
           render json: {
@@ -89,9 +89,9 @@ module Spree
         respond_to do |format|
           format.html do
             if @order.next
-              redirect_to checkout_state_path(@order.state)
+              redirect_to checkout_state_path_for(@order)
             else
-              redirect_to checkout_state_path(@order.state)
+              redirect_to checkout_state_path_for(@order)
             end
           end
           
@@ -156,19 +156,23 @@ module Spree
     end
     
     private
+
+    def checkout_state_path_for(order, state = order.state)
+      checkout_state_path(order.token, state)
+    end
     
     def next_step_url_for(order, next_step)
       return unless next_step
       
       case next_step
       when 'address'
-        checkout_state_path('address')
+        checkout_state_path_for(order, 'address')
       when 'delivery'
-        checkout_state_path('delivery')
+        checkout_state_path_for(order, 'delivery')
       when 'payment'
-        checkout_state_path('payment')
+        checkout_state_path_for(order, 'payment')
       when 'confirm'
-        checkout_state_path('confirm')
+        checkout_state_path_for(order, 'confirm')
       when 'complete'
         order_path(order, order_token: order.guest_token)
       end

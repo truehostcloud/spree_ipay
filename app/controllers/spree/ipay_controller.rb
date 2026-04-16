@@ -20,16 +20,20 @@ module Spree
         
         redirect_to redirect_url, allow_other_host: true
       else
-        redirect_to checkout_state_path(@order.state), alert: "Unable to process payment. Please try again."
+        redirect_to checkout_state_path_for(@order), alert: "Unable to process payment. Please try again."
       end
     rescue ActiveRecord::RecordNotFound => e
       redirect_to cart_path, alert: "Order not found."
     rescue => e
-      redirect_to checkout_state_path(@order&.state || :cart), 
-                  alert: "An error occurred while processing your payment. Please try again."
+      redirect_to(@order.present? ? checkout_state_path_for(@order) : cart_path,
+          alert: "An error occurred while processing your payment. Please try again.")
     end
     
     private
+
+    def checkout_state_path_for(order, state = order.state)
+      checkout_state_path(order.token, state)
+    end
     
     # Extract callback parameters based on iPay documentation
     def extract_callback_params
