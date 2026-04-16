@@ -120,7 +120,7 @@ module Spree
       esc_heading = ERB::Util.html_escape(meta[:heading])
       esc_color = ERB::Util.html_escape(meta[:color]) # assumed safe, as it's generated SVG markup
       esc_root_path = ERB::Util.html_escape(spree.root_path)
-      esc_payment_path = ERB::Util.html_escape(spree.checkout_state_path(order.state))
+      esc_payment_path = ERB::Util.html_escape(spree.checkout_state_path(order.token, order.state))
 
       # Build details table safely using helpers
       @details = helpers.content_tag(:table,

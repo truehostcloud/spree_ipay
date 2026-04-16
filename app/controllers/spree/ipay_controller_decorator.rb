@@ -24,8 +24,7 @@ module Spree
             
             redirect_to redirect_url, allow_other_host: true
           else
-            redirect_to checkout_state_path(@order.state), 
-                        alert: "Unable to process payment. Please try again."
+            redirect_to checkout_state_path_for(@order), alert: "Unable to process payment. Please try again."
           end
         end
         
@@ -57,8 +56,10 @@ module Spree
     rescue => e
       respond_to do |format|
         format.html do
-          redirect_to checkout_state_path(@order&.state || :cart), 
-                      alert: "An error occurred while processing your payment. Please try again."
+          redirect_to(
+            @order.present? ? checkout_state_path_for(@order) : cart_path,
+            alert: "An error occurred while processing your payment. Please try again."
+          )
         end
         format.json do
           render json: { 
@@ -71,6 +72,10 @@ module Spree
     end
 
     private
+
+    def checkout_state_path_for(order, state = order.state)
+      checkout_state_path(order.token, state)
+    end
 
     def set_headers
       response.headers['Cache-Control'] = 'no-cache, no-store, max-age=0, must-revalidate'

@@ -180,7 +180,7 @@ module Spree
 
             # Here you might want to implement a status check with iPay
             # For now, we'll just redirect to payment info page
-            redirect_to spree.checkout_state_path(:payment),
+            redirect_to checkout_state_path_for(order, 'payment'),
                         notice: 'We are still processing your payment. Please check back soon.'
             return
           end
@@ -188,13 +188,13 @@ module Spree
           # If payment failed
           if @payment.failed? || @payment.void?
 
-            redirect_to spree.checkout_state_path(:payment),
+            redirect_to checkout_state_path_for(order, 'payment'),
                         alert: 'Payment was not completed. Please try again or use a different payment method.'
             return
           end
 
           # Default fallback
-          redirect_to spree.checkout_state_path(order.state),
+          redirect_to checkout_state_path_for(order),
                       notice: 'Please complete your order.'
         rescue StandardError
           redirect_to spree.root_path,
@@ -219,6 +219,10 @@ module Spree
         end
 
         private
+
+        def checkout_state_path_for(order, state = order.state)
+          spree.checkout_state_path(order.token, state)
+        end
 
         # Dummy method to satisfy Spree API controller expectations
         def try_spree_current_user
