@@ -14,10 +14,10 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_dependency 'spree', '>= 5.0', '< 6.0'
-  spec.required_ruby_version = '~> 3.3.6'
+  spec.required_ruby_version = '~> 4.0.1'
 
-  spec.add_dependency 'rails', '~> 7.2.0'
-  spec.add_dependency 'httparty', '~> 0.16.0'
+  spec.add_dependency 'rails', '~> 8.1.2'
+  spec.add_dependency 'httparty', '>= 0.17', '< 1.0'
   spec.add_dependency 'rack-attack', '~> 6.7'
   spec.add_dependency 'elastic-apm', '~> 4.8.0'
 
