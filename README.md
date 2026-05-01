@@ -106,7 +106,6 @@ Expected Parameters:
 ## Configuration
 
 1. **In Spree Admin:**
-
    - Go to `Configuration > Payment Methods`
    - Click "New Payment Method"
    - Choose `Spree::PaymentMethod::Ipay` as the provider
