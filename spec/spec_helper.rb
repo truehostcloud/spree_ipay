@@ -1,8 +1,11 @@
 require 'rspec'
 require 'webmock/rspec'
 require 'ffaker'
-require 'pry-byebug'
 require 'active_support/core_ext/hash/indifferent_access'
+
+unless ENV['CI']
+  require 'pry-byebug'
+end
 
 # Mock Spree modules
 module Spree
