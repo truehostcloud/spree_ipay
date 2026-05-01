@@ -35,16 +35,21 @@ This gem integrates the iPay payment gateway with your Spree Commerce store, ena
    # OR
    gem 'spree_ipay', github: 'your-repo/spree_ipay'  # If hosted on GitHub
    ```
-2. **Install the gem:**
+2. **Install system dependencies for SQLite:**
+   ```bash
+   sudo apt-get install -y sqlite3 libsqlite3-dev
+   ```
+   On macOS, install SQLite with Homebrew instead.
+3. **Install the gem:**
    ```bash
    bundle install
    ```
-3. **Install migrations from the extension:**
+4. **Install migrations from the extension:**
    ```bash
    bundle exec rails railties:install:migrations
    ```
    This copies all iPay-related migrations from the extension to your main app.
-4. **Run database migrations:**
+5. **Run database migrations:**
    ```bash
    bundle exec rails db:migrate
    ```

@@ -12,17 +12,17 @@ jobs:
     
     steps:
     - uses: actions/checkout@v3
+
+    - name: Install SQLite and dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sqlite3 libsqlite3-dev
     
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
         ruby-version: 4.0.1
         bundler-cache: true
-    
-    - name: Install SQLite and dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y sqlite3 libsqlite3-dev
         
     - name: Setup test environment
       env:
